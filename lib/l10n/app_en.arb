@@ -2,6 +2,7 @@
   "appTitle": "BOQ Works",
   "dashboard": "Dashboard",
   "projects": "Projects",
+  "hardwarePrices": "Hardware Prices",
   "importBoq": "Import BOQ",
   "account": "Account",
   "goodMorning": "Good morning",
@@ -53,5 +54,13 @@
   "projectCreated": "Project created",
   "draft": "Draft",
   "boqs": "BOQs",
-  "imported": "BOQ uploaded"
+  "imported": "BOQ uploaded",
+  "priceComparison": "Price Comparison",
+  "bestRecommendations": "Best Recommendations",
+  "itemsTracked": "Items Tracked",
+  "pricesUpdatedToday": "Prices Updated Today",
+  "averagePriceChange": "Avg Price Change",
+  "suppliersTracked": "Suppliers Tracked",
+  "lowestPriceOpportunities": "Lowest Price Opportunities",
+  "boqItemsWithUpdatedPrices": "BOQ Items with Updated Prices"
 }

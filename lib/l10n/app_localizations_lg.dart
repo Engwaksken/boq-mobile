@@ -18,6 +18,9 @@ class AppLocalizationsLg extends AppLocalizations {
   String get projects => 'Pulojekiti';
 
   @override
+  String get hardwarePrices => 'Ebikwano bya Hardware';
+
+  @override
   String get importBoq => 'Yingiza BOQ';
 
   @override
@@ -175,4 +178,28 @@ class AppLocalizationsLg extends AppLocalizations {
 
   @override
   String get imported => 'BOQ etikkiddwa';
+
+  @override
+  String get priceComparison => 'Ekihinga eky\'Ebikwano';
+
+  @override
+  String get bestRecommendations => 'Ebisuubizo eby\'Abaka';
+
+  @override
+  String get itemsTracked => 'Ebintu eby\'Ekitegyekeko';
+
+  @override
+  String get pricesUpdatedToday => 'Ebikwano eby\'Ekitegyekeko Lero';
+
+  @override
+  String get averagePriceChange => 'Enkyukakyuka y\'Omuwendo';
+
+  @override
+  String get suppliersTracked => 'Abazimisa ab\'Obugayima';
+
+  @override
+  String get lowestPriceOpportunities => 'Eby\'Olugero lw\'Omutono';
+
+  @override
+  String get boqItemsWithUpdatedPrices => 'Ebikwano bya BOQ eby\'Okugeza';
 }

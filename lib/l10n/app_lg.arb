@@ -2,6 +2,7 @@
   "appTitle": "BOQ Works",
   "dashboard": "Ekisengejjero",
   "projects": "Pulojekiti",
+  "hardwarePrices": "Ebikwano bya Hardware",
   "importBoq": "Yingiza BOQ",
   "account": "Akawunti",
   "goodMorning": "Wasuze otya",
@@ -53,5 +54,13 @@
   "projectCreated": "Pulojekiti etondeddwa",
   "draft": "Kiwandiikiddwa",
   "boqs": "BOQ",
-  "imported": "BOQ etikkiddwa"
+  "imported": "BOQ etikkiddwa",
+  "priceComparison": "Ekihinga eky'Ebikwano",
+  "bestRecommendations": "Ebisuubizo eby'Abaka",
+  "itemsTracked": "Ebintu eby'Ekitegyekeko",
+  "pricesUpdatedToday": "Ebikwano eby'Ekitegyekeko Lero",
+  "averagePriceChange": "Enkyukakyuka y'Omuwendo",
+  "suppliersTracked": "Abazimisa ab'Obugayima",
+  "lowestPriceOpportunities": "Eby'Olugero lw'Omutono",
+  "boqItemsWithUpdatedPrices": "Ebikwano bya BOQ eby'Okugeza"
 }

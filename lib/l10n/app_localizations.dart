@@ -116,6 +116,12 @@ abstract class AppLocalizations {
   /// **'Projects'**
   String get projects;
 
+  /// No description provided for @hardwarePrices.
+  ///
+  /// In en, this message translates to:
+  /// **'Hardware Prices'**
+  String get hardwarePrices;
+
   /// No description provided for @importBoq.
   ///
   /// In en, this message translates to:
@@ -427,6 +433,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'BOQ uploaded'**
   String get imported;
+
+  /// No description provided for @priceComparison.
+  ///
+  /// In en, this message translates to:
+  /// **'Price Comparison'**
+  String get priceComparison;
+
+  /// No description provided for @bestRecommendations.
+  ///
+  /// In en, this message translates to:
+  /// **'Best Recommendations'**
+  String get bestRecommendations;
+
+  /// No description provided for @itemsTracked.
+  ///
+  /// In en, this message translates to:
+  /// **'Items Tracked'**
+  String get itemsTracked;
+
+  /// No description provided for @pricesUpdatedToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Prices Updated Today'**
+  String get pricesUpdatedToday;
+
+  /// No description provided for @averagePriceChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Avg Price Change'**
+  String get averagePriceChange;
+
+  /// No description provided for @suppliersTracked.
+  ///
+  /// In en, this message translates to:
+  /// **'Suppliers Tracked'**
+  String get suppliersTracked;
+
+  /// No description provided for @lowestPriceOpportunities.
+  ///
+  /// In en, this message translates to:
+  /// **'Lowest Price Opportunities'**
+  String get lowestPriceOpportunities;
+
+  /// No description provided for @boqItemsWithUpdatedPrices.
+  ///
+  /// In en, this message translates to:
+  /// **'BOQ Items with Updated Prices'**
+  String get boqItemsWithUpdatedPrices;
 }
 
 class _AppLocalizationsDelegate

@@ -18,6 +18,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get projects => 'Projects';
 
   @override
+  String get hardwarePrices => 'Hardware Prices';
+
+  @override
   String get importBoq => 'Import BOQ';
 
   @override
@@ -175,4 +178,28 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get imported => 'BOQ uploaded';
+
+  @override
+  String get priceComparison => 'Price Comparison';
+
+  @override
+  String get bestRecommendations => 'Best Recommendations';
+
+  @override
+  String get itemsTracked => 'Items Tracked';
+
+  @override
+  String get pricesUpdatedToday => 'Prices Updated Today';
+
+  @override
+  String get averagePriceChange => 'Avg Price Change';
+
+  @override
+  String get suppliersTracked => 'Suppliers Tracked';
+
+  @override
+  String get lowestPriceOpportunities => 'Lowest Price Opportunities';
+
+  @override
+  String get boqItemsWithUpdatedPrices => 'BOQ Items with Updated Prices';
 }
