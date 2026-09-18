@@ -562,9 +562,10 @@ class ApiClient {
     request.fields['project_id'] = '$projectId';
     request.files.add(await http.MultipartFile.fromPath('file', filePath));
     final streamed = await request.send().timeout(const Duration(seconds: 120));
-    final response = await http.Response.fromStream(streamed);
-    if (response.statusCode != 201)
+final response = await http.Response.fromStream(streamed);
+    if (response.statusCode != 201) {
       throw ApiException('Upload failed: ${response.statusCode}');
+    }
   }
 
   Future<void> uploadBoqFromBytes({
@@ -581,8 +582,9 @@ class ApiClient {
     );
     final streamed = await request.send().timeout(const Duration(seconds: 120));
     final response = await http.Response.fromStream(streamed);
-    if (response.statusCode != 201)
+    if (response.statusCode != 201) {
       throw ApiException('Upload failed: ${response.statusCode}');
+    }
   }
 
   Future<int> processBoq(int id) async {
@@ -591,7 +593,9 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) {
+      throw ApiException(_message(body));
+    }
     return body['data']['items_created'] as int? ?? 0;
   }
 
@@ -610,16 +614,21 @@ class ApiClient {
     };
     if (search != null && search.isNotEmpty) queryParams['search'] = search;
     if (status != null && status.isNotEmpty) queryParams['status'] = status;
-    if (pricingStatus != null && pricingStatus.isNotEmpty)
+    if (pricingStatus != null && pricingStatus.isNotEmpty) {
       queryParams['pricing_status'] = pricingStatus;
-    if (facility != null && facility.isNotEmpty) queryParams['facility'] = facility;
+    }
+    if (facility != null && facility.isNotEmpty) {
+      queryParams['facility'] = facility;
+    }
 
     final response = await _httpClient.get(
       Uri.parse('$baseUrl/boqs/$id/items').replace(queryParameters: queryParams),
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) {
+      throw ApiException(_message(body));
+    }
     final pageData = body['data'] as Map<String, dynamic>;
     return (pageData['data'] as List<dynamic>)
         .cast<Map<String, dynamic>>()
@@ -708,7 +717,9 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) {
+      throw ApiException(_message(body));
+    }
     return PricingBatch.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -717,8 +728,9 @@ class ApiClient {
       Uri.parse('$baseUrl/boqs/$boqId/pdf'),
       headers: await _headers(),
     );
-    if (response.statusCode != 200)
+    if (response.statusCode != 200) {
       throw const ApiException('Unable to generate the BOQ PDF.');
+    }
     return response.bodyBytes;
   }
 

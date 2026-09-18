@@ -295,7 +295,15 @@ class _LoginPageState extends State<LoginPage> {
                       autofillHints: const [AutofillHints.email],
                       decoration: InputDecoration(
                         labelText: l10n.email,
+                        hintText: l10n.email,
                         prefixIcon: const Icon(Icons.email_outlined),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(color: Color(0xFF102A43), width: 1.5),
+                        ),
                       ),
                       validator: (value) {
                         final email = value?.trim() ?? '';
@@ -320,6 +328,7 @@ class _LoginPageState extends State<LoginPage> {
                       },
                       decoration: InputDecoration(
                         labelText: l10n.password,
+                        hintText: l10n.password,
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
                           onPressed: () {
@@ -332,6 +341,13 @@ class _LoginPageState extends State<LoginPage> {
                                 ? Icons.visibility_outlined
                                 : Icons.visibility_off_outlined,
                           ),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(color: Color(0xFF102A43), width: 1.5),
                         ),
                       ),
                       validator: (value) {
