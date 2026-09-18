@@ -481,6 +481,150 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'BOQ Items with Updated Prices'**
   String get boqItemsWithUpdatedPrices;
+
+  /// No description provided for @proxySubscriptions.
+  ///
+  /// In en, this message translates to:
+  /// **'Proxy Subscriptions'**
+  String get proxySubscriptions;
+
+  /// No description provided for @beneficiary.
+  ///
+  /// In en, this message translates to:
+  /// **'Beneficiary'**
+  String get beneficiary;
+
+  /// No description provided for @beneficiaryEmail.
+  ///
+  /// In en, this message translates to:
+  /// **'Beneficiary Email'**
+  String get beneficiaryEmail;
+
+  /// No description provided for @payer.
+  ///
+  /// In en, this message translates to:
+  /// **'Payer'**
+  String get payer;
+
+  /// No description provided for @plan.
+  ///
+  /// In en, this message translates to:
+  /// **'Plan'**
+  String get plan;
+
+  /// No description provided for @status.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get status;
+
+  /// No description provided for @paymentStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment Status'**
+  String get paymentStatus;
+
+  /// No description provided for @startDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Start Date'**
+  String get startDate;
+
+  /// No description provided for @endDate.
+  ///
+  /// In en, this message translates to:
+  /// **'End Date'**
+  String get endDate;
+
+  /// No description provided for @createdAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Created At'**
+  String get createdAt;
+
+  /// No description provided for @transactionId.
+  ///
+  /// In en, this message translates to:
+  /// **'Transaction ID'**
+  String get transactionId;
+
+  /// No description provided for @search.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get search;
+
+  /// No description provided for @refresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get refresh;
+
+  /// No description provided for @retry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get retry;
+
+  /// No description provided for @allStatuses.
+  ///
+  /// In en, this message translates to:
+  /// **'All Statuses'**
+  String get allStatuses;
+
+  /// No description provided for @statusActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get statusActive;
+
+  /// No description provided for @statusPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get statusPending;
+
+  /// No description provided for @statusCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelled'**
+  String get statusCancelled;
+
+  /// No description provided for @statusExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Expired'**
+  String get statusExpired;
+
+  /// No description provided for @noProxySubscriptions.
+  ///
+  /// In en, this message translates to:
+  /// **'No proxy subscriptions found'**
+  String get noProxySubscriptions;
+
+  /// No description provided for @noProxySubscriptionsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'There are no proxy subscriptions matching your filters.'**
+  String get noProxySubscriptionsDescription;
+
+  /// No description provided for @proxySubscriptionDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Proxy Subscription Details'**
+  String get proxySubscriptionDetails;
+
+  /// No description provided for @adminAccessRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Admin Access Required'**
+  String get adminAccessRequired;
+
+  /// No description provided for @adminAccessDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'This page is only accessible to administrators.'**
+  String get adminAccessDescription;
 }
 
 class _AppLocalizationsDelegate

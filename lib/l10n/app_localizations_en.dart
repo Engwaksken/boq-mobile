@@ -202,4 +202,78 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get boqItemsWithUpdatedPrices => 'BOQ Items with Updated Prices';
+
+  @override
+  String get proxySubscriptions => 'Proxy Subscriptions';
+
+  @override
+  String get beneficiary => 'Beneficiary';
+
+  @override
+  String get beneficiaryEmail => 'Beneficiary Email';
+
+  @override
+  String get payer => 'Payer';
+
+  @override
+  String get plan => 'Plan';
+
+  @override
+  String get status => 'Status';
+
+  @override
+  String get paymentStatus => 'Payment Status';
+
+  @override
+  String get startDate => 'Start Date';
+
+  @override
+  String get endDate => 'End Date';
+
+  @override
+  String get createdAt => 'Created At';
+
+  @override
+  String get transactionId => 'Transaction ID';
+
+  @override
+  String get search => 'Search';
+
+  @override
+  String get refresh => 'Refresh';
+
+  @override
+  String get retry => 'Retry';
+
+  @override
+  String get allStatuses => 'All Statuses';
+
+  @override
+  String get statusActive => 'Active';
+
+  @override
+  String get statusPending => 'Pending';
+
+  @override
+  String get statusCancelled => 'Cancelled';
+
+  @override
+  String get statusExpired => 'Expired';
+
+  @override
+  String get noProxySubscriptions => 'No proxy subscriptions found';
+
+  @override
+  String get noProxySubscriptionsDescription =>
+      'There are no proxy subscriptions matching your filters.';
+
+  @override
+  String get proxySubscriptionDetails => 'Proxy Subscription Details';
+
+  @override
+  String get adminAccessRequired => 'Admin Access Required';
+
+  @override
+  String get adminAccessDescription =>
+      'This page is only accessible to administrators.';
 }

@@ -202,4 +202,78 @@ class AppLocalizationsLg extends AppLocalizations {
 
   @override
   String get boqItemsWithUpdatedPrices => 'Ebikwano bya BOQ eby\'Okugeza';
+
+  @override
+  String get proxySubscriptions => 'Obwammemba bwa Proxy';
+
+  @override
+  String get beneficiary => 'Omugenzebwa';
+
+  @override
+  String get beneficiaryEmail => 'Email ya Omugenzebwa';
+
+  @override
+  String get payer => 'Omukwata';
+
+  @override
+  String get plan => 'Pulaani';
+
+  @override
+  String get status => 'Obwenyini';
+
+  @override
+  String get paymentStatus => 'Obwenyini bwa Kwesha';
+
+  @override
+  String get startDate => 'Lunaku lwa Kweteka';
+
+  @override
+  String get endDate => 'Lunaku lwa Mwisho';
+
+  @override
+  String get createdAt => 'Lunaku lwa Kwetondeka';
+
+  @override
+  String get transactionId => 'Koodi ya Transakishoni';
+
+  @override
+  String get search => 'Ssaka';
+
+  @override
+  String get refresh => 'Ganzeza';
+
+  @override
+  String get retry => 'Ganzeza';
+
+  @override
+  String get allStatuses => 'Obwenyini Bwonna';
+
+  @override
+  String get statusActive => 'Kikola';
+
+  @override
+  String get statusPending => 'Kitegereke';
+
+  @override
+  String get statusCancelled => 'Gwako';
+
+  @override
+  String get statusExpired => 'Mwisho';
+
+  @override
+  String get noProxySubscriptions => 'Tewali obwammemba bwa proxy';
+
+  @override
+  String get noProxySubscriptionsDescription =>
+      'Tewali obwammemba bwa proxy bunaakulaba.';
+
+  @override
+  String get proxySubscriptionDetails => 'Ebikwata ku Obwammemba bwa Proxy';
+
+  @override
+  String get adminAccessRequired => 'Obugagga bwa Admin Bwebulidde';
+
+  @override
+  String get adminAccessDescription =>
+      'Olusomesa luno lulabibwa abakulu abakulu tu.';
 }

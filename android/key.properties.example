@@ -1,0 +1,4 @@
+storePassword=CHANGE_ME
+keyPassword=CHANGE_ME
+keyAlias=boq-upload
+storeFile=../keystore/boq-upload-keystore.jks

@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart' hide Element;
 import 'package:flutter/material.dart' hide Element;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -1028,6 +1030,31 @@ class _AccountPageState extends State<AccountPage> {
     _subscription = widget.api.currentSubscription();
   }
 
+  void _reloadSubscription() {
+    if (!mounted) return;
+    setState(() {
+      _subscription = widget.api.currentSubscription();
+    });
+  }
+
+  double? _subscriptionProgress(Map<String, dynamic> subscription) {
+    final start = DateTime.tryParse('${subscription['start_date'] ?? ''}');
+    final end = DateTime.tryParse('${subscription['end_date'] ?? ''}');
+    if (start == null || end == null || !end.isAfter(start)) return null;
+
+    final total = end.difference(start).inSeconds;
+    final elapsed = DateTime.now().difference(start).inSeconds;
+    return (elapsed / total).clamp(0.0, 1.0).toDouble();
+  }
+
+  int? _daysRemaining(Map<String, dynamic> subscription) {
+    final end = DateTime.tryParse('${subscription['end_date'] ?? ''}');
+    if (end == null) return null;
+    final remaining = end.difference(DateTime.now());
+    if (remaining.isNegative) return 0;
+    return (remaining.inHours / 24).ceil();
+  }
+
   Future<void> _signOut() async {
     await widget.api.logout();
     widget.onSignedOut();
@@ -1064,7 +1091,7 @@ class _AccountPageState extends State<AccountPage> {
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
-                          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => PlansPage(api: widget.api))),
+                          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => PlansPage(api: widget.api, onSubscriptionCreated: _reloadSubscription))),
                           child: Text(widget.l10n.managePlan),
                         ),
                       ),
@@ -1075,6 +1102,10 @@ class _AccountPageState extends State<AccountPage> {
             }
             if (snapshot.hasData) {
               final sub = snapshot.data!;
+              final progress = _subscriptionProgress(sub);
+              final daysRemaining = _daysRemaining(sub);
+              final status = '${sub['status'] ?? 'N/A'}';
+              final isTrial = status.toLowerCase() == 'trial';
               return Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -1089,25 +1120,46 @@ class _AccountPageState extends State<AccountPage> {
                       const SizedBox(height: 12),
                       Text(sub['plan']?['name'] ?? 'No Active Plan'),
                       const SizedBox(height: 4),
-                      Text(
-                        sub['status'] ?? 'N/A',
-                        style: Theme.of(context).textTheme.bodySmall,
+                      Row(
+                        children: [
+                          Chip(
+                            avatar: Icon(
+                              isTrial ? Icons.hourglass_top : Icons.verified_outlined,
+                              size: 16,
+                            ),
+                            label: Text(isTrial ? '7-day trial' : status.toUpperCase()),
+                          ),
+                          if (daysRemaining != null) ...[
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                daysRemaining == 0
+                                    ? 'Expires today'
+                                    : '$daysRemaining day${daysRemaining == 1 ? '' : 's'} remaining',
+                                textAlign: TextAlign.end,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                      const SizedBox(height: 16),
-                      const LinearProgressIndicator(value: 0.58),
-                      const SizedBox(height: 8),
+                      if (progress != null) ...[
+                        const SizedBox(height: 12),
+                        LinearProgressIndicator(value: progress),
+                      ],
+                      const SizedBox(height: 12),
                       Text(
-                        '${widget.l10n.aiCredits}: ${sub['plan']?['ai_credits'] ?? 'N/A'}',
+                        '${widget.l10n.aiCredits}: ${sub['plan']?['max_ai_credits'] ?? 'N/A'}',
                       ),
                       Text(
-                        '${widget.l10n.ocrPages}: ${sub['plan']?['ocr_pages'] ?? 'N/A'}',
+                        '${widget.l10n.ocrPages}: ${sub['plan']?['max_ocr_pages'] ?? 'N/A'}',
                       ),
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
                           onPressed: () => Navigator.of(context).push(
                             MaterialPageRoute<void>(
-                              builder: (_) => PlansPage(api: widget.api),
+                              builder: (_) => PlansPage(api: widget.api, onSubscriptionCreated: _reloadSubscription),
                             ),
                           ),
                           child: Text(widget.l10n.managePlan),
@@ -1194,10 +1246,92 @@ class _AccountPageState extends State<AccountPage> {
   }
 }
 
-class PlansPage extends StatelessWidget {
-  const PlansPage({super.key, required this.api});
+class PlansPage extends StatefulWidget {
+  const PlansPage({super.key, required this.api, this.onSubscriptionCreated});
 
   final ApiClient api;
+  final VoidCallback? onSubscriptionCreated;
+
+  @override
+  State<PlansPage> createState() => _PlansPageState();
+}
+
+class _PlansPageState extends State<PlansPage> {
+  late Future<List<Map<String, dynamic>>> _plans;
+  int? _submittingPlanId;
+
+  @override
+  void initState() {
+    super.initState();
+    _plans = widget.api.plans();
+  }
+
+  Future<void> _selectPlan(Map<String, dynamic> plan) async {
+    final id = int.tryParse('${plan['id'] ?? ''}');
+    if (id == null || _submittingPlanId != null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Select subscription plan'),
+        content: Text(
+          'Create a pending subscription for ${plan['name'] ?? 'this plan'}? '
+          'Your plan becomes active only after payment is confirmed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _submittingPlanId = id);
+    try {
+      final subscription = await widget.api.createSubscription(id);
+      if (!mounted) return;
+      widget.onSubscriptionCreated?.call();
+      final status = '${subscription['status'] ?? 'pending'}';
+
+      if (status == 'pending') {
+        final activated = await Navigator.of(context).push<bool>(
+          MaterialPageRoute<bool>(
+            builder: (_) => PaymentPage(
+              api: widget.api,
+              subscription: subscription,
+            ),
+          ),
+        );
+        if (activated == true) {
+          widget.onSubscriptionCreated?.call();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Payment confirmed. Your subscription is now active.'),
+            ),
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Subscription updated successfully.')),
+        );
+      }
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } finally {
+      if (mounted) setState(() => _submittingPlanId = null);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1205,39 +1339,706 @@ class PlansPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text(l10n.managePlan)),
       body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: api.plans(),
+        future: _plans,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(20),
-                child: Text(snapshot.error.toString()),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 42),
+                    const SizedBox(height: 12),
+                    const Text('Unable to load subscription plans.'),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: () => setState(() => _plans = widget.api.plans()),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
               ),
             );
           }
-          if (!snapshot.hasData)
+          if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
+          }
           final plans = snapshot.data!;
-          if (plans.isEmpty)
+          if (plans.isEmpty) {
             return const Center(
               child: Text('No plans are currently available.'),
             );
+          }
           return ListView.builder(
             padding: const EdgeInsets.all(20),
             itemCount: plans.length,
             itemBuilder: (context, index) {
               final plan = plans[index];
+              final id = int.tryParse('${plan['id'] ?? ''}');
+              final busy = id != null && _submittingPlanId == id;
+              final features = (plan['included_features'] as List<dynamic>? ?? const [])
+                  .map((item) => '$item')
+                  .where((item) => item.trim().isNotEmpty)
+                  .take(4)
+                  .toList();
+
               return Card(
-                child: ListTile(
-                  leading: const Icon(Icons.workspace_premium_outlined),
-                  title: Text('${plan['name'] ?? 'Plan'}'),
-                  subtitle: Text('${plan['description'] ?? ''}'),
-                  trailing: Text(
-                    '${plan['currency'] ?? ''} ${plan['price'] ?? ''}',
+                margin: const EdgeInsets.only(bottom: 14),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.workspace_premium_outlined),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              '${plan['name'] ?? 'Plan'}',
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          Text(
+                            '${plan['currency'] ?? 'UGX'} ${plan['price'] ?? '0'}',
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                        ],
+                      ),
+                      if ('${plan['description'] ?? ''}'.trim().isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text('${plan['description']}'),
+                      ],
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          if (plan['trial_days'] != null)
+                            Chip(label: Text('${plan['trial_days']} day trial')),
+                          if (plan['max_projects'] != null)
+                            Chip(label: Text('${plan['max_projects']} projects')),
+                          if (plan['max_boqs'] != null)
+                            Chip(label: Text('${plan['max_boqs']} BOQs')),
+                          if (plan['max_ai_credits'] != null)
+                            Chip(label: Text('${plan['max_ai_credits']} AI credits')),
+                        ],
+                      ),
+                      if (features.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        ...features.map(
+                          (feature) => Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.check_circle_outline, size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(child: Text(feature)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: busy ? null : () => _selectPlan(plan),
+                          child: busy
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Text('Select plan'),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               );
             },
+          );
+        },
+      ),
+    );
+  }
+}
+
+
+class PaymentPage extends StatefulWidget {
+  const PaymentPage({
+    super.key,
+    required this.api,
+    required this.subscription,
+  });
+
+  final ApiClient api;
+  final Map<String, dynamic> subscription;
+
+  @override
+  State<PaymentPage> createState() => _PaymentPageState();
+}
+
+class _PaymentPageState extends State<PaymentPage> {
+  late Future<List<Map<String, dynamic>>> _gateways;
+  String? _selectedGatewayCode;
+  String? _selectedMethod;
+  Map<String, dynamic>? _paymentData;
+  bool _initiating = false;
+  bool _verifying = false;
+  bool _successHandled = false;
+  String? _idempotencyKey;
+  Timer? _statusTimer;
+  int _pollCount = 0;
+  Map<String, dynamic>? _receipt;
+  final TextEditingController _phoneNumber = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _gateways = widget.api.paymentGateways();
+  }
+
+  @override
+  void dispose() {
+    _statusTimer?.cancel();
+    _phoneNumber.dispose();
+    super.dispose();
+  }
+
+  int? get _subscriptionId =>
+      int.tryParse('${widget.subscription['id'] ?? ''}');
+
+  Map<String, dynamic>? get _transaction =>
+      _paymentData?['transaction'] as Map<String, dynamic>?;
+
+  Map<String, dynamic>? get _gatewayResult =>
+      _paymentData?['gateway'] as Map<String, dynamic>?;
+
+  Future<void> _initiate(Map<String, dynamic> gateway) async {
+    final subscriptionId = _subscriptionId;
+    final code = '${gateway['code'] ?? ''}'.trim();
+    if (subscriptionId == null || code.isEmpty || _initiating) return;
+
+    setState(() {
+      _initiating = true;
+      _selectedGatewayCode = code;
+    });
+    try {
+      _idempotencyKey ??=
+          'mobile-$subscriptionId-$code-${DateTime.now().microsecondsSinceEpoch}';
+      final data = await widget.api.initiatePayment(
+        subscriptionId: subscriptionId,
+        gatewayCode: code,
+        idempotencyKey: _idempotencyKey!,
+        paymentMethod: _selectedMethod,
+        phoneNumber: _phoneNumber.text,
+        network: _selectedMethod,
+      );
+      if (!mounted) return;
+      setState(() => _paymentData = data);
+      _startStatusPolling();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Payment started. Follow the instructions below, then verify the payment.'),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } finally {
+      if (mounted) setState(() => _initiating = false);
+    }
+  }
+
+  void _startStatusPolling() {
+    _statusTimer?.cancel();
+    _pollCount = 0;
+    _statusTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      _pollCount++;
+      if (_pollCount > 24 || !mounted) {
+        timer.cancel();
+        return;
+      }
+      await _refreshTransaction(silent: true);
+    });
+  }
+
+  Future<void> _loadReceipt(int transactionId) async {
+    try {
+      final receipt = await widget.api.paymentReceipt(transactionId);
+      if (!mounted) return;
+      setState(() => _receipt = receipt);
+    } on ApiException {
+      // The invoice may still be committing; the next status refresh can retry.
+    }
+  }
+
+  Future<void> _handleSuccessfulPayment(Map<String, dynamic> transaction) async {
+    if (_successHandled || !mounted) return;
+    _successHandled = true;
+    _statusTimer?.cancel();
+    final transactionId = int.tryParse('${transaction['id'] ?? ''}');
+    if (transactionId != null) {
+      await _loadReceipt(transactionId);
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Payment confirmed'),
+        content: const Text('Your subscription has been activated successfully.'),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    if (mounted) Navigator.of(context).pop(true);
+  }
+
+  Future<void> _verify() async {
+    final transaction = _transaction;
+    final transactionId = int.tryParse('${transaction?['id'] ?? ''}');
+    if (transactionId == null || _verifying) return;
+
+    setState(() => _verifying = true);
+    try {
+      final verified = await widget.api.verifyPayment(transactionId);
+      if (!mounted) return;
+      setState(() {
+        _paymentData = {
+          ...?_paymentData,
+          'transaction': verified,
+        };
+      });
+      final status = '${verified['status'] ?? ''}'.toLowerCase();
+      if (status == 'successful') {
+        await _handleSuccessfulPayment(verified);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              status == 'under_review'
+                  ? 'Payment submitted for review. Your plan will activate after confirmation.'
+                  : 'Payment status: ${status.isEmpty ? 'pending' : status}.',
+            ),
+          ),
+        );
+      }
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } finally {
+      if (mounted) setState(() => _verifying = false);
+    }
+  }
+
+  Future<void> _refreshTransaction({bool silent = false}) async {
+    final transactionId = int.tryParse('${_transaction?['id'] ?? ''}');
+    if (transactionId == null) return;
+    try {
+      final refreshed = await widget.api.transaction(transactionId);
+      if (!mounted) return;
+      setState(() {
+        _paymentData = {
+          ...?_paymentData,
+          'transaction': refreshed,
+        };
+        final invoice = refreshed['invoice'];
+        if (invoice is Map<String, dynamic>) {
+          _receipt = invoice;
+        }
+      });
+      final status = '${refreshed['status'] ?? ''}'.toLowerCase();
+      if (status == 'successful') {
+        await _handleSuccessfulPayment(refreshed);
+      }
+    } on ApiException catch (e) {
+      if (!mounted || silent) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    }
+  }
+
+  Widget _receiptCard() {
+    final receipt = _receipt;
+    if (receipt == null || receipt.isEmpty) return const SizedBox.shrink();
+    final currency = '${receipt['currency'] ?? ''}';
+    final total = receipt['total_amount'] ?? receipt['amount'] ?? '';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.receipt_long_outlined),
+                const SizedBox(width: 8),
+                Text(
+                  'Payment receipt',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SelectableText('Invoice: ${receipt['invoice_number'] ?? ''}'),
+            SelectableText('Reference: ${receipt['transaction_reference'] ?? _transaction?['reference'] ?? ''}'),
+            Text('Amount: $currency $total'),
+            if (receipt['payment_date'] != null) Text('Paid: ${receipt['payment_date']}'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _gatewayInstructions() {
+    final gateway = _gatewayResult;
+    if (gateway == null || gateway.isEmpty) return const SizedBox.shrink();
+    final rows = <Widget>[];
+
+    void addRow(String label, dynamic value) {
+      if (value == null || '$value'.trim().isEmpty) return;
+      rows.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 105,
+                child: Text(
+                  label,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              Expanded(child: SelectableText('$value')),
+            ],
+          ),
+        ),
+      );
+    }
+
+    addRow('Reference', gateway['transaction_reference']);
+    addRow('Provider', gateway['provider']);
+    addRow('Phone', gateway['phone']);
+    addRow('Mode', gateway['mode']);
+    addRow('Instructions', gateway['instructions']);
+
+    final checkoutUrl = '${gateway['checkout_url'] ?? ''}'.trim();
+    if (checkoutUrl.isNotEmpty) {
+      rows.add(
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.link),
+          title: const Text('Checkout URL'),
+          subtitle: SelectableText(checkoutUrl),
+          trailing: Wrap(
+            spacing: 2,
+            children: [
+              IconButton(
+                tooltip: 'Open secure checkout',
+                onPressed: () async {
+                  final uri = Uri.tryParse(checkoutUrl);
+                  if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Unable to open checkout. You can copy the link instead.')),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.open_in_new),
+              ),
+              IconButton(
+                tooltip: 'Copy',
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: checkoutUrl));
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Checkout URL copied.')),
+                  );
+                },
+                icon: const Icon(Icons.copy_outlined),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final bankDetails = gateway['bank_details'];
+    if (bankDetails is Map) {
+      for (final entry in bankDetails.entries) {
+        addRow('${entry.key}', entry.value);
+      }
+    } else if (bankDetails != null) {
+      addRow('Bank details', bankDetails);
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Payment instructions',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            ...rows,
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final plan = widget.subscription['plan'] as Map<String, dynamic>? ?? const {};
+    final transaction = _transaction;
+    final status = '${transaction?['status'] ?? 'not started'}';
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Complete payment')),
+      body: FutureBuilder<List<Map<String, dynamic>>>(
+        future: _gateways,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 44),
+                    const SizedBox(height: 12),
+                    const Text('Unable to load payment methods.'),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: () => setState(
+                        () => _gateways = widget.api.paymentGateways(),
+                      ),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final gateways = snapshot.data!;
+          return ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${plan['name'] ?? 'Subscription plan'}',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${plan['currency'] ?? 'UGX'} ${plan['price'] ?? '0'}',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 6),
+                      Text('Subscription status: ${widget.subscription['status'] ?? 'pending'}'),
+                      if (transaction != null) ...[
+                        const Divider(height: 24),
+                        Text('Transaction: ${transaction['reference'] ?? transaction['id'] ?? ''}'),
+                        Text('Payment status: $status'),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (gateways.isEmpty)
+                const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(18),
+                    child: Text(
+                      'No payment methods are currently enabled. Please contact the administrator.',
+                    ),
+                  ),
+                )
+              else ...[
+                Text(
+                  'Choose payment method',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                ...gateways.map((gateway) {
+                  final code = '${gateway['code'] ?? ''}';
+                  final methods = (gateway['supported_methods'] as List<dynamic>? ?? const [])
+                      .map((e) => '$e')
+                      .where((e) => e.trim().isNotEmpty)
+                      .toList();
+                  final selected = _selectedGatewayCode == code;
+                  return Card(
+                    child: RadioListTile<String>(
+                      value: code,
+                      groupValue: _selectedGatewayCode,
+                      onChanged: _paymentData != null
+                          ? null
+                          : (value) => setState(() {
+                                _selectedGatewayCode = value;
+                                _selectedMethod = methods.isNotEmpty ? methods.first : null;
+                                _idempotencyKey = null;
+                              }),
+                      title: Text('${gateway['name'] ?? code}'),
+                      subtitle: Text(
+                        '${gateway['description'] ?? gateway['driver'] ?? ''}'
+                        '${gateway['is_aggregator'] == true ? ' • Aggregator' : ''}'
+                        '${gateway['is_test_mode'] == true ? ' • Test mode' : ''}',
+                      ),
+                      secondary: selected
+                          ? const Icon(Icons.check_circle)
+                          : const Icon(Icons.payments_outlined),
+                    ),
+                  );
+                }),
+                if (_selectedGatewayCode != null && _paymentData == null) ...[
+                  const SizedBox(height: 10),
+                  Builder(
+                    builder: (context) {
+                      final selected = gateways.firstWhere(
+                        (g) => '${g['code'] ?? ''}' == _selectedGatewayCode,
+                        orElse: () => const <String, dynamic>{},
+                      );
+                      final methods = (selected['supported_methods'] as List<dynamic>? ?? const [])
+                          .map((e) => '$e')
+                          .where((e) => e.trim().isNotEmpty)
+                          .toList();
+                      final driver = '${selected['driver'] ?? ''}';
+                      final isAggregator = selected['is_aggregator'] == true;
+                      final effectiveMethod = methods.contains(_selectedMethod)
+                          ? _selectedMethod
+                          : (methods.isNotEmpty ? methods.first : null);
+                      final aggregatorMobile = isAggregator &&
+                          !['card', 'visa', 'mastercard'].contains('${effectiveMethod ?? ''}'.toLowerCase());
+                      final needsPhone = driver == 'mtn_momo' ||
+                          driver == 'airtel_money' ||
+                          aggregatorMobile;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (needsPhone) ...[
+                            TextField(
+                              controller: _phoneNumber,
+                              keyboardType: TextInputType.phone,
+                              onChanged: (_) => setState(() {}),
+                              decoration: InputDecoration(
+                                labelText: driver == 'mtn_momo'
+                                    ? 'MTN MoMo number'
+                                    : driver == 'airtel_money'
+                                        ? 'Airtel Money number'
+                                        : 'Mobile money number',
+                                hintText: 'e.g. 0772 123 456',
+                                prefixIcon: const Icon(Icons.phone_android),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          if (methods.length > 1)
+                            DropdownButtonFormField<String>(
+                              value: methods.contains(_selectedMethod) ? _selectedMethod : methods.first,
+                              decoration: const InputDecoration(labelText: 'Payment option'),
+                              items: methods
+                                  .map((method) => DropdownMenuItem(
+                                        value: method,
+                                        child: Text(method),
+                                      ))
+                                  .toList(),
+                              onChanged: (value) => setState(() => _selectedMethod = value),
+                            ),
+                          if (methods.length > 1) const SizedBox(height: 12),
+                          FilledButton.icon(
+                            onPressed: _initiating || (needsPhone && _phoneNumber.text.trim().isEmpty)
+                                ? null
+                                : () => _initiate(selected),
+                            icon: _initiating
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  )
+                                : const Icon(Icons.lock_outline),
+                            label: Text(_initiating ? 'Starting payment…' : 'Continue to payment'),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ],
+              if (_paymentData != null) ...[
+                const SizedBox(height: 12),
+                _gatewayInstructions(),
+                if (_receipt != null) ...[
+                  const SizedBox(height: 12),
+                  _receiptCard(),
+                ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _refreshTransaction,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Refresh status'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _verifying ? null : _verify,
+                        icon: _verifying
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.verified_outlined),
+                        label: Text(_verifying ? 'Checking…' : 'Verify payment'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Your plan is activated only after the server confirms a successful payment. Closing this screen does not delete the pending subscription.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ],
+            ],
           );
         },
       ),
@@ -4384,6 +5185,410 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
           ),
           Expanded(child: Text(value)),
         ],
+      ),
+    );
+  }
+}
+
+class ProxySubscriptionListPage extends StatefulWidget {
+  const ProxySubscriptionListPage({super.key, required this.api});
+
+  final ApiClient api;
+
+  @override
+  State<ProxySubscriptionListPage> createState() => _ProxySubscriptionListPageState();
+}
+
+class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
+  late Future<List<ProxySubscription>> _subscriptions;
+  final _searchController = TextEditingController();
+  String _statusFilter = 'all';
+  bool _isAdmin = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSubscriptions();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadSubscriptions() async {
+    setState(() {
+      _error = null;
+    });
+    try {
+      final subscriptions = await widget.api.listProxySubscriptions();
+      if (mounted) {
+        setState(() {
+          _subscriptions = Future.value(subscriptions);
+          _isAdmin = true;
+        });
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.message;
+          _isAdmin = e.message.toLowerCase().contains('unauthorized') ||
+              e.message.toLowerCase().contains('forbidden') ||
+              e.message.toLowerCase().contains('admin');
+        });
+      }
+    }
+  }
+
+  List<ProxySubscription> _filterSubscriptions(List<ProxySubscription> subscriptions) {
+    final query = _searchController.text.toLowerCase().trim();
+    return subscriptions.where((sub) {
+      final matchesSearch = query.isEmpty ||
+          sub.beneficiaryName.toLowerCase().contains(query) ||
+          sub.beneficiaryEmail.toLowerCase().contains(query) ||
+          sub.planName.toLowerCase().contains(query) ||
+          sub.payerName.toLowerCase().contains(query);
+      final matchesStatus = _statusFilter == 'all' || sub.status == _statusFilter;
+      return matchesSearch && matchesStatus;
+    }).toList();
+  }
+
+  String _formatDate(String dateStr) {
+    try {
+      final dt = DateTime.parse(dateStr);
+      return '${dt.day}/${dt.month}/${dt.year}';
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'active':
+        return const Color(0xFF047857);
+      case 'pending':
+        return const Color(0xFFB45309);
+      case 'cancelled':
+        return const Color(0xFFBE123C);
+      case 'expired':
+        return Colors.grey;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    if (!_isAdmin) {
+      return Scaffold(
+        appBar: AppBar(title: Text(l10n.proxySubscriptions)),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.lock_outline, size: 48, color: Colors.grey),
+                const SizedBox(height: 16),
+                Text(
+                  l10n.adminAccessRequired,
+                  style: Theme.of(context).textTheme.titleMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  l10n.adminAccessDescription,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l10n.proxySubscriptions),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadSubscriptions,
+            tooltip: l10n.refresh,
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          _buildFilters(l10n),
+          Expanded(
+            child: FutureBuilder<List<ProxySubscription>>(
+              future: _subscriptions,
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                          const SizedBox(height: 16),
+                          Text(snapshot.error.toString()),
+                          const SizedBox(height: 16),
+                          FilledButton(onPressed: _loadSubscriptions, child: Text(l10n.retry)),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final filtered = _filterSubscriptions(snapshot.data!);
+                if (filtered.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.assignment_outlined, size: 48, color: Colors.grey[400]),
+                        const SizedBox(height: 16),
+                        Text(l10n.noProxySubscriptions),
+                        const SizedBox(height: 8),
+                        Text(
+                          l10n.noProxySubscriptionsDescription,
+                          style: TextStyle(color: Colors.grey[600]),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return RefreshIndicator(
+                  onRefresh: _loadSubscriptions,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) {
+                      final sub = filtered[index];
+                      return _ProxySubscriptionCard(
+                        subscription: sub,
+                        onTap: () => _showDetails(sub),
+                        statusColor: _statusColor(sub.status),
+                        formatDate: _formatDate,
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilters(AppLocalizations l10n) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+      ),
+      child: Column(
+        children: [
+          TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              labelText: l10n.search,
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() {});
+                      },
+                    )
+                  : null,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            value: _statusFilter,
+            decoration: InputDecoration(
+              labelText: l10n.status,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              isDense: true,
+            ),
+            items: [
+              DropdownMenuItem(value: 'all', child: Text(l10n.allStatuses)),
+              DropdownMenuItem(value: 'active', child: Text(l10n.statusActive)),
+              DropdownMenuItem(value: 'pending', child: Text(l10n.statusPending)),
+              DropdownMenuItem(value: 'cancelled', child: Text(l10n.statusCancelled)),
+              DropdownMenuItem(value: 'expired', child: Text(l10n.statusExpired)),
+            ],
+            onChanged: (value) => setState(() => _statusFilter = value ?? 'all'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDetails(ProxySubscription sub) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => Container(
+          padding: const EdgeInsets.all(20),
+          child: ListView(
+            controller: scrollController,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                l10n.proxySubscriptionDetails,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 20),
+              _detailRow(l10n.beneficiary, sub.beneficiaryName),
+              _detailRow(l10n.beneficiaryEmail, sub.beneficiaryEmail),
+              _detailRow(l10n.plan, sub.planName),
+              _detailRow(l10n.payer, sub.payerName),
+              _detailRow(l10n.status, sub.status.capitalize()),
+              _detailRow(l10n.paymentStatus, sub.paymentStatus.capitalize()),
+              _detailRow(l10n.startDate, _formatDate(sub.startDate)),
+              _detailRow(l10n.endDate, _formatDate(sub.endDate)),
+              _detailRow(l10n.createdAt, _formatDate(sub.createdAt)),
+              if (sub.transactionId.isNotEmpty) _detailRow(l10n.transactionId, sub.transactionId),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProxySubscriptionCard extends StatelessWidget {
+  const _ProxySubscriptionCard({
+    required this.subscription,
+    required this.onTap,
+    required this.statusColor,
+    required this.formatDate,
+  });
+
+  final ProxySubscription subscription;
+  final VoidCallback onTap;
+  final Color statusColor;
+  final String Function(String) formatDate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      subscription.beneficiaryName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      subscription.status.capitalize(),
+                      style: TextStyle(
+                        color: statusColor,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subscription.beneficiaryEmail,
+                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  Chip(
+                    label: Text(subscription.planName),
+                    backgroundColor: Colors.blue[50],
+                  ),
+                  Chip(
+                    label: Text(subscription.payerName),
+                    backgroundColor: Colors.green[50],
+                  ),
+                  Chip(
+                    label: Text('${subscription.paymentStatus.capitalize()}'),
+                    backgroundColor: subscription.paymentStatus == 'paid'
+                        ? Colors.green[50]
+                        : Colors.orange[50],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(Icons.calendar_today, size: 14, color: Colors.grey[500]),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${formatDate(subscription.createdAt)}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                  const Spacer(),
+                  if (subscription.transactionId.isNotEmpty)
+                    Text(
+                      subscription.transactionId,
+                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
