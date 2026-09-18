@@ -5443,6 +5443,7 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
   }
 
   void _showDetails(ProxySubscription sub) {
+    final l10n = AppLocalizations.of(context)!;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
