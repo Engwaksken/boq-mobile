@@ -10,6 +10,8 @@ int _asInt(dynamic value) =>
 double _asDouble(dynamic value) =>
     value is num ? value.toDouble() : double.tryParse('$value') ?? 0.0;
 
+double? _asDoubleOrNull(dynamic value) => value == null ? null : _asDouble(value);
+
 class ApiClient {
   ApiClient({http.Client? httpClient, FlutterSecureStorage? storage})
     : _httpClient = httpClient ?? http.Client(),
@@ -284,6 +286,8 @@ class ApiClient {
     double? contractValue,
     String? description,
     String? status,
+    String? originalLanguage,
+    String? reportLanguage,
   }) async {
     final response = await _httpClient.post(
       Uri.parse('$baseUrl/projects'),
@@ -310,6 +314,8 @@ class ApiClient {
         if (contractValue != null) 'contract_value': contractValue.toString(),
         if (description != null) 'description': description,
         if (status != null) 'status': status,
+        if (originalLanguage != null) 'original_language': originalLanguage,
+        if (reportLanguage != null) 'report_language': reportLanguage,
       },
     );
     final body = _decode(response);
@@ -340,6 +346,8 @@ class ApiClient {
     String? currency,
     String? description,
     String? status,
+    String? originalLanguage,
+    String? reportLanguage,
   }) async {
     final response = await _httpClient.put(
       Uri.parse('$baseUrl/projects/$id'),
@@ -366,6 +374,8 @@ class ApiClient {
         if (currency != null) 'currency': currency,
         if (description != null) 'description': description,
         if (status != null) 'status': status,
+        if (originalLanguage != null) 'original_language': originalLanguage,
+        if (reportLanguage != null) 'report_language': reportLanguage,
       },
     );
     final body = _decode(response);
@@ -596,7 +606,15 @@ final response = await http.Response.fromStream(streamed);
     if (response.statusCode != 200) {
       throw ApiException(_message(body));
     }
-    return body['data']['items_created'] as int? ?? 0;
+    final meta = body['meta'];
+    if (meta is Map && meta['items_imported'] is int) {
+      return meta['items_imported'] as int;
+    }
+    final data = body['data'];
+    if (data is Map && data['items_created'] is int) {
+      return data['items_created'] as int;
+    }
+    return 0;
   }
 
   Future<List<BoqItemSummary>> boqItems(
@@ -1062,12 +1080,18 @@ final response = await http.Response.fromStream(streamed);
 
   Future<List<HardwareCategory>> hardwareCategoriesAdmin() async {
     final response = await _httpClient.get(
-      Uri.parse('$baseUrl/admin/hardware-categories'),
+      Uri.parse('$baseUrl/hardware-categories'),
       headers: await _headers(),
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw ApiException(_message(body));
-    return (body['data'] as List<dynamic>? ?? [])
+    final raw = body['data'];
+    final list = raw is List
+        ? raw
+        : raw is Map && raw['data'] is List
+            ? raw['data'] as List
+            : <dynamic>[];
+    return list
         .cast<Map<String, dynamic>>()
         .map(HardwareCategory.fromJson)
         .toList();
@@ -1075,16 +1099,14 @@ final response = await http.Response.fromStream(streamed);
 
   Future<HardwareCategory> createHardwareCategory({
     required String name,
-    required String code,
     String? description,
     bool isActive = true,
   }) async {
     final response = await _httpClient.post(
-      Uri.parse('$baseUrl/admin/hardware-categories'),
+      Uri.parse('$baseUrl/hardware-categories'),
       headers: await _headers(),
       body: {
         'name': name,
-        'code': code,
         if (description != null && description.isNotEmpty) 'description': description,
         'is_active': isActive.toString(),
       },
@@ -1097,18 +1119,16 @@ final response = await http.Response.fromStream(streamed);
   Future<HardwareCategory> updateHardwareCategory(
     int id, {
     String? name,
-    String? code,
     String? description,
     bool? isActive,
   }) async {
     final body = <String, String>{};
     if (name != null) body['name'] = name;
-    if (code != null) body['code'] = code;
     if (description != null) body['description'] = description;
     if (isActive != null) body['is_active'] = isActive.toString();
 
     final response = await _httpClient.put(
-      Uri.parse('$baseUrl/admin/hardware-categories/$id'),
+      Uri.parse('$baseUrl/hardware-categories/$id'),
       headers: await _headers(),
       body: body,
     );
@@ -1119,7 +1139,7 @@ final response = await http.Response.fromStream(streamed);
 
   Future<void> deleteHardwareCategory(int id) async {
     final response = await _httpClient.delete(
-      Uri.parse('$baseUrl/admin/hardware-categories/$id'),
+      Uri.parse('$baseUrl/hardware-categories/$id'),
       headers: await _headers(),
     );
     final body = _decode(response);
@@ -1128,7 +1148,7 @@ final response = await http.Response.fromStream(streamed);
 
   Future<HardwareCategory> toggleHardwareCategory(int id) async {
     final response = await _httpClient.post(
-      Uri.parse('$baseUrl/admin/hardware-categories/$id/toggle-active'),
+      Uri.parse('$baseUrl/hardware-categories/$id/toggle-active'),
       headers: await _headers(),
     );
     final body = _decode(response);
@@ -1249,9 +1269,11 @@ class ProjectDetail {
     required this.description,
     required this.status,
     required this.ownerName,
+    required this.originalLanguage,
+    required this.reportLanguage,
     required this.boqs,
   });
-  factory ProjectDetail.fromJson(Map<String, dynamic> json) => ProjectDetail(
+factory ProjectDetail.fromJson(Map<String, dynamic> json) => ProjectDetail(
     id: _asInt(json['id']),
     name: json['name'] as String? ?? '',
     code: json['code'] as String? ?? '',
@@ -1273,6 +1295,8 @@ class ProjectDetail {
     description: json['description'] as String? ?? '',
     status: json['status'] as String? ?? 'draft',
     ownerName: json['user']?['name'] as String? ?? '',
+    originalLanguage: json['original_language'] as String? ?? '',
+    reportLanguage: json['report_language'] as String? ?? '',
     boqs: (json['boqs'] as List<dynamic>? ?? [])
         .cast<Map<String, dynamic>>()
         .map(BoqSummary.fromJson)
@@ -1299,6 +1323,8 @@ class ProjectDetail {
   final String description;
   final String status;
   final String ownerName;
+  final String originalLanguage;
+  final String reportLanguage;
   final List<BoqSummary> boqs;
 }
 
@@ -1984,17 +2010,17 @@ class BoqItemDetail extends BoqItemSummary {
     billId: json['bill_id'] as int?,
     elementId: json['element_id'] as int?,
     subElementId: json['sub_element_id'] as int?,
-    originalRate: (json['original_rate'] as num?)?.toDouble(),
-    approvedRate: (json['approved_rate'] as num?)?.toDouble(),
-    aiSuggestedRate: (json['ai_suggested_rate'] as num?)?.toDouble(),
+    originalRate: _asDoubleOrNull(json['original_rate']),
+    approvedRate: _asDoubleOrNull(json['approved_rate']),
+    aiSuggestedRate: _asDoubleOrNull(json['ai_suggested_rate']),
     currency: json['currency'] as String? ?? 'UGX',
     workCategory: json['work_category'] as String?,
     materialCategory: json['material_category'] as String?,
     location: json['location'] as String?,
     pricingSource: json['pricing_source'] as String?,
     pricingDate: json['pricing_date'] as String?,
-    aiConfidence: (json['ai_confidence'] as num?)?.toDouble(),
-    translationConfidence: (json['translation_confidence'] as num?)?.toDouble(),
+    aiConfidence: _asDoubleOrNull(json['ai_confidence']),
+    translationConfidence: _asDoubleOrNull(json['translation_confidence']),
     notes: json['notes'] as String?,
     status: json['status'] as String? ?? 'pending',
     translations: (json['translations'] as List<dynamic>? ?? [])
@@ -2258,11 +2284,11 @@ class HardwareCategory {
   const HardwareCategory({
     required this.id,
     required this.name,
-    required this.code,
+    this.code = '',
     this.description,
     required this.isActive,
-    required this.createdAt,
-    required this.updatedAt,
+    this.createdAt = '',
+    this.updatedAt = '',
   });
 
   factory HardwareCategory.fromJson(Map<String, dynamic> json) => HardwareCategory(

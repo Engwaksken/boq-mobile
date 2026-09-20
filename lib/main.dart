@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
@@ -782,7 +783,25 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _code = TextEditingController();
-  String _currency = 'UGX';
+  final _client = TextEditingController();
+  final _contractor = TextEditingController();
+  final _consultant = TextEditingController();
+  final _quantitySurveyor = TextEditingController();
+  final _projectManager = TextEditingController();
+  final _siteEngineer = TextEditingController();
+  final _fundingOrganisation = TextEditingController();
+  final _country = TextEditingController();
+  final _district = TextEditingController();
+  final _location = TextEditingController();
+  final _projectType = TextEditingController();
+  final _startDate = TextEditingController();
+  final _expectedCompletionDate = TextEditingController();
+  final _contractValue = TextEditingController();
+  final _currency = TextEditingController(text: 'UGX');
+  final _description = TextEditingController();
+  final _originalLanguage = TextEditingController();
+  final _reportLanguage = TextEditingController();
+  String _status = 'draft';
   bool _saving = false;
   String? _error;
 
@@ -790,7 +809,35 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
   void dispose() {
     _name.dispose();
     _code.dispose();
+    _client.dispose();
+    _contractor.dispose();
+    _consultant.dispose();
+    _quantitySurveyor.dispose();
+    _projectManager.dispose();
+    _siteEngineer.dispose();
+    _fundingOrganisation.dispose();
+    _country.dispose();
+    _district.dispose();
+    _location.dispose();
+    _projectType.dispose();
+    _startDate.dispose();
+    _expectedCompletionDate.dispose();
+    _contractValue.dispose();
+    _currency.dispose();
+    _description.dispose();
+    _originalLanguage.dispose();
+    _reportLanguage.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickDate(TextEditingController controller) async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (date != null) controller.text = date.toIso8601String().split('T').first;
   }
 
   Future<void> _save(AppLocalizations l10n) async {
@@ -802,8 +849,54 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
     try {
       await widget.api.createProject(
         name: _name.text.trim(),
-        code: _code.text.trim(),
-        currency: _currency,
+        code: _code.text.trim().isEmpty ? null : _code.text.trim(),
+        client: _client.text.trim().isEmpty ? null : _client.text.trim(),
+        contractor: _contractor.text.trim().isEmpty
+            ? null
+            : _contractor.text.trim(),
+        consultant: _consultant.text.trim().isEmpty
+            ? null
+            : _consultant.text.trim(),
+        quantitySurveyor: _quantitySurveyor.text.trim().isEmpty
+            ? null
+            : _quantitySurveyor.text.trim(),
+        projectManager: _projectManager.text.trim().isEmpty
+            ? null
+            : _projectManager.text.trim(),
+        siteEngineer: _siteEngineer.text.trim().isEmpty
+            ? null
+            : _siteEngineer.text.trim(),
+        fundingOrganisation: _fundingOrganisation.text.trim().isEmpty
+            ? null
+            : _fundingOrganisation.text.trim(),
+        country: _country.text.trim().isEmpty ? null : _country.text.trim(),
+        district: _district.text.trim().isEmpty
+            ? null
+            : _district.text.trim(),
+        location: _location.text.trim().isEmpty
+            ? null
+            : _location.text.trim(),
+        projectType: _projectType.text.trim().isEmpty
+            ? null
+            : _projectType.text.trim(),
+        startDate: _startDate.text.isEmpty ? null : _startDate.text,
+        expectedCompletionDate: _expectedCompletionDate.text.isEmpty
+            ? null
+            : _expectedCompletionDate.text,
+        contractValue: _contractValue.text.trim().isEmpty
+            ? null
+            : double.tryParse(_contractValue.text.trim()),
+        currency: _currency.text.trim(),
+        description: _description.text.trim().isEmpty
+            ? null
+            : _description.text.trim(),
+        status: _status,
+        originalLanguage: _originalLanguage.text.trim().isEmpty
+            ? null
+            : _originalLanguage.text.trim(),
+        reportLanguage: _reportLanguage.text.trim().isEmpty
+            ? null
+            : _reportLanguage.text.trim(),
       );
       if (mounted) {
         ScaffoldMessenger.of(
@@ -830,9 +923,9 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
           children: [
             TextFormField(
               controller: _name,
-              decoration: InputDecoration(labelText: l10n.projects),
+              decoration: const InputDecoration(labelText: 'Project Name *'),
               validator: (value) =>
-                  value == null || value.trim().isEmpty ? l10n.projects : null,
+                  value == null || value.trim().isEmpty ? 'Required' : null,
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -840,15 +933,127 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
               decoration: InputDecoration(labelText: l10n.projectCode),
             ),
             const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              initialValue: _currency,
+            TextFormField(
+              controller: _client,
+              decoration: const InputDecoration(labelText: 'Client'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _contractor,
+              decoration: const InputDecoration(labelText: 'Contractor'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _consultant,
+              decoration: const InputDecoration(labelText: 'Consultant'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _quantitySurveyor,
+              decoration: const InputDecoration(labelText: 'Quantity Surveyor'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _projectManager,
+              decoration: const InputDecoration(labelText: 'Project Manager'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _siteEngineer,
+              decoration: const InputDecoration(labelText: 'Site Engineer'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _fundingOrganisation,
+              decoration: const InputDecoration(
+                labelText: 'Funding Organisation',
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _country,
+              decoration: const InputDecoration(labelText: 'Country'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _district,
+              decoration: const InputDecoration(labelText: 'District'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _location,
+              decoration: const InputDecoration(labelText: 'Location'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _projectType,
+              decoration: const InputDecoration(labelText: 'Project Type'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _startDate,
+              decoration: const InputDecoration(
+                labelText: 'Start Date',
+                suffixIcon: Icon(Icons.calendar_today),
+              ),
+              readOnly: true,
+              onTap: () => _pickDate(_startDate),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _expectedCompletionDate,
+              decoration: const InputDecoration(
+                labelText: 'Expected Completion Date',
+                suffixIcon: Icon(Icons.calendar_today),
+              ),
+              readOnly: true,
+              onTap: () => _pickDate(_expectedCompletionDate),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _contractValue,
+              decoration: const InputDecoration(labelText: 'Contract Value'),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _currency,
               decoration: InputDecoration(labelText: l10n.currency),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _description,
+              decoration: const InputDecoration(labelText: 'Description'),
+              maxLines: 3,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _originalLanguage,
+              decoration: const InputDecoration(labelText: 'Original Language'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _reportLanguage,
+              decoration: const InputDecoration(labelText: 'Report Language'),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              value: _status,
+              decoration: const InputDecoration(labelText: 'Status'),
               items: const [
-                DropdownMenuItem(value: 'UGX', child: Text('UGX')),
-                DropdownMenuItem(value: 'USD', child: Text('USD')),
+                DropdownMenuItem(value: 'draft', child: Text('Draft')),
+                DropdownMenuItem(value: 'active', child: Text('Active')),
+                DropdownMenuItem(
+                  value: 'completed',
+                  child: Text('Completed'),
+                ),
+                DropdownMenuItem(
+                  value: 'archived',
+                  child: Text('Archived'),
+                ),
               ],
               onChanged: (value) {
-                if (value != null) setState(() => _currency = value);
+                if (value != null) setState(() => _status = value);
               },
             ),
             if (_error != null)
@@ -890,14 +1095,58 @@ class _ImportPageState extends State<ImportPage> {
   late final Future<List<ProjectSummary>> _projects = widget.api.projects();
   int? _projectId;
   bool _uploading = false;
+  XFile? _pickedImage;
+
+  Future<void> _pickImage() async {
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.camera,
+      maxWidth: 2048,
+      maxHeight: 2048,
+      imageQuality: 85,
+    );
+    if (picked != null) {
+      setState(() => _pickedImage = picked);
+      _uploadPickedImage();
+    }
+  }
+
+  Future<void> _uploadPickedImage() async {
+    if (_projectId == null) return;
+    final bytes = await _pickedImage!.readAsBytes();
+    setState(() => _uploading = true);
+    try {
+      await widget.api.uploadBoqFromBytes(
+        projectId: _projectId!,
+        fileName: _pickedImage!.name,
+        bytes: bytes,
+      );
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${widget.l10n.imported}: ${_pickedImage!.name}')),
+        );
+    } on ApiException catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Upload failed: check the file and try again'),
+          ),
+        );
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+      setState(() => _pickedImage = null);
+    }
+  }
 
   Future<void> _upload() async {
     if (_projectId == null) return;
     final selected = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['xlsx', 'xls', 'csv', 'pdf', 'jpg', 'jpeg', 'png'],
-      // Android content URIs are not always readable through file.path.
-      // Request bytes so uploads work consistently on physical devices.
       withData: true,
     );
     if (selected == null || selected.files.isEmpty) return;
@@ -1003,15 +1252,15 @@ class _ImportPageState extends State<ImportPage> {
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: _projectId == null || _uploading ? null : _upload,
-            icon: const Icon(Icons.document_scanner_outlined),
-            label: Text(l10n.scanPages),
-          ),
-        ),
+const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _projectId == null || _uploading ? null : _pickImage,
+                  icon: const Icon(Icons.document_scanner_outlined),
+                  label: Text(l10n.scanPages),
+                ),
+              ),
       ],
     );
   }
@@ -2659,6 +2908,8 @@ class _EditProjectPageState extends State<EditProjectPage> {
   final _contractValue = TextEditingController();
   final _currency = TextEditingController(text: 'UGX');
   final _description = TextEditingController();
+  final _originalLanguage = TextEditingController();
+  final _reportLanguage = TextEditingController();
   String _status = 'draft';
   bool _loading = false;
   ProjectDetail? _project;
@@ -2693,6 +2944,8 @@ class _EditProjectPageState extends State<EditProjectPage> {
           _contractValue.text = project.contractValue.toString();
           _currency.text = project.currency;
           _description.text = project.description;
+          _originalLanguage.text = project.originalLanguage;
+          _reportLanguage.text = project.reportLanguage;
           _status = project.status;
         });
       }
@@ -2749,6 +3002,8 @@ class _EditProjectPageState extends State<EditProjectPage> {
         currency: _currency.text,
         description: _description.text.isEmpty ? null : _description.text,
         status: _status,
+        originalLanguage: _originalLanguage.text.isEmpty ? null : _originalLanguage.text,
+        reportLanguage: _reportLanguage.text.isEmpty ? null : _reportLanguage.text,
       );
       if (mounted) {
         Navigator.pop(context, true);
@@ -2870,6 +3125,18 @@ class _EditProjectPageState extends State<EditProjectPage> {
                   controller: _description,
                   decoration: const InputDecoration(labelText: 'Description'),
                   maxLines: 3,
+                ),
+                TextFormField(
+                  controller: _originalLanguage,
+                  decoration: const InputDecoration(
+                    labelText: 'Original Language',
+                  ),
+                ),
+                TextFormField(
+                  controller: _reportLanguage,
+                  decoration: const InputDecoration(
+                    labelText: 'Report Language',
+                  ),
                 ),
                 DropdownButtonFormField<String>(
                   value: _status,
@@ -3325,15 +3592,21 @@ class _HardwarePricesPageState extends State<HardwarePricesPage> {
   }
 
   Future<void> _fetchFilters() async {
+    final names = <String>{};
     try {
-      final cats = await widget.api.hardwarePriceCategories();
-      if (mounted) {
-        setState(() {
-          _categories = cats.map((c) => c.name).toList();
-        });
-      }
+      final priceCats = await widget.api.hardwarePriceCategories();
+      names.addAll(priceCats.map((c) => c.name).where((n) => n.isNotEmpty));
     } catch (e) {
       // Ignore filter fetch errors
+    }
+    try {
+      final hardwareCats = await widget.api.hardwareCategoriesAdmin();
+      names.addAll(hardwareCats.map((c) => c.name).where((n) => n.isNotEmpty));
+    } catch (e) {
+      // Ignore filter fetch errors
+    }
+    if (mounted) {
+      setState(() => _categories = names.toList()..sort());
     }
   }
 
