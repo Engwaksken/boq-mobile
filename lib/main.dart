@@ -1115,15 +1115,16 @@ class _ImportPageState extends State<ImportPage> {
     final bytes = await _pickedImage!.readAsBytes();
     setState(() => _uploading = true);
     try {
-      await widget.api.uploadBoqFromBytes(
+      final boq = await widget.api.uploadBoqFromBytes(
         projectId: _projectId!,
         fileName: _pickedImage!.name,
         bytes: bytes,
       );
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${widget.l10n.imported}: ${_pickedImage!.name}')),
-        );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${widget.l10n.imported}: ${_pickedImage!.name}')),
+      );
+      await _reviewUploadedBoq(boq);
     } on ApiException catch (error) {
       if (mounted)
         ScaffoldMessenger.of(
@@ -1138,7 +1139,7 @@ class _ImportPageState extends State<ImportPage> {
         );
     } finally {
       if (mounted) setState(() => _uploading = false);
-      setState(() => _pickedImage = null);
+      if (mounted) setState(() => _pickedImage = null);
     }
   }
 
@@ -1156,19 +1157,22 @@ class _ImportPageState extends State<ImportPage> {
     if (bytes == null && path == null) return;
     setState(() => _uploading = true);
     try {
-      if (bytes != null) {
-        await widget.api.uploadBoqFromBytes(
-          projectId: _projectId!,
-          fileName: file.name,
-          bytes: bytes,
-        );
-      } else if (path != null) {
-        await widget.api.uploadBoq(projectId: _projectId!, filePath: path);
-      }
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${widget.l10n.imported}: ${file.name}')),
-        );
+      final boq = bytes != null
+          ? await widget.api.uploadBoqFromBytes(
+              projectId: _projectId!,
+              fileName: file.name,
+              bytes: bytes,
+            )
+          : await widget.api.uploadBoq(
+              projectId: _projectId!,
+              filePath: path!,
+              name: file.name,
+            );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${widget.l10n.imported}: ${file.name}')),
+      );
+      await _reviewUploadedBoq(boq);
     } on ApiException catch (error) {
       if (mounted)
         ScaffoldMessenger.of(
@@ -1183,6 +1187,44 @@ class _ImportPageState extends State<ImportPage> {
         );
     } finally {
       if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  /// Auto-processes the uploaded BOQ ("Generate BOQ") then opens its
+  /// review page so the user can verify items and fetch prices. Falls back
+  /// to the project page when processing fails so nothing is lost.
+  Future<void> _reviewUploadedBoq(BoqSummary boq) async {
+    if (!mounted) return;
+    try {
+      final imported = await widget.api.processBoq(boq.id);
+      if (!mounted) return;
+      if (imported > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Imported $imported BOQ items')),
+        );
+      }
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => BoqItemsPage(
+            api: widget.api,
+            boqId: boq.id,
+            title: boq.name,
+          ),
+        ),
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${error.message} (open the project to retry)')),
+      );
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ProjectDetailPage(
+            api: widget.api,
+            projectId: _projectId!,
+          ),
+        ),
+      );
     }
   }
 
@@ -2811,27 +2853,103 @@ class ProjectDetailPage extends StatelessWidget {
                       ),
                     ),
                   ),
-                  trailing: boq.status == 'uploaded'
-                      ? FilledButton(
-                          onPressed: () async {
-                            try {
-                              final items = await api.processBoq(boq.id);
-                              if (context.mounted)
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('$items BOQ items created'),
-                                  ),
-                                );
-                            } on ApiException catch (error) {
-                              if (context.mounted)
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(error.message)),
-                                );
-                            }
-                          },
-                          child: const Text('Generate BOQ'),
-                        )
-                      : null,
+trailing: boq.status == 'uploaded'
+    ? FilledButton(
+        onPressed: () async {
+          final place = [
+            project.country,
+            project.district,
+            project.location,
+          ].where((e) => e.isNotEmpty).toList().join(', ');
+          try {
+            final created = await api.processBoq(boq.id);
+            if (!context.mounted) return;
+            final items = await api.allBoqItems(boq.id);
+            if (!context.mounted) return;
+            if (items.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('$created BOQ items created'),
+                ),
+              );
+              return;
+            }
+            if (place.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Set a location on the project to fetch prices.',
+                  ),
+                ),
+              );
+              return;
+            }
+            final progress = ValueNotifier<String>(
+              'Preparing to fetch prices...',
+            );
+            final reportFuture = _priceBoqItems(
+              api,
+              items,
+              place,
+              onProgress: (done, total, description) {
+                progress.value = 'Fetching $done/$total: $description';
+              },
+            );
+            await showDialog<void>(
+              context: context,
+              barrierDismissible: false,
+              builder: (dialogContext) {
+                reportFuture.then((_) {
+                  if (dialogContext.mounted) {
+                    Navigator.of(dialogContext).pop();
+                  }
+                });
+                return AlertDialog(
+                  title: const Text('Generating BOQ prices'),
+                  content: ValueListenableBuilder<String>(
+                    valueListenable: progress,
+                    builder: (context, value, _) => Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircularProgressIndicator(),
+                        const SizedBox(width: 16),
+                        Expanded(child: Text(value)),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+            final report = await reportFuture;
+            if (!context.mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  report.failedMessages.isEmpty
+                      ? 'Generated prices for ${report.priced} items'
+                      : 'Generated ${report.priced} of ${items.length} (${report.failedMessages.length} failed)',
+                ),
+              ),
+            );
+            await Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => BoqItemsPage(
+                  api: api,
+                  boqId: boq.id,
+                  title: boq.name,
+                ),
+              ),
+            );
+          } on ApiException catch (error) {
+            if (context.mounted)
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(error.message)),
+              );
+          }
+        },
+        child: const Text('Generate BOQ'),
+      )
+    : null,
                 ),
               ),
           ],
@@ -2868,6 +2986,49 @@ String _formatLocation(String country, String district, String location) {
     location,
   ].where((e) => e.isNotEmpty).toList();
   return parts.isEmpty ? '—' : parts.join(', ');
+}
+
+class ItemPricingReport {
+  const ItemPricingReport({
+    required this.priced,
+    required this.failedMessages,
+    required this.failedItems,
+  });
+  final int priced;
+  final List<String> failedMessages;
+  final List<BoqItemSummary> failedItems;
+}
+
+Future<ItemPricingReport> _priceBoqItems(
+  ApiClient api,
+  List<BoqItemSummary> targets,
+  String location, {
+  void Function(int done, int total, String description)? onProgress,
+}) async {
+  var priced = 0;
+  final failedMessages = <String>[];
+  final failedItems = <BoqItemSummary>[];
+  for (var i = 0; i < targets.length; i++) {
+    final item = targets[i];
+    onProgress?.call(i + 1, targets.length, item.description);
+    try {
+      await api.priceItem(item.id, location);
+      priced++;
+    } on ApiException catch (error) {
+      failedMessages.add(
+        '${item.description} (${item.unit}): ${error.message}',
+      );
+      failedItems.add(item);
+    } catch (_) {
+      failedMessages.add('${item.description} (${item.unit}): failed');
+      failedItems.add(item);
+    }
+  }
+  return ItemPricingReport(
+    priced: priced,
+    failedMessages: failedMessages,
+    failedItems: failedItems,
+  );
 }
 
 extension StringCapitalize on String {
@@ -3189,6 +3350,9 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
   String? _progress;
   List<Map<String, dynamic>> _history = [];
   bool _historyVisible = false;
+  bool _pricing = false;
+  List<String> _failedReport = [];
+  List<BoqItemSummary> _retryItems = [];
   _BoqItemsPageState() : _boqDetail = null;
   @override
   void initState() {
@@ -3222,40 +3386,91 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
   }
 
   Future<void> _price() async {
-    if (_location.text.trim().isEmpty) return;
+    final location = _location.text.trim();
+    if (location.isEmpty || _pricing) return;
     setState(() {
-      _progress = 'Starting...';
+      _pricing = true;
+      _progress = 'Loading BOQ items...';
       _history = [];
       _historyVisible = false;
+      _failedReport = [];
+      _retryItems = [];
     });
     try {
-      var batch = await widget.api.startPricingBatch(
-        widget.boqId,
-        _location.text.trim(),
-      );
-      if (mounted) {
-        setState(() => _progress = '0/${batch.total} fetched (${batch.status})');
-      }
-      while (batch.status == 'queued' || batch.status == 'running') {
-        await Future<void>.delayed(const Duration(seconds: 2));
-        batch = await widget.api.pricingBatch(batch.id);
-        if (mounted)
-          setState(
-            () => _progress =
-                '${batch.processed}/${batch.total} fetched (${batch.status})',
-          );
-      }
-      if (mounted) {
-        await _refreshItems();
+      final items = await widget.api.allBoqItems(widget.boqId);
+      if (!mounted) return;
+      if (items.isEmpty) {
         setState(() {
-          _progress = 'Saved ${batch.processed} prices for ${_location.text.trim()}';
-          _historyVisible = true;
+          _pricing = false;
+          _progress = 'No BOQ items found to price';
         });
-        await _loadHistory();
+        return;
       }
+      await _runPricing(items, location);
     } on ApiException catch (error) {
       if (mounted) {
-        setState(() => _progress = error.message);
+        setState(() {
+          _pricing = false;
+          _progress = error.message;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _pricing = false;
+          _progress = 'Failed to load BOQ items';
+        });
+      }
+    }
+  }
+
+  Future<void> _runPricing(
+    List<BoqItemSummary> targets,
+    String location,
+  ) async {
+    final report = await _priceBoqItems(
+      widget.api,
+      targets,
+      location,
+      onProgress: (done, total, description) {
+        if (mounted) {
+          setState(() => _progress = 'Fetching $done/$total: $description');
+        }
+      },
+    );
+    await _refreshItems();
+    if (!mounted) return;
+    setState(() {
+      _pricing = false;
+      _failedReport = report.failedMessages;
+      _retryItems = report.failedItems;
+      _progress = report.failedMessages.isEmpty
+          ? 'Fetched prices for ${report.priced} items'
+          : 'Fetched ${report.priced} of ${targets.length} items (${report.failedMessages.length} failed)';
+      _historyVisible = true;
+    });
+    await _loadHistory();
+  }
+
+  Future<void> _retry() async {
+    if (_retryItems.isEmpty || _pricing) return;
+    final location = _location.text.trim();
+    if (location.isEmpty) return;
+    final targets = _retryItems;
+    setState(() {
+      _pricing = true;
+      _failedReport = [];
+      _retryItems = [];
+      _progress = 'Retrying ${targets.length} failed items...';
+    });
+    try {
+      await _runPricing(targets, location);
+    } on ApiException catch (error) {
+      if (mounted) {
+        setState(() {
+          _pricing = false;
+          _progress = error.message;
+        });
       }
     }
   }
@@ -3356,7 +3571,7 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
             ),
             const SizedBox(height: 10),
             FilledButton.icon(
-              onPressed: _price,
+              onPressed: _pricing ? null : _price,
               icon: const Icon(Icons.auto_awesome),
               label: const Text('Get Prices'),
             ),
@@ -3375,6 +3590,44 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                     ),
+                  ],
+                ),
+              ),
+            if (_pricing)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: LinearProgressIndicator(),
+              ),
+            if (_failedReport.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.all(14),
+                margin: const EdgeInsets.only(top: 8),
+                color: const Color(0xFFFFEBEE),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${_failedReport.length} item(s) could not be priced:',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFB71C1C),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    for (final failure in _failedReport)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Text('- $failure', style: const TextStyle(fontSize: 13)),
+                      ),
+                    if (_retryItems.isNotEmpty)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: _pricing ? null : _retry,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Retry failed items'),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -3564,7 +3817,9 @@ class HardwarePricesPage extends StatefulWidget {
   State<HardwarePricesPage> createState() => _HardwarePricesPageState();
 }
 
-class _HardwarePricesPageState extends State<HardwarePricesPage> {
+class _HardwarePricesPageState extends State<HardwarePricesPage>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
   int _page = 1;
   bool _loading = false;
   bool _loadingMore = false;
@@ -3577,24 +3832,29 @@ class _HardwarePricesPageState extends State<HardwarePricesPage> {
   List<String> _categories = [];
   List<String> _suppliers = [];
   List<String> _locations = [];
+  List<HardwarePriceCategory> _categoryStats = [];
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _fetch();
     _fetchFilters();
   }
 
   @override
   void dispose() {
+    _tabController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
   Future<void> _fetchFilters() async {
     final names = <String>{};
+    final stats = <HardwarePriceCategory>[];
     try {
       final priceCats = await widget.api.hardwarePriceCategories();
+      stats.addAll(priceCats);
       names.addAll(priceCats.map((c) => c.name).where((n) => n.isNotEmpty));
     } catch (e) {
       // Ignore filter fetch errors
@@ -3606,12 +3866,18 @@ class _HardwarePricesPageState extends State<HardwarePricesPage> {
       // Ignore filter fetch errors
     }
     if (mounted) {
-      setState(() => _categories = names.toList()..sort());
+      setState(() {
+        _categories = names.toList()..sort();
+        if (stats.isNotEmpty) {
+          _categoryStats = stats..sort((a, b) => a.name.compareTo(b.name));
+        }
+      });
     }
   }
 
-  Future<void> _fetch({bool loadMore = false}) async {
+  Future<void> _fetch({bool loadMore = false, int? page}) async {
     if (_loading) return;
+    final target = page ?? (loadMore ? _page + 1 : 1);
     if (loadMore) {
       setState(() => _loadingMore = true);
     } else {
@@ -3626,7 +3892,7 @@ class _HardwarePricesPageState extends State<HardwarePricesPage> {
         supplier: _selectedSupplier,
         location: _selectedLocation,
         search: _searchController.text.isEmpty ? null : _searchController.text,
-        page: loadMore ? _page + 1 : 1,
+        page: target,
         perPage: 20,
       );
       if (mounted) {
@@ -3642,7 +3908,7 @@ class _HardwarePricesPageState extends State<HardwarePricesPage> {
             _page = result.currentPage;
           } else {
             _result = result;
-            _page = 1;
+            _page = target;
           }
           _loading = false;
           _loadingMore = false;
@@ -3697,11 +3963,135 @@ class _HardwarePricesPageState extends State<HardwarePricesPage> {
     ),
     body: Column(
       children: [
-        _buildFilters(),
-        Expanded(child: _buildList()),
+        Material(
+          color: Colors.white,
+          child: TabBar(
+            controller: _tabController,
+            tabs: const [
+              Tab(text: 'All Prices'),
+              Tab(text: 'Categories'),
+            ],
+          ),
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildAllTab(),
+              _buildCategoriesTab(),
+            ],
+          ),
+        ),
       ],
     ),
   );
+
+  Widget _buildAllTab() => Column(
+    children: [
+      _buildFilters(),
+      Expanded(child: _buildList()),
+      if (_result != null && _result!.data.isNotEmpty) _buildPaginationFooter(),
+    ],
+  );
+
+  Widget _buildPaginationFooter() {
+    final last = _result?.lastPage ?? 1;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Colors.grey[200]!)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Page $_page of $last',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          Row(
+            children: [
+              if (_loadingMore)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              IconButton(
+                icon: const Icon(Icons.chevron_left),
+                tooltip: 'Previous page',
+                onPressed: _page <= 1 ? null : () => _goToPage(_page - 1),
+              ),
+              IconButton(
+                icon: const Icon(Icons.chevron_right),
+                tooltip: 'Next page',
+                onPressed: _page >= last ? null : () => _goToPage(_page + 1),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _goToPage(int page) => _fetch(page: page);
+
+  Widget _buildCategoriesTab() {
+    if (_categoryStats.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('No categories loaded'),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _fetchFilters,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Load categories'),
+            ),
+          ],
+        ),
+      );
+    }
+    final total = _categoryStats.fold<int>(0, (sum, c) => sum + c.count);
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _categoryStats.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.apps)),
+              title: const Text('All categories'),
+              subtitle: Text('$total items'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                setState(() => _selectedCategory = null);
+                _tabController.animateTo(0);
+                _fetch();
+              },
+            ),
+          );
+        }
+        final cat = _categoryStats[index - 1];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            leading: const CircleAvatar(child: Icon(Icons.category_outlined)),
+            title: Text(cat.name),
+            subtitle: Text('${cat.count} items'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              setState(() => _selectedCategory = cat.name);
+              _tabController.animateTo(0);
+              _fetch();
+            },
+          ),
+        );
+      },
+    );
+  }
 
   Widget _buildFilters() => Container(
     padding: const EdgeInsets.all(16),

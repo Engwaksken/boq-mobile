@@ -563,22 +563,28 @@ class ApiClient {
     return BoqItemDetail.fromJson(body['data'] as Map<String, dynamic>);
   }
 
-  Future<void> uploadBoq({
+Future<BoqSummary> uploadBoq({
     required int projectId,
     required String filePath,
+    String? name,
   }) async {
     final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/boqs'));
     request.headers.addAll(await _headers());
     request.fields['project_id'] = '$projectId';
+    if (name != null && name.isNotEmpty) request.fields['name'] = name;
     request.files.add(await http.MultipartFile.fromPath('file', filePath));
     final streamed = await request.send().timeout(const Duration(seconds: 120));
-final response = await http.Response.fromStream(streamed);
-    if (response.statusCode != 201) {
-      throw ApiException('Upload failed: ${response.statusCode}');
+    final response = await http.Response.fromStream(streamed);
+    final body = _decode(response);
+    if (response.statusCode != 201) throw ApiException(_message(body));
+    final data = body['data'];
+    if (data is! Map<String, dynamic>) {
+      throw const ApiException('The server did not return the created BOQ.');
     }
+    return BoqSummary.fromJson(data);
   }
 
-  Future<void> uploadBoqFromBytes({
+  Future<BoqSummary> uploadBoqFromBytes({
     required int projectId,
     required String fileName,
     required Uint8List bytes,
@@ -592,9 +598,13 @@ final response = await http.Response.fromStream(streamed);
     );
     final streamed = await request.send().timeout(const Duration(seconds: 120));
     final response = await http.Response.fromStream(streamed);
-    if (response.statusCode != 201) {
-      throw ApiException('Upload failed: ${response.statusCode}');
+    final body = _decode(response);
+    if (response.statusCode != 201) throw ApiException(_message(body));
+    final data = body['data'];
+    if (data is! Map<String, dynamic>) {
+      throw const ApiException('The server did not return the created BOQ.');
     }
+    return BoqSummary.fromJson(data);
   }
 
   Future<int> processBoq(int id) async {
@@ -654,19 +664,31 @@ final response = await http.Response.fromStream(streamed);
         .toList();
   }
 
-  List<BoqItemSummary> _flattenBoqItems(BoqDetail boq) {
-    final items = <BoqItemSummary>[];
-    for (final facility in boq.facilities) {
-      for (final bill in facility.bills) {
-        for (final element in bill.elements) {
-          items.addAll(element.items);
-          for (final subElement in element.subElements) {
-            items.addAll(subElement.items);
-          }
-        }
-      }
-    }
-    return items;
+  /// Fetches every BOQ item across all pages of the paginated items endpoint.
+  Future<List<BoqItemSummary>> allBoqItems(int id) async {
+    final all = <BoqItemSummary>[];
+    var page = 1;
+    var lastPage = 1;
+    do {
+      final response = await _httpClient.get(
+        Uri.parse('$baseUrl/boqs/$id/items').replace(
+          queryParameters: {'page': '$page', 'per_page': '100'},
+        ),
+        headers: await _headers(),
+      );
+      final body = _decode(response);
+      if (response.statusCode != 200) throw ApiException(_message(body));
+      final pageData = body['data'];
+      if (pageData is! Map<String, dynamic>) break;
+      final rows = pageData['data'];
+      if (rows is! List) break;
+      all.addAll(
+        rows.cast<Map<String, dynamic>>().map(BoqItemSummary.fromJson),
+      );
+      lastPage = pageData['last_page'] as int? ?? page;
+      page++;
+    } while (page <= lastPage);
+    return all;
   }
 
   Future<Map<String, dynamic>> priceItem(int id, String location) async {
