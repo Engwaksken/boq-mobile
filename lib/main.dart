@@ -3199,60 +3199,73 @@ class _EditProjectPageState extends State<EditProjectPage> {
                   ),
                   validator: (v) => v!.isEmpty ? 'Required' : null,
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _code,
                   decoration: const InputDecoration(labelText: 'Project Code'),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _client,
                   decoration: const InputDecoration(labelText: 'Client'),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _contractor,
                   decoration: const InputDecoration(labelText: 'Contractor'),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _consultant,
                   decoration: const InputDecoration(labelText: 'Consultant'),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _quantitySurveyor,
                   decoration: const InputDecoration(
                     labelText: 'Quantity Surveyor',
                   ),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _projectManager,
                   decoration: const InputDecoration(
                     labelText: 'Project Manager',
                   ),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _siteEngineer,
                   decoration: const InputDecoration(labelText: 'Site Engineer'),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _fundingOrganisation,
                   decoration: const InputDecoration(
                     labelText: 'Funding Organisation',
                   ),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _country,
                   decoration: const InputDecoration(labelText: 'Country'),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _district,
                   decoration: const InputDecoration(labelText: 'District'),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _location,
                   decoration: const InputDecoration(labelText: 'Location'),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _projectType,
                   decoration: const InputDecoration(labelText: 'Project Type'),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _startDate,
                   decoration: const InputDecoration(
@@ -3262,6 +3275,7 @@ class _EditProjectPageState extends State<EditProjectPage> {
                   readOnly: true,
                   onTap: () => _pickDate(_startDate),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _expectedCompletionDate,
                   decoration: const InputDecoration(
@@ -3271,6 +3285,7 @@ class _EditProjectPageState extends State<EditProjectPage> {
                   readOnly: true,
                   onTap: () => _pickDate(_expectedCompletionDate),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _contractValue,
                   decoration: const InputDecoration(
@@ -3278,27 +3293,32 @@ class _EditProjectPageState extends State<EditProjectPage> {
                   ),
                   keyboardType: TextInputType.number,
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _currency,
                   decoration: const InputDecoration(labelText: 'Currency'),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _description,
                   decoration: const InputDecoration(labelText: 'Description'),
                   maxLines: 3,
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _originalLanguage,
                   decoration: const InputDecoration(
                     labelText: 'Original Language',
                   ),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _reportLanguage,
                   decoration: const InputDecoration(
                     labelText: 'Report Language',
                   ),
                 ),
+                const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   value: _status,
                   decoration: const InputDecoration(labelText: 'Status'),
