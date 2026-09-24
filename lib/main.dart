@@ -3877,13 +3877,11 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
       stats.addAll(priceCats);
       names.addAll(priceCats.map((c) => c.name).where((n) => n.isNotEmpty));
     } catch (e) {
-      // Ignore filter fetch errors
     }
     try {
       final hardwareCats = await widget.api.hardwareCategoriesAdmin();
       names.addAll(hardwareCats.map((c) => c.name).where((n) => n.isNotEmpty));
     } catch (e) {
-      // Ignore filter fetch errors
     }
     if (mounted) {
       setState(() {
