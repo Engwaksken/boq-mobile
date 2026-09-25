@@ -795,9 +795,7 @@ Future<BoqSummary> uploadBoq({
     return body['data'] as Map<String, dynamic>;
   }
 
-  /// ============================================================================
-  /// PROXY SUBSCRIPTION API METHODS
-  /// ============================================================================
+  // Proxy subscription API methods.
 
   Future<List<BeneficiaryUser>> searchBeneficiaries(String query) async {
     final response = await _httpClient.get(
@@ -905,9 +903,7 @@ Future<BoqSummary> uploadBoq({
     if (response.statusCode != 200) throw ApiException(_message(body));
   }
 
-  /// ============================================================================
-  /// BOQ PRICING JOB API METHODS (replaces PricingBatch)
-  /// ============================================================================
+  // BOQ pricing job API methods.
 
   Future<BoqPricingJob> startPricingJob(int boqId, {int batchSize = 25}) async {
     final response = await _httpClient.post(
@@ -1000,9 +996,7 @@ Future<BoqSummary> uploadBoq({
     return BoqPricingJobProgress.fromJson(body['data'] as Map<String, dynamic>);
   }
 
-  /// ============================================================================
-  /// AI PROVIDER ADMIN API METHODS
-  /// ============================================================================
+  // AI provider admin API methods.
 
   Future<List<AiProvider>> aiProviders() async {
     final response = await _httpClient.get(
@@ -1096,9 +1090,7 @@ Future<BoqSummary> uploadBoq({
     return AiProvider.fromJson(body['data'] as Map<String, dynamic>);
   }
 
-  /// ============================================================================
-  /// HARDWARE CATEGORY ADMIN API METHODS
-  /// ============================================================================
+  // Hardware category admin API methods.
 
   Future<List<HardwareCategory>> hardwareCategoriesAdmin() async {
     final response = await _httpClient.get(
@@ -2101,9 +2093,7 @@ class BoqItemTranslation {
   final String? reviewedAt;
 }
 
-/// ============================================================================
-/// PROXY SUBSCRIPTION MODELS
-/// ============================================================================
+// Proxy subscription models.
 
 class ProxySubscription {
   const ProxySubscription({
@@ -2174,9 +2164,7 @@ class BeneficiaryUser {
   final String email;
 }
 
-/// ============================================================================
-/// BOQ PRICING JOB MODELS (replaces PricingBatch)
-/// ============================================================================
+// BOQ pricing job models.
 
 class BoqPricingJob {
   const BoqPricingJob({
@@ -2265,9 +2253,7 @@ class BoqPricingJobProgress {
   final String status;
 }
 
-/// ============================================================================
-/// AI PROVIDER & HARDWARE CATEGORY MODELS
-/// ============================================================================
+// AI provider and hardware category models.
 
 class AiProvider {
   const AiProvider({

@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
@@ -18,6 +19,19 @@ import 'api_client.dart';
 
 void main() {
   runApp(const BoqApp());
+}
+
+Future<T?> _loadOrNull<T>(Future<T> Function() load) async {
+  try {
+    return await load();
+  } on Object catch (error) {
+    if (error is ApiException ||
+        error is http.ClientException ||
+        error is IOException) {
+      return null;
+    }
+    rethrow;
+  }
 }
 
 class BoqApp extends StatefulWidget {
@@ -1883,7 +1897,7 @@ class _PaymentPageState extends State<PaymentPage> {
       if (!mounted) return;
       setState(() => _receipt = receipt);
     } on ApiException {
-      // The invoice may still be committing; the next status refresh can retry.
+      return;
     }
   }
 
@@ -2635,15 +2649,12 @@ class ProjectDetailPage extends StatelessWidget {
         PopupMenuButton<String>(
           onSelected: (value) async {
             if (value == 'edit') {
-              final updated = await Navigator.of(context).push<bool>(
+              await Navigator.of(context).push<bool>(
                 MaterialPageRoute(
                   builder: (_) =>
                       EditProjectPage(api: api, projectId: projectId),
                 ),
               );
-              if (updated == true && context.mounted) {
-                // Refresh will happen automatically when popping back
-              }
             } else if (value == 'delete') {
               final confirm = await showDialog<bool>(
                 context: context,
@@ -2668,9 +2679,7 @@ class ProjectDetailPage extends StatelessWidget {
                 try {
                   await api.deleteProject(projectId);
                   if (context.mounted) {
-                    Navigator.of(
-                      context,
-                    ).pop(true); // Return true to indicate deletion
+                    Navigator.of(context).pop(true);
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Project deleted')),
                     );
@@ -3872,17 +3881,15 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
   Future<void> _fetchFilters() async {
     final names = <String>{};
     final stats = <HardwarePriceCategory>[];
-    try {
-      final priceCats = await widget.api.hardwarePriceCategories();
-      stats.addAll(priceCats);
-      names.addAll(priceCats.map((c) => c.name).where((n) => n.isNotEmpty));
-    } catch (e) {
-    }
-    try {
-      final hardwareCats = await widget.api.hardwareCategoriesAdmin();
-      names.addAll(hardwareCats.map((c) => c.name).where((n) => n.isNotEmpty));
-    } catch (e) {
-    }
+    final priceCats =
+        await _loadOrNull(widget.api.hardwarePriceCategories) ??
+        const <HardwarePriceCategory>[];
+    stats.addAll(priceCats);
+    names.addAll(priceCats.map((c) => c.name).where((n) => n.isNotEmpty));
+    final hardwareCats =
+        await _loadOrNull(widget.api.hardwareCategoriesAdmin) ??
+        const <HardwareCategory>[];
+    names.addAll(hardwareCats.map((c) => c.name).where((n) => n.isNotEmpty));
     if (mounted) {
       setState(() {
         _categories = names.toList()..sort();
@@ -4907,11 +4914,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   }
 
   Future<void> _fetchCategories() async {
-    try {
-      final cats = await widget.api.hardwarePriceCategories();
-      if (mounted)
-        setState(() => _categories = cats.map((c) => c.name).toList());
-    } catch (_) {}
+    final cats = await _loadOrNull(widget.api.hardwarePriceCategories);
+    if (cats == null || !mounted) return;
+    setState(() => _categories = cats.map((c) => c.name).toList());
   }
 
   Future<void> _fetch() async {
