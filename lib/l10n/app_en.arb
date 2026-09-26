@@ -101,5 +101,18 @@
   "noProxySubscriptionsDescription": "There are no proxy subscriptions matching your filters.",
   "proxySubscriptionDetails": "Proxy Subscription Details",
   "adminAccessRequired": "Admin Access Required",
-  "adminAccessDescription": "This page is only accessible to administrators."
+  "adminAccessDescription": "This page is only accessible to administrators.",
+  "useBiometricToLogin": "Login with Biometric",
+  "biometricPromptTitle": "Enable Biometric Login",
+  "biometricPromptMessage": "Would you like to enable biometric login for faster access?",
+  "biometricPromptEnable": "Enable",
+  "biometricPromptCancel": "Cancel",
+  "enableBiometricLogin": "Enable Biometric Login",
+  "biometricLoginDescription": "Use fingerprint or face recognition to sign in quickly",
+  "biometricNotAvailable": "Biometric authentication is not available on this device",
+  "biometricEnabled": "Biometric login enabled",
+  "biometricDisabled": "Biometric login disabled",
+  "biometricError": "Biometric authentication failed. Please try again.",
+  "biometricAvailable": "Biometric available",
+  "biometricTypes": "Available: "
 }

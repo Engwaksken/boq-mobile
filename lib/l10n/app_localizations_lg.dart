@@ -141,6 +141,55 @@ class AppLocalizationsLg extends AppLocalizations {
       'Tesobodde kuyingira. Kebera ebikukwatako oddemu ogezeeko.';
 
   @override
+  String get forgotPassword => 'Oyimiride ekigambo ekikuumi?';
+
+  @override
+  String get noAccount => 'Tolina akaawunti?';
+
+  @override
+  String get signUp => 'Weeyingize';
+
+  @override
+  String get signUpDescription =>
+      'Tonda akaawunti otandike okuddukanya pulojekiti zo n\'ama BOQ.';
+
+  @override
+  String get organisationName => 'Erinnya ly\'ekibiina (si bya kweetagisa)';
+
+  @override
+  String get confirmPassword => 'Kakasa ekigambo ekikuumi';
+
+  @override
+  String get passwordTooShort =>
+      'Ekigambo ekikuumi kirina okuba n\'ebigambo 8 oba okusukka.';
+
+  @override
+  String get passwordMismatch => 'Ebigambo ebikuumi tebikwatagana.';
+
+  @override
+  String get createAccount => 'Tonda akaawunti';
+
+  @override
+  String get resetPasswordDescription =>
+      'Wandika endagiriro ya email yo, tuunikuggyeza olukusa lw\'okuddizaawo ekigambo ekikuumi.';
+
+  @override
+  String get resetEmailSent =>
+      'Bwe waba nga waliwo akaawunti eyo, tumyeerezza olukusa lw\'okuddizaawo ekigambo ekikuumi. Kebera email yo.';
+
+  @override
+  String get sendResetLink => 'Tumya olukusa';
+
+  @override
+  String get backToSignIn => 'Dda ku kuyingira';
+
+  @override
+  String get privacyPolicy => 'Empisa za Kyaama';
+
+  @override
+  String get termsOfUse => 'Empisa z\'Eby\'Okukozesa';
+
+  @override
   String get loadingDashboard => 'Ekisengejjero kyo kitikkibwa...';
 
   @override
@@ -276,4 +325,46 @@ class AppLocalizationsLg extends AppLocalizations {
   @override
   String get adminAccessDescription =>
       'Olusomesa luno lulabibwa abakulu abakulu tu.';
+
+  @override
+  String get useBiometricToLogin => 'Yingira n\'Obulamu';
+
+  @override
+  String get biometricPromptTitle => 'Kolesa Obuyita Obulamu';
+
+  @override
+  String get biometricPromptMessage =>
+      'Omulabe okuwulira obuyita obulamu bwo kuyingira nga bwe kibi?';
+
+  @override
+  String get biometricPromptEnable => 'Kolesa';
+
+  @override
+  String get biometricPromptCancel => 'Gana';
+
+  @override
+  String get enableBiometricLogin => 'Kolesa Obuyita Obulamu';
+
+  @override
+  String get biometricLoginDescription =>
+      'Kozesa ekigere oba ennyo y\'omuntu okuyingira nga bwe kibi';
+
+  @override
+  String get biometricNotAvailable =>
+      'Obuyita obulamu tebwaliwo ku kifaananyi kino';
+
+  @override
+  String get biometricEnabled => 'Obuyita obulamu bwakolesedde';
+
+  @override
+  String get biometricDisabled => 'Obuyita obulamu bwekkedde';
+
+  @override
+  String get biometricError => 'Obuyita obulamu bweleke. Mwongeze omulabe.';
+
+  @override
+  String get biometricAvailable => 'Obuyita obulamu buliwo';
+
+  @override
+  String get biometricTypes => 'Ebikozesebwa: ';
 }

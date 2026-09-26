@@ -356,6 +356,96 @@ abstract class AppLocalizations {
   /// **'Unable to sign in. Check your details and try again.'**
   String get signInFailed;
 
+  /// No description provided for @forgotPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Forgot password?'**
+  String get forgotPassword;
+
+  /// No description provided for @noAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t have an account?'**
+  String get noAccount;
+
+  /// No description provided for @signUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign up'**
+  String get signUp;
+
+  /// No description provided for @signUpDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Create an account to start managing your projects and BOQs.'**
+  String get signUpDescription;
+
+  /// No description provided for @organisationName.
+  ///
+  /// In en, this message translates to:
+  /// **'Organisation name (optional)'**
+  String get organisationName;
+
+  /// No description provided for @confirmPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm password'**
+  String get confirmPassword;
+
+  /// No description provided for @passwordTooShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Password must be at least 8 characters.'**
+  String get passwordTooShort;
+
+  /// No description provided for @passwordMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Passwords do not match.'**
+  String get passwordMismatch;
+
+  /// No description provided for @createAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Create account'**
+  String get createAccount;
+
+  /// No description provided for @resetPasswordDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your email address and we will send you a link to reset your password.'**
+  String get resetPasswordDescription;
+
+  /// No description provided for @resetEmailSent.
+  ///
+  /// In en, this message translates to:
+  /// **'If an account exists for that email, a password reset link has been sent. Check your inbox.'**
+  String get resetEmailSent;
+
+  /// No description provided for @sendResetLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Send reset link'**
+  String get sendResetLink;
+
+  /// No description provided for @backToSignIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to sign in'**
+  String get backToSignIn;
+
+  /// No description provided for @privacyPolicy.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy Policy'**
+  String get privacyPolicy;
+
+  /// No description provided for @termsOfUse.
+  ///
+  /// In en, this message translates to:
+  /// **'Terms of Use'**
+  String get termsOfUse;
+
   /// No description provided for @loadingDashboard.
   ///
   /// In en, this message translates to:
@@ -625,6 +715,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This page is only accessible to administrators.'**
   String get adminAccessDescription;
+
+  /// No description provided for @useBiometricToLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Login with Biometric'**
+  String get useBiometricToLogin;
+
+  /// No description provided for @biometricPromptTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Biometric Login'**
+  String get biometricPromptTitle;
+
+  /// No description provided for @biometricPromptMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Would you like to enable biometric login for faster access?'**
+  String get biometricPromptMessage;
+
+  /// No description provided for @biometricPromptEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable'**
+  String get biometricPromptEnable;
+
+  /// No description provided for @biometricPromptCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get biometricPromptCancel;
+
+  /// No description provided for @enableBiometricLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Biometric Login'**
+  String get enableBiometricLogin;
+
+  /// No description provided for @biometricLoginDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Use fingerprint or face recognition to sign in quickly'**
+  String get biometricLoginDescription;
+
+  /// No description provided for @biometricNotAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Biometric authentication is not available on this device'**
+  String get biometricNotAvailable;
+
+  /// No description provided for @biometricEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Biometric login enabled'**
+  String get biometricEnabled;
+
+  /// No description provided for @biometricDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Biometric login disabled'**
+  String get biometricDisabled;
+
+  /// No description provided for @biometricError.
+  ///
+  /// In en, this message translates to:
+  /// **'Biometric authentication failed. Please try again.'**
+  String get biometricError;
+
+  /// No description provided for @biometricAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Biometric available'**
+  String get biometricAvailable;
+
+  /// No description provided for @biometricTypes.
+  ///
+  /// In en, this message translates to:
+  /// **'Available: '**
+  String get biometricTypes;
 }
 
 class _AppLocalizationsDelegate

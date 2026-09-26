@@ -101,5 +101,18 @@
   "noProxySubscriptionsDescription": "Tewali obwammemba bwa proxy bunaakulaba.",
   "proxySubscriptionDetails": "Ebikwata ku Obwammemba bwa Proxy",
   "adminAccessRequired": "Obugagga bwa Admin Bwebulidde",
-  "adminAccessDescription": "Olusomesa luno lulabibwa abakulu abakulu tu."
+  "adminAccessDescription": "Olusomesa luno lulabibwa abakulu abakulu tu.",
+  "useBiometricToLogin": "Yingira n'Obulamu",
+  "biometricPromptTitle": "Kolesa Obuyita Obulamu",
+  "biometricPromptMessage": "Omulabe okuwulira obuyita obulamu bwo kuyingira nga bwe kibi?",
+  "biometricPromptEnable": "Kolesa",
+  "biometricPromptCancel": "Gana",
+  "enableBiometricLogin": "Kolesa Obuyita Obulamu",
+  "biometricLoginDescription": "Kozesa ekigere oba ennyo y'omuntu okuyingira nga bwe kibi",
+  "biometricNotAvailable": "Obuyita obulamu tebwaliwo ku kifaananyi kino",
+  "biometricEnabled": "Obuyita obulamu bwakolesedde",
+  "biometricDisabled": "Obuyita obulamu bwekkedde",
+  "biometricError": "Obuyita obulamu bweleke. Mwongeze omulabe.",
+  "biometricAvailable": "Obuyita obulamu buliwo",
+  "biometricTypes": "Ebikozesebwa: "
 }

@@ -141,6 +141,54 @@ class AppLocalizationsEn extends AppLocalizations {
       'Unable to sign in. Check your details and try again.';
 
   @override
+  String get forgotPassword => 'Forgot password?';
+
+  @override
+  String get noAccount => 'Don\'t have an account?';
+
+  @override
+  String get signUp => 'Sign up';
+
+  @override
+  String get signUpDescription =>
+      'Create an account to start managing your projects and BOQs.';
+
+  @override
+  String get organisationName => 'Organisation name (optional)';
+
+  @override
+  String get confirmPassword => 'Confirm password';
+
+  @override
+  String get passwordTooShort => 'Password must be at least 8 characters.';
+
+  @override
+  String get passwordMismatch => 'Passwords do not match.';
+
+  @override
+  String get createAccount => 'Create account';
+
+  @override
+  String get resetPasswordDescription =>
+      'Enter your email address and we will send you a link to reset your password.';
+
+  @override
+  String get resetEmailSent =>
+      'If an account exists for that email, a password reset link has been sent. Check your inbox.';
+
+  @override
+  String get sendResetLink => 'Send reset link';
+
+  @override
+  String get backToSignIn => 'Back to sign in';
+
+  @override
+  String get privacyPolicy => 'Privacy Policy';
+
+  @override
+  String get termsOfUse => 'Terms of Use';
+
+  @override
   String get loadingDashboard => 'Loading your dashboard...';
 
   @override
@@ -276,4 +324,47 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get adminAccessDescription =>
       'This page is only accessible to administrators.';
+
+  @override
+  String get useBiometricToLogin => 'Login with Biometric';
+
+  @override
+  String get biometricPromptTitle => 'Enable Biometric Login';
+
+  @override
+  String get biometricPromptMessage =>
+      'Would you like to enable biometric login for faster access?';
+
+  @override
+  String get biometricPromptEnable => 'Enable';
+
+  @override
+  String get biometricPromptCancel => 'Cancel';
+
+  @override
+  String get enableBiometricLogin => 'Enable Biometric Login';
+
+  @override
+  String get biometricLoginDescription =>
+      'Use fingerprint or face recognition to sign in quickly';
+
+  @override
+  String get biometricNotAvailable =>
+      'Biometric authentication is not available on this device';
+
+  @override
+  String get biometricEnabled => 'Biometric login enabled';
+
+  @override
+  String get biometricDisabled => 'Biometric login disabled';
+
+  @override
+  String get biometricError =>
+      'Biometric authentication failed. Please try again.';
+
+  @override
+  String get biometricAvailable => 'Biometric available';
+
+  @override
+  String get biometricTypes => 'Available: ';
 }

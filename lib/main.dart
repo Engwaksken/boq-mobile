@@ -16,6 +16,87 @@ import 'package:intl/intl.dart';
 import 'package:boq_mobile/l10n/app_localizations.dart';
 
 import 'api_client.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+/// Service for handling biometric authentication operations.
+class BiometricService {
+  final LocalAuthentication _localAuth = LocalAuthentication();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  static const String _biometricEnabledKey = 'biometric_enabled';
+
+  /// Checks if biometric hardware is available on the device.
+  Future<bool> isBiometricAvailable() async {
+    try {
+      return await _localAuth.canCheckBiometrics;
+    } on PlatformException catch (_) {
+      return false;
+    }
+  }
+
+  /// Gets the list of available biometric types on the device.
+  Future<List<BiometricType>> getAvailableBiometrics() async {
+    try {
+      return await _localAuth.getAvailableBiometrics();
+    } on PlatformException catch (_) {
+      return <BiometricType>[];
+    }
+  }
+
+  /// Authenticates the user using biometric authentication.
+  /// Returns true if authentication succeeds, false otherwise.
+  Future<bool> authenticate({required String localizedReason}) async {
+    try {
+      return await _localAuth.authenticate(
+        localizedReason: localizedReason,
+        options: const AuthenticationOptions(
+          biometricOnly: true,
+          stickyAuth: true,
+        ),
+      );
+    } on PlatformException catch (_) {
+      return false;
+    }
+  }
+
+  /// Checks if the user has enabled biometric login.
+  Future<bool> isBiometricEnabled() async {
+    try {
+      final value = await _secureStorage.read(key: _biometricEnabledKey);
+      return value == 'true';
+    } on PlatformException catch (_) {
+      return false;
+    }
+  }
+
+  /// Enables or disables biometric login for the user.
+  Future<void> setBiometricEnabled(bool enabled) async {
+    try {
+      await _secureStorage.write(
+        key: _biometricEnabledKey,
+        value: enabled.toString(),
+      );
+    } on PlatformException catch (_) {
+      // Ignore storage errors
+    }
+  }
+
+  /// Gets a localized name for the given biometric type.
+  String getBiometricTypeName(BiometricType type) {
+    switch (type) {
+      case BiometricType.fingerprint:
+        return 'Fingerprint';
+      case BiometricType.face:
+        return 'Face Recognition';
+      case BiometricType.iris:
+        return 'Iris Scan';
+      case BiometricType.strong:
+        return 'Strong Biometric';
+      case BiometricType.weak:
+        return 'Weak Biometric';
+    }
+  }
+}
 
 void main() {
   runApp(const BoqApp());
@@ -225,15 +306,81 @@ class _LoginPageState extends State<LoginPage> {
   final _email = TextEditingController();
   final _password = TextEditingController();
 
+  late final BiometricService _biometricService;
+  bool _biometricAvailable = false;
+  bool _biometricEnabled = false;
+
   bool _loading = false;
   bool _obscurePassword = true;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _biometricService = BiometricService();
+    _checkBiometricStatus();
+  }
+
+  Future<void> _checkBiometricStatus() async {
+    final available = await _biometricService.isBiometricAvailable();
+    final enabled = await _biometricService.isBiometricEnabled();
+    if (mounted) {
+      setState(() {
+        _biometricAvailable = available;
+        _biometricEnabled = enabled;
+      });
+    }
+  }
 
   @override
   void dispose() {
     _email.dispose();
     _password.dispose();
     super.dispose();
+  }
+
+  Future<void> _authenticateWithBiometric() async {
+    final l10n = AppLocalizations.of(context)!;
+    final success = await _biometricService.authenticate(
+      localizedReason: l10n.useBiometricToLogin,
+    );
+    if (success && mounted) {
+      widget.onSignedIn();
+    } else if (mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.biometricError)));
+    }
+  }
+
+  Future<void> _promptEnableBiometric() async {
+    final l10n = AppLocalizations.of(context)!;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.biometricPromptTitle),
+        content: Text(l10n.biometricPromptMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(l10n.biometricPromptCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(l10n.biometricPromptEnable),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true && mounted) {
+      await _biometricService.setBiometricEnabled(true);
+      if (mounted) {
+        setState(() => _biometricEnabled = true);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.biometricEnabled)));
+      }
+    }
   }
 
   Future<void> _signIn() async {
@@ -254,6 +401,11 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!mounted) {
         return;
+      }
+
+      // Check if biometric is available but not enabled, prompt to enable
+      if (_biometricAvailable && !_biometricEnabled) {
+        await _promptEnableBiometric();
       }
 
       widget.onSignedIn();
@@ -317,7 +469,10 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(color: Color(0xFF102A43), width: 1.5),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF102A43),
+                            width: 1.5,
+                          ),
                         ),
                       ),
                       validator: (value) {
@@ -362,7 +517,10 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(color: Color(0xFF102A43), width: 1.5),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF102A43),
+                            width: 1.5,
+                          ),
                         ),
                       ),
                       validator: (value) {
@@ -385,6 +543,19 @@ class _LoginPageState extends State<LoginPage> {
                         child: Text(
                           _error!,
                           style: const TextStyle(color: Color(0xFFBE123C)),
+                        ),
+                      ),
+                    ],
+                    if (_biometricEnabled && _biometricAvailable) ...[
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: 50,
+                        child: OutlinedButton.icon(
+                          onPressed: _loading
+                              ? null
+                              : _authenticateWithBiometric,
+                          icon: const Icon(Icons.fingerprint),
+                          label: Text(l10n.useBiometricToLogin),
                         ),
                       ),
                     ],
@@ -884,12 +1055,8 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
             ? null
             : _fundingOrganisation.text.trim(),
         country: _country.text.trim().isEmpty ? null : _country.text.trim(),
-        district: _district.text.trim().isEmpty
-            ? null
-            : _district.text.trim(),
-        location: _location.text.trim().isEmpty
-            ? null
-            : _location.text.trim(),
+        district: _district.text.trim().isEmpty ? null : _district.text.trim(),
+        location: _location.text.trim().isEmpty ? null : _location.text.trim(),
         projectType: _projectType.text.trim().isEmpty
             ? null
             : _projectType.text.trim(),
@@ -1057,14 +1224,8 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
               items: const [
                 DropdownMenuItem(value: 'draft', child: Text('Draft')),
                 DropdownMenuItem(value: 'active', child: Text('Active')),
-                DropdownMenuItem(
-                  value: 'completed',
-                  child: Text('Completed'),
-                ),
-                DropdownMenuItem(
-                  value: 'archived',
-                  child: Text('Archived'),
-                ),
+                DropdownMenuItem(value: 'completed', child: Text('Completed')),
+                DropdownMenuItem(value: 'archived', child: Text('Archived')),
               ],
               onChanged: (value) {
                 if (value != null) setState(() => _status = value);
@@ -1136,7 +1297,9 @@ class _ImportPageState extends State<ImportPage> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${widget.l10n.imported}: ${_pickedImage!.name}')),
+        SnackBar(
+          content: Text('${widget.l10n.imported}: ${_pickedImage!.name}'),
+        ),
       );
       await _reviewUploadedBoq(boq);
     } on ApiException catch (error) {
@@ -1213,17 +1376,14 @@ class _ImportPageState extends State<ImportPage> {
       final imported = await widget.api.processBoq(boq.id);
       if (!mounted) return;
       if (imported > 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Imported $imported BOQ items')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Imported $imported BOQ items')));
       }
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => BoqItemsPage(
-            api: widget.api,
-            boqId: boq.id,
-            title: boq.name,
-          ),
+          builder: (_) =>
+              BoqItemsPage(api: widget.api, boqId: boq.id, title: boq.name),
         ),
       );
     } on ApiException catch (error) {
@@ -1233,10 +1393,8 @@ class _ImportPageState extends State<ImportPage> {
       );
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => ProjectDetailPage(
-            api: widget.api,
-            projectId: _projectId!,
-          ),
+          builder: (_) =>
+              ProjectDetailPage(api: widget.api, projectId: _projectId!),
         ),
       );
     }
@@ -1308,15 +1466,15 @@ class _ImportPageState extends State<ImportPage> {
             ],
           ),
         ),
-const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _projectId == null || _uploading ? null : _pickImage,
-                  icon: const Icon(Icons.document_scanner_outlined),
-                  label: Text(l10n.scanPages),
-                ),
-              ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _projectId == null || _uploading ? null : _pickImage,
+            icon: const Icon(Icons.document_scanner_outlined),
+            label: Text(l10n.scanPages),
+          ),
+        ),
       ],
     );
   }
@@ -1405,14 +1563,22 @@ class _AccountPageState extends State<AccountPage> {
                     children: [
                       Text(
                         widget.l10n.subscription,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 8),
                       const Text('No active plan'),
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
-                          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => PlansPage(api: widget.api, onSubscriptionCreated: _reloadSubscription))),
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => PlansPage(
+                                api: widget.api,
+                                onSubscriptionCreated: _reloadSubscription,
+                              ),
+                            ),
+                          ),
                           child: Text(widget.l10n.managePlan),
                         ),
                       ),
@@ -1445,10 +1611,14 @@ class _AccountPageState extends State<AccountPage> {
                         children: [
                           Chip(
                             avatar: Icon(
-                              isTrial ? Icons.hourglass_top : Icons.verified_outlined,
+                              isTrial
+                                  ? Icons.hourglass_top
+                                  : Icons.verified_outlined,
                               size: 16,
                             ),
-                            label: Text(isTrial ? '7-day trial' : status.toUpperCase()),
+                            label: Text(
+                              isTrial ? '7-day trial' : status.toUpperCase(),
+                            ),
                           ),
                           if (daysRemaining != null) ...[
                             const SizedBox(width: 8),
@@ -1480,7 +1650,10 @@ class _AccountPageState extends State<AccountPage> {
                         child: TextButton(
                           onPressed: () => Navigator.of(context).push(
                             MaterialPageRoute<void>(
-                              builder: (_) => PlansPage(api: widget.api, onSubscriptionCreated: _reloadSubscription),
+                              builder: (_) => PlansPage(
+                                api: widget.api,
+                                onSubscriptionCreated: _reloadSubscription,
+                              ),
                             ),
                           ),
                           child: Text(widget.l10n.managePlan),
@@ -1624,10 +1797,8 @@ class _PlansPageState extends State<PlansPage> {
       if (status == 'pending') {
         final activated = await Navigator.of(context).push<bool>(
           MaterialPageRoute<bool>(
-            builder: (_) => PaymentPage(
-              api: widget.api,
-              subscription: subscription,
-            ),
+            builder: (_) =>
+                PaymentPage(api: widget.api, subscription: subscription),
           ),
         );
         if (activated == true) {
@@ -1635,7 +1806,9 @@ class _PlansPageState extends State<PlansPage> {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Payment confirmed. Your subscription is now active.'),
+              content: Text(
+                'Payment confirmed. Your subscription is now active.',
+              ),
             ),
           );
         }
@@ -1646,9 +1819,9 @@ class _PlansPageState extends State<PlansPage> {
       }
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _submittingPlanId = null);
     }
@@ -1674,7 +1847,8 @@ class _PlansPageState extends State<PlansPage> {
                     const Text('Unable to load subscription plans.'),
                     const SizedBox(height: 12),
                     OutlinedButton(
-                      onPressed: () => setState(() => _plans = widget.api.plans()),
+                      onPressed: () =>
+                          setState(() => _plans = widget.api.plans()),
                       child: const Text('Retry'),
                     ),
                   ],
@@ -1698,11 +1872,12 @@ class _PlansPageState extends State<PlansPage> {
               final plan = plans[index];
               final id = int.tryParse('${plan['id'] ?? ''}');
               final busy = id != null && _submittingPlanId == id;
-              final features = (plan['included_features'] as List<dynamic>? ?? const [])
-                  .map((item) => '$item')
-                  .where((item) => item.trim().isNotEmpty)
-                  .take(4)
-                  .toList();
+              final features =
+                  (plan['included_features'] as List<dynamic>? ?? const [])
+                      .map((item) => '$item')
+                      .where((item) => item.trim().isNotEmpty)
+                      .take(4)
+                      .toList();
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 14),
@@ -1739,13 +1914,21 @@ class _PlansPageState extends State<PlansPage> {
                         runSpacing: 8,
                         children: [
                           if (plan['trial_days'] != null)
-                            Chip(label: Text('${plan['trial_days']} day trial')),
+                            Chip(
+                              label: Text('${plan['trial_days']} day trial'),
+                            ),
                           if (plan['max_projects'] != null)
-                            Chip(label: Text('${plan['max_projects']} projects')),
+                            Chip(
+                              label: Text('${plan['max_projects']} projects'),
+                            ),
                           if (plan['max_boqs'] != null)
                             Chip(label: Text('${plan['max_boqs']} BOQs')),
                           if (plan['max_ai_credits'] != null)
-                            Chip(label: Text('${plan['max_ai_credits']} AI credits')),
+                            Chip(
+                              label: Text(
+                                '${plan['max_ai_credits']} AI credits',
+                              ),
+                            ),
                         ],
                       ),
                       if (features.isNotEmpty) ...[
@@ -1755,7 +1938,10 @@ class _PlansPageState extends State<PlansPage> {
                             padding: const EdgeInsets.only(top: 4),
                             child: Row(
                               children: [
-                                const Icon(Icons.check_circle_outline, size: 18),
+                                const Icon(
+                                  Icons.check_circle_outline,
+                                  size: 18,
+                                ),
                                 const SizedBox(width: 8),
                                 Expanded(child: Text(feature)),
                               ],
@@ -1772,7 +1958,9 @@ class _PlansPageState extends State<PlansPage> {
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
                               : const Text('Select plan'),
                         ),
@@ -1789,13 +1977,8 @@ class _PlansPageState extends State<PlansPage> {
   }
 }
 
-
 class PaymentPage extends StatefulWidget {
-  const PaymentPage({
-    super.key,
-    required this.api,
-    required this.subscription,
-  });
+  const PaymentPage({super.key, required this.api, required this.subscription});
 
   final ApiClient api;
   final Map<String, dynamic> subscription;
@@ -1865,14 +2048,16 @@ class _PaymentPageState extends State<PaymentPage> {
       _startStatusPolling();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Payment started. Follow the instructions below, then verify the payment.'),
+          content: Text(
+            'Payment started. Follow the instructions below, then verify the payment.',
+          ),
         ),
       );
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _initiating = false);
     }
@@ -1901,7 +2086,9 @@ class _PaymentPageState extends State<PaymentPage> {
     }
   }
 
-  Future<void> _handleSuccessfulPayment(Map<String, dynamic> transaction) async {
+  Future<void> _handleSuccessfulPayment(
+    Map<String, dynamic> transaction,
+  ) async {
     if (_successHandled || !mounted) return;
     _successHandled = true;
     _statusTimer?.cancel();
@@ -1914,7 +2101,9 @@ class _PaymentPageState extends State<PaymentPage> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Payment confirmed'),
-        content: const Text('Your subscription has been activated successfully.'),
+        content: const Text(
+          'Your subscription has been activated successfully.',
+        ),
         actions: [
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext),
@@ -1936,10 +2125,7 @@ class _PaymentPageState extends State<PaymentPage> {
       final verified = await widget.api.verifyPayment(transactionId);
       if (!mounted) return;
       setState(() {
-        _paymentData = {
-          ...?_paymentData,
-          'transaction': verified,
-        };
+        _paymentData = {...?_paymentData, 'transaction': verified};
       });
       final status = '${verified['status'] ?? ''}'.toLowerCase();
       if (status == 'successful') {
@@ -1957,9 +2143,9 @@ class _PaymentPageState extends State<PaymentPage> {
       }
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _verifying = false);
     }
@@ -1972,10 +2158,7 @@ class _PaymentPageState extends State<PaymentPage> {
       final refreshed = await widget.api.transaction(transactionId);
       if (!mounted) return;
       setState(() {
-        _paymentData = {
-          ...?_paymentData,
-          'transaction': refreshed,
-        };
+        _paymentData = {...?_paymentData, 'transaction': refreshed};
         final invoice = refreshed['invoice'];
         if (invoice is Map<String, dynamic>) {
           _receipt = invoice;
@@ -1987,9 +2170,9 @@ class _PaymentPageState extends State<PaymentPage> {
       }
     } on ApiException catch (e) {
       if (!mounted || silent) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -2011,16 +2194,19 @@ class _PaymentPageState extends State<PaymentPage> {
                 Text(
                   'Payment receipt',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 12),
             SelectableText('Invoice: ${receipt['invoice_number'] ?? ''}'),
-            SelectableText('Reference: ${receipt['transaction_reference'] ?? _transaction?['reference'] ?? ''}'),
+            SelectableText(
+              'Reference: ${receipt['transaction_reference'] ?? _transaction?['reference'] ?? ''}',
+            ),
             Text('Amount: $currency $total'),
-            if (receipt['payment_date'] != null) Text('Paid: ${receipt['payment_date']}'),
+            if (receipt['payment_date'] != null)
+              Text('Paid: ${receipt['payment_date']}'),
           ],
         ),
       ),
@@ -2075,10 +2261,18 @@ class _PaymentPageState extends State<PaymentPage> {
                 tooltip: 'Open secure checkout',
                 onPressed: () async {
                   final uri = Uri.tryParse(checkoutUrl);
-                  if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+                  if (uri == null ||
+                      !await launchUrl(
+                        uri,
+                        mode: LaunchMode.externalApplication,
+                      )) {
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Unable to open checkout. You can copy the link instead.')),
+                      const SnackBar(
+                        content: Text(
+                          'Unable to open checkout. You can copy the link instead.',
+                        ),
+                      ),
                     );
                   }
                 },
@@ -2118,9 +2312,9 @@ class _PaymentPageState extends State<PaymentPage> {
           children: [
             Text(
               'Payment instructions',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
             ...rows,
@@ -2132,7 +2326,8 @@ class _PaymentPageState extends State<PaymentPage> {
 
   @override
   Widget build(BuildContext context) {
-    final plan = widget.subscription['plan'] as Map<String, dynamic>? ?? const {};
+    final plan =
+        widget.subscription['plan'] as Map<String, dynamic>? ?? const {};
     final transaction = _transaction;
     final status = '${transaction?['status'] ?? 'not started'}';
 
@@ -2179,8 +2374,8 @@ class _PaymentPageState extends State<PaymentPage> {
                       Text(
                         '${plan['name'] ?? 'Subscription plan'}',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Text(
@@ -2188,10 +2383,14 @@ class _PaymentPageState extends State<PaymentPage> {
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 6),
-                      Text('Subscription status: ${widget.subscription['status'] ?? 'pending'}'),
+                      Text(
+                        'Subscription status: ${widget.subscription['status'] ?? 'pending'}',
+                      ),
                       if (transaction != null) ...[
                         const Divider(height: 24),
-                        Text('Transaction: ${transaction['reference'] ?? transaction['id'] ?? ''}'),
+                        Text(
+                          'Transaction: ${transaction['reference'] ?? transaction['id'] ?? ''}',
+                        ),
                         Text('Payment status: $status'),
                       ],
                     ],
@@ -2212,16 +2411,18 @@ class _PaymentPageState extends State<PaymentPage> {
                 Text(
                   'Choose payment method',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 ...gateways.map((gateway) {
                   final code = '${gateway['code'] ?? ''}';
-                  final methods = (gateway['supported_methods'] as List<dynamic>? ?? const [])
-                      .map((e) => '$e')
-                      .where((e) => e.trim().isNotEmpty)
-                      .toList();
+                  final methods =
+                      (gateway['supported_methods'] as List<dynamic>? ??
+                              const [])
+                          .map((e) => '$e')
+                          .where((e) => e.trim().isNotEmpty)
+                          .toList();
                   final selected = _selectedGatewayCode == code;
                   return Card(
                     child: RadioListTile<String>(
@@ -2230,10 +2431,12 @@ class _PaymentPageState extends State<PaymentPage> {
                       onChanged: _paymentData != null
                           ? null
                           : (value) => setState(() {
-                                _selectedGatewayCode = value;
-                                _selectedMethod = methods.isNotEmpty ? methods.first : null;
-                                _idempotencyKey = null;
-                              }),
+                              _selectedGatewayCode = value;
+                              _selectedMethod = methods.isNotEmpty
+                                  ? methods.first
+                                  : null;
+                              _idempotencyKey = null;
+                            }),
                       title: Text('${gateway['name'] ?? code}'),
                       subtitle: Text(
                         '${gateway['description'] ?? gateway['driver'] ?? ''}'
@@ -2254,18 +2457,26 @@ class _PaymentPageState extends State<PaymentPage> {
                         (g) => '${g['code'] ?? ''}' == _selectedGatewayCode,
                         orElse: () => const <String, dynamic>{},
                       );
-                      final methods = (selected['supported_methods'] as List<dynamic>? ?? const [])
-                          .map((e) => '$e')
-                          .where((e) => e.trim().isNotEmpty)
-                          .toList();
+                      final methods =
+                          (selected['supported_methods'] as List<dynamic>? ??
+                                  const [])
+                              .map((e) => '$e')
+                              .where((e) => e.trim().isNotEmpty)
+                              .toList();
                       final driver = '${selected['driver'] ?? ''}';
                       final isAggregator = selected['is_aggregator'] == true;
                       final effectiveMethod = methods.contains(_selectedMethod)
                           ? _selectedMethod
                           : (methods.isNotEmpty ? methods.first : null);
-                      final aggregatorMobile = isAggregator &&
-                          !['card', 'visa', 'mastercard'].contains('${effectiveMethod ?? ''}'.toLowerCase());
-                      final needsPhone = driver == 'mtn_momo' ||
+                      final aggregatorMobile =
+                          isAggregator &&
+                          ![
+                            'card',
+                            'visa',
+                            'mastercard',
+                          ].contains('${effectiveMethod ?? ''}'.toLowerCase());
+                      final needsPhone =
+                          driver == 'mtn_momo' ||
                           driver == 'airtel_money' ||
                           aggregatorMobile;
                       return Column(
@@ -2280,8 +2491,8 @@ class _PaymentPageState extends State<PaymentPage> {
                                 labelText: driver == 'mtn_momo'
                                     ? 'MTN MoMo number'
                                     : driver == 'airtel_money'
-                                        ? 'Airtel Money number'
-                                        : 'Mobile money number',
+                                    ? 'Airtel Money number'
+                                    : 'Mobile money number',
                                 hintText: 'e.g. 0772 123 456',
                                 prefixIcon: const Icon(Icons.phone_android),
                               ),
@@ -2290,29 +2501,45 @@ class _PaymentPageState extends State<PaymentPage> {
                           ],
                           if (methods.length > 1)
                             DropdownButtonFormField<String>(
-                              value: methods.contains(_selectedMethod) ? _selectedMethod : methods.first,
-                              decoration: const InputDecoration(labelText: 'Payment option'),
+                              value: methods.contains(_selectedMethod)
+                                  ? _selectedMethod
+                                  : methods.first,
+                              decoration: const InputDecoration(
+                                labelText: 'Payment option',
+                              ),
                               items: methods
-                                  .map((method) => DropdownMenuItem(
-                                        value: method,
-                                        child: Text(method),
-                                      ))
+                                  .map(
+                                    (method) => DropdownMenuItem(
+                                      value: method,
+                                      child: Text(method),
+                                    ),
+                                  )
                                   .toList(),
-                              onChanged: (value) => setState(() => _selectedMethod = value),
+                              onChanged: (value) =>
+                                  setState(() => _selectedMethod = value),
                             ),
                           if (methods.length > 1) const SizedBox(height: 12),
                           FilledButton.icon(
-                            onPressed: _initiating || (needsPhone && _phoneNumber.text.trim().isEmpty)
+                            onPressed:
+                                _initiating ||
+                                    (needsPhone &&
+                                        _phoneNumber.text.trim().isEmpty)
                                 ? null
                                 : () => _initiate(selected),
                             icon: _initiating
                                 ? const SizedBox(
                                     width: 18,
                                     height: 18,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
                                   )
                                 : const Icon(Icons.lock_outline),
-                            label: Text(_initiating ? 'Starting payment…' : 'Continue to payment'),
+                            label: Text(
+                              _initiating
+                                  ? 'Starting payment…'
+                                  : 'Continue to payment',
+                            ),
                           ),
                         ],
                       );
@@ -2345,10 +2572,14 @@ class _PaymentPageState extends State<PaymentPage> {
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : const Icon(Icons.verified_outlined),
-                        label: Text(_verifying ? 'Checking…' : 'Verify payment'),
+                        label: Text(
+                          _verifying ? 'Checking…' : 'Verify payment',
+                        ),
                       ),
                     ),
                   ],
@@ -2393,6 +2624,55 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _loaded = false;
   bool _saving = false;
   String? _error;
+
+  late final BiometricService _biometricService;
+  bool _biometricAvailable = false;
+  bool _biometricEnabled = false;
+  List<BiometricType> _availableBiometrics = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _biometricService = BiometricService();
+    _loadBiometricStatus();
+  }
+
+  Future<void> _loadBiometricStatus() async {
+    final available = await _biometricService.isBiometricAvailable();
+    final enabled = await _biometricService.isBiometricEnabled();
+    final biometrics = await _biometricService.getAvailableBiometrics();
+    if (mounted) {
+      setState(() {
+        _biometricAvailable = available;
+        _biometricEnabled = enabled;
+        _availableBiometrics = biometrics;
+      });
+    }
+  }
+
+  Future<void> _toggleBiometric(bool value) async {
+    final l10n = AppLocalizations.of(context)!;
+    try {
+      await _biometricService.setBiometricEnabled(value);
+      if (mounted) {
+        setState(() => _biometricEnabled = value);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              value ? l10n.biometricEnabled : l10n.biometricDisabled,
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _biometricEnabled = !value);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.biometricError)));
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -2493,6 +2773,52 @@ class _ProfilePageState extends State<ProfilePage> {
                       setState(() => _selectedLocale = value);
                     }
                   },
+                ),
+                const SizedBox(height: 16),
+                // Biometric section
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l10n.enableBiometricLogin,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _biometricAvailable
+                              ? '${l10n.biometricAvailable} - ${l10n.biometricTypes}${_availableBiometrics.map((t) => _biometricService.getBiometricTypeName(t)).join(', ')}'
+                              : l10n.biometricNotAvailable,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: _biometricAvailable
+                                    ? null
+                                    : Colors.grey[600],
+                              ),
+                        ),
+                        const SizedBox(height: 12),
+                        SwitchListTile(
+                          title: Text(l10n.enableBiometricLogin),
+                          subtitle: Text(l10n.biometricLoginDescription),
+                          value: _biometricEnabled,
+                          onChanged: _biometricAvailable
+                              ? _toggleBiometric
+                              : null,
+                          secondary: Icon(
+                            _biometricAvailable
+                                ? Icons.fingerprint
+                                : Icons.fingerprint_outlined,
+                            color: _biometricAvailable
+                                ? Theme.of(context).colorScheme.primary
+                                : Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -2862,103 +3188,104 @@ class ProjectDetailPage extends StatelessWidget {
                       ),
                     ),
                   ),
-trailing: boq.status == 'uploaded'
-    ? FilledButton(
-        onPressed: () async {
-          final place = [
-            project.country,
-            project.district,
-            project.location,
-          ].where((e) => e.isNotEmpty).toList().join(', ');
-          try {
-            final created = await api.processBoq(boq.id);
-            if (!context.mounted) return;
-            final items = await api.allBoqItems(boq.id);
-            if (!context.mounted) return;
-            if (items.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('$created BOQ items created'),
-                ),
-              );
-              return;
-            }
-            if (place.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Set a location on the project to fetch prices.',
-                  ),
-                ),
-              );
-              return;
-            }
-            final progress = ValueNotifier<String>(
-              'Preparing to fetch prices...',
-            );
-            final reportFuture = _priceBoqItems(
-              api,
-              items,
-              place,
-              onProgress: (done, total, description) {
-                progress.value = 'Fetching $done/$total: $description';
-              },
-            );
-            await showDialog<void>(
-              context: context,
-              barrierDismissible: false,
-              builder: (dialogContext) {
-                reportFuture.then((_) {
-                  if (dialogContext.mounted) {
-                    Navigator.of(dialogContext).pop();
-                  }
-                });
-                return AlertDialog(
-                  title: const Text('Generating BOQ prices'),
-                  content: ValueListenableBuilder<String>(
-                    valueListenable: progress,
-                    builder: (context, value, _) => Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const CircularProgressIndicator(),
-                        const SizedBox(width: 16),
-                        Expanded(child: Text(value)),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            );
-            final report = await reportFuture;
-            if (!context.mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  report.failedMessages.isEmpty
-                      ? 'Generated prices for ${report.priced} items'
-                      : 'Generated ${report.priced} of ${items.length} (${report.failedMessages.length} failed)',
-                ),
-              ),
-            );
-            await Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => BoqItemsPage(
-                  api: api,
-                  boqId: boq.id,
-                  title: boq.name,
-                ),
-              ),
-            );
-          } on ApiException catch (error) {
-            if (context.mounted)
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(error.message)),
-              );
-          }
-        },
-        child: const Text('Generate BOQ'),
-      )
-    : null,
+                  trailing: boq.status == 'uploaded'
+                      ? FilledButton(
+                          onPressed: () async {
+                            final place = [
+                              project.country,
+                              project.district,
+                              project.location,
+                            ].where((e) => e.isNotEmpty).toList().join(', ');
+                            try {
+                              final created = await api.processBoq(boq.id);
+                              if (!context.mounted) return;
+                              final items = await api.allBoqItems(boq.id);
+                              if (!context.mounted) return;
+                              if (items.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('$created BOQ items created'),
+                                  ),
+                                );
+                                return;
+                              }
+                              if (place.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Set a location on the project to fetch prices.',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+                              final progress = ValueNotifier<String>(
+                                'Preparing to fetch prices...',
+                              );
+                              final reportFuture = _priceBoqItems(
+                                api,
+                                items,
+                                place,
+                                onProgress: (done, total, description) {
+                                  progress.value =
+                                      'Fetching $done/$total: $description';
+                                },
+                              );
+                              await showDialog<void>(
+                                context: context,
+                                barrierDismissible: false,
+                                builder: (dialogContext) {
+                                  reportFuture.then((_) {
+                                    if (dialogContext.mounted) {
+                                      Navigator.of(dialogContext).pop();
+                                    }
+                                  });
+                                  return AlertDialog(
+                                    title: const Text('Generating BOQ prices'),
+                                    content: ValueListenableBuilder<String>(
+                                      valueListenable: progress,
+                                      builder: (context, value, _) => Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const CircularProgressIndicator(),
+                                          const SizedBox(width: 16),
+                                          Expanded(child: Text(value)),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
+                              final report = await reportFuture;
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    report.failedMessages.isEmpty
+                                        ? 'Generated prices for ${report.priced} items'
+                                        : 'Generated ${report.priced} of ${items.length} (${report.failedMessages.length} failed)',
+                                  ),
+                                ),
+                              );
+                              await Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => BoqItemsPage(
+                                    api: api,
+                                    boqId: boq.id,
+                                    title: boq.name,
+                                  ),
+                                ),
+                              );
+                            } on ApiException catch (error) {
+                              if (context.mounted)
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(error.message)),
+                                );
+                            }
+                          },
+                          child: const Text('Generate BOQ'),
+                        )
+                      : null,
                 ),
               ),
           ],
@@ -3172,8 +3499,12 @@ class _EditProjectPageState extends State<EditProjectPage> {
         currency: _currency.text,
         description: _description.text.isEmpty ? null : _description.text,
         status: _status,
-        originalLanguage: _originalLanguage.text.isEmpty ? null : _originalLanguage.text,
-        reportLanguage: _reportLanguage.text.isEmpty ? null : _reportLanguage.text,
+        originalLanguage: _originalLanguage.text.isEmpty
+            ? null
+            : _originalLanguage.text,
+        reportLanguage: _reportLanguage.text.isEmpty
+            ? null
+            : _reportLanguage.text,
       );
       if (mounted) {
         Navigator.pop(context, true);
@@ -3396,7 +3727,8 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
   }
 
   Future<void> _refreshItems() async {
-    if (mounted) setState(() => _boqDetail = widget.api.boqDetail(widget.boqId));
+    if (mounted)
+      setState(() => _boqDetail = widget.api.boqDetail(widget.boqId));
   }
 
   List<BoqItemSummary> _flattenBoqItems(BoqDetail boq) {
@@ -3539,7 +3871,11 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
           icon: const Icon(Icons.account_tree),
           onPressed: () => Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => BoqDetailPage(api: widget.api, boqId: widget.boqId, title: widget.title),
+              builder: (_) => BoqDetailPage(
+                api: widget.api,
+                boqId: widget.boqId,
+                title: widget.title,
+              ),
             ),
           ),
           tooltip: 'View Hierarchy',
@@ -3614,9 +3950,12 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
                     const Icon(Icons.schedule),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        'Progress: $_progress',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Text(
+                          'Progress: $_progress',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
                       ),
                     ),
                   ],
@@ -3632,32 +3971,37 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
                 padding: const EdgeInsets.all(14),
                 margin: const EdgeInsets.only(top: 8),
                 color: const Color(0xFFFFEBEE),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${_failedReport.length} item(s) could not be priced:',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFFB71C1C),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    for (final failure in _failedReport)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Text('- $failure', style: const TextStyle(fontSize: 13)),
-                      ),
-                    if (_retryItems.isNotEmpty)
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton.icon(
-                          onPressed: _pricing ? null : _retry,
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Retry failed items'),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${_failedReport.length} item(s) could not be priced:',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFB71C1C),
                         ),
                       ),
-                  ],
+                      const SizedBox(height: 6),
+                      for (final failure in _failedReport)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Text(
+                            '- $failure',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      if (_retryItems.isNotEmpty)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed: _pricing ? null : _retry,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Retry failed items'),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             const SizedBox(height: 16),
@@ -4001,10 +4345,7 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
         Expanded(
           child: TabBarView(
             controller: _tabController,
-            children: [
-              _buildAllTab(),
-              _buildCategoriesTab(),
-            ],
+            children: [_buildAllTab(), _buildCategoriesTab()],
           ),
         ),
       ],
@@ -4317,6 +4658,11 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 }
@@ -5219,9 +5565,9 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
                 );
               } on ApiException catch (error) {
                 if (context.mounted)
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(error.message)),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(error.message)));
               }
             },
             tooltip: 'Export PDF',
@@ -5268,8 +5614,9 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
                 Expanded(
                   child: Text(
                     boq.name,
-                    style: Theme.of(context).textTheme.headlineSmall
-                        ?.copyWith(fontWeight: FontWeight.w700),
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 _statusChip(boq.status),
@@ -5277,11 +5624,12 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
             ),
             const SizedBox(height: 8),
             if (boq.code.isNotEmpty)
-              Text('Code: ${boq.code}',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(color: Colors.grey[600])),
+              Text(
+                'Code: ${boq.code}',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+              ),
             if (boq.description.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(boq.description),
@@ -5319,27 +5667,36 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
           children: [
             Text(
               'Summary',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w700),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
-            _summaryRow('Subtotal', '${boq.currency} ${money.format(grandSummary.subtotal)}'),
-            _summaryRow('VAT (18%)', '${boq.currency} ${money.format(grandSummary.vat)}'),
-            _summaryRow('Contingency (5%)',
-                '${boq.currency} ${money.format(grandSummary.contingency)}'),
+            _summaryRow(
+              'Subtotal',
+              '${boq.currency} ${money.format(grandSummary.subtotal)}',
+            ),
+            _summaryRow(
+              'VAT (18%)',
+              '${boq.currency} ${money.format(grandSummary.vat)}',
+            ),
+            _summaryRow(
+              'Contingency (5%)',
+              '${boq.currency} ${money.format(grandSummary.contingency)}',
+            ),
             const Divider(),
-            _summaryRow('Grand Total', '${boq.currency} ${money.format(grandSummary.grandTotal)}',
-                isTotal: true),
+            _summaryRow(
+              'Grand Total',
+              '${boq.currency} ${money.format(grandSummary.grandTotal)}',
+              isTotal: true,
+            ),
             if (boq.summaries.length > 1) ...[
               const SizedBox(height: 16),
               Text(
                 'Breakdown',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 8),
               ...boq.summaries
@@ -5388,8 +5745,11 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
               children: [
                 _miniSummary('Subtotal', '${money.format(summary.subtotal)}'),
                 _miniSummary('VAT', '${money.format(summary.vat)}'),
-                _miniSummary('Total', '${money.format(summary.grandTotal)}',
-                    isTotal: true),
+                _miniSummary(
+                  'Total',
+                  '${money.format(summary.grandTotal)}',
+                  isTotal: true,
+                ),
               ],
             ),
           ],
@@ -5408,10 +5768,9 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
           children: [
             Text(
               'Import Metadata',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
             if (metadata['import_sheets'] != null) ...[
@@ -5452,10 +5811,9 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
           children: [
             Text(
               'BOQ Structure',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w700),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
             if (boq.facilities.isEmpty)
@@ -5491,7 +5849,11 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
         style: const TextStyle(fontWeight: FontWeight.w700),
       ),
       subtitle: facility.description != null
-          ? Text(facility.description!, maxLines: 1, overflow: TextOverflow.ellipsis)
+          ? Text(
+              facility.description!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            )
           : null,
       children: [
         ...facility.bills
@@ -5510,14 +5872,22 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
       initiallyExpanded: depth <= 1,
       leading: CircleAvatar(
         backgroundColor: const Color(0xFF047857).withValues(alpha: 0.12),
-        child: const Icon(Icons.receipt_long, color: Color(0xFF047857), size: 18),
+        child: const Icon(
+          Icons.receipt_long,
+          color: Color(0xFF047857),
+          size: 18,
+        ),
       ),
       title: Text(
         _localizedName(bill.name, bill.nameTranslations),
         style: const TextStyle(fontWeight: FontWeight.w600),
       ),
       subtitle: bill.description != null
-          ? Text(bill.description!, maxLines: 1, overflow: TextOverflow.ellipsis)
+          ? Text(
+              bill.description!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            )
           : null,
       children: [
         ...bill.elements
@@ -5543,7 +5913,11 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
         style: const TextStyle(fontWeight: FontWeight.w600),
       ),
       subtitle: element.description != null
-          ? Text(element.description!, maxLines: 1, overflow: TextOverflow.ellipsis)
+          ? Text(
+              element.description!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            )
           : null,
       children: [
         if (element.items.isNotEmpty)
@@ -5561,14 +5935,22 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
       initiallyExpanded: false,
       leading: CircleAvatar(
         backgroundColor: const Color(0xFF7C3AED).withValues(alpha: 0.12),
-        child: const Icon(Icons.subdirectory_arrow_right, color: Color(0xFF7C3AED), size: 18),
+        child: const Icon(
+          Icons.subdirectory_arrow_right,
+          color: Color(0xFF7C3AED),
+          size: 18,
+        ),
       ),
       title: Text(
         _localizedName(subElement.name, subElement.nameTranslations),
         style: const TextStyle(fontWeight: FontWeight.w600),
       ),
       subtitle: subElement.description != null
-          ? Text(subElement.description!, maxLines: 1, overflow: TextOverflow.ellipsis)
+          ? Text(
+              subElement.description!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            )
           : null,
       children: subElement.items.map((item) => _buildItemTile(item)).toList(),
     );
@@ -5578,7 +5960,11 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
     return ListTile(
       dense: true,
       contentPadding: const EdgeInsets.only(left: 72, right: 16),
-      leading: const Icon(Icons.format_list_numbered, size: 18, color: Colors.grey),
+      leading: const Icon(
+        Icons.format_list_numbered,
+        size: 18,
+        color: Colors.grey,
+      ),
       title: Text(
         item.description,
         style: const TextStyle(fontWeight: FontWeight.w500),
@@ -5621,7 +6007,10 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
       ),
       trailing: Text(
         '${money.format(summary.grandTotal)}',
-        style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF047857)),
+        style: const TextStyle(
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF047857),
+        ),
       ),
     );
   }
@@ -5787,16 +6176,20 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
                       ),
                       const SizedBox(height: 8),
                       if (item.code.isNotEmpty)
-                        Text('Code: ${item.code}',
-                            style: TextStyle(color: Colors.grey[600])),
+                        Text(
+                          'Code: ${item.code}',
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
                       const SizedBox(height: 16),
                       _detailRow('Quantity', '${item.quantity} ${item.unit}'),
                       _detailRow('Amount', item.amount),
                       if (item.originalRate != null)
                         _detailRow('Original Rate', '${item.originalRate}'),
                       if (item.aiSuggestedRate != null)
-                        _detailRow('AI Suggested Rate',
-                            '${item.aiSuggestedRate} (confidence: ${item.aiConfidence?.toStringAsFixed(0)}%)'),
+                        _detailRow(
+                          'AI Suggested Rate',
+                          '${item.aiSuggestedRate} (confidence: ${item.aiConfidence?.toStringAsFixed(0)}%)',
+                        ),
                       if (item.approvedRate != null)
                         _detailRow('Approved Rate', '${item.approvedRate}'),
                       _detailRow('Status', item.status!.capitalize()),
@@ -5812,7 +6205,10 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
                         _detailRow('Pricing Date', item.pricingDate!),
                       if (item.notes != null && item.notes!.isNotEmpty) ...[
                         const SizedBox(height: 8),
-                        Text('Notes', style: Theme.of(context).textTheme.labelLarge),
+                        Text(
+                          'Notes',
+                          style: Theme.of(context).textTheme.labelLarge,
+                        ),
                         const SizedBox(height: 4),
                         Text(item.notes!),
                       ],
@@ -5834,7 +6230,9 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 12),
-                        ...item.translations.map((t) => _translationTile(t)).toList(),
+                        ...item.translations
+                            .map((t) => _translationTile(t))
+                            .toList(),
                       ],
                     ),
                   ),
@@ -5853,18 +6251,22 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: Colors.blue[50],
-          child: Text(t.locale.toUpperCase(),
-              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
+          child: Text(
+            t.locale.toUpperCase(),
+            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+          ),
         ),
         title: Text(t.translatedDescription),
         subtitle: Text(
           'Provider: ${t.provider ?? 'unknown'}  |  Confidence: ${t.confidence?.toStringAsFixed(0) ?? 'N/A'}%',
         ),
-        trailing: Text(t.status!.capitalize(),
-            style: TextStyle(
-              color: t.status == 'accepted' ? Colors.green : Colors.orange,
-              fontWeight: FontWeight.w600,
-            )),
+        trailing: Text(
+          t.status!.capitalize(),
+          style: TextStyle(
+            color: t.status == 'accepted' ? Colors.green : Colors.orange,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
     );
   }
@@ -5898,7 +6300,8 @@ class ProxySubscriptionListPage extends StatefulWidget {
   final ApiClient api;
 
   @override
-  State<ProxySubscriptionListPage> createState() => _ProxySubscriptionListPageState();
+  State<ProxySubscriptionListPage> createState() =>
+      _ProxySubscriptionListPageState();
 }
 
 class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
@@ -5936,7 +6339,8 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
       if (mounted) {
         setState(() {
           _error = e.message;
-          _isAdmin = e.message.toLowerCase().contains('unauthorized') ||
+          _isAdmin =
+              e.message.toLowerCase().contains('unauthorized') ||
               e.message.toLowerCase().contains('forbidden') ||
               e.message.toLowerCase().contains('admin');
         });
@@ -5944,15 +6348,19 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
     }
   }
 
-  List<ProxySubscription> _filterSubscriptions(List<ProxySubscription> subscriptions) {
+  List<ProxySubscription> _filterSubscriptions(
+    List<ProxySubscription> subscriptions,
+  ) {
     final query = _searchController.text.toLowerCase().trim();
     return subscriptions.where((sub) {
-      final matchesSearch = query.isEmpty ||
+      final matchesSearch =
+          query.isEmpty ||
           sub.beneficiaryName.toLowerCase().contains(query) ||
           sub.beneficiaryEmail.toLowerCase().contains(query) ||
           sub.planName.toLowerCase().contains(query) ||
           sub.payerName.toLowerCase().contains(query);
-      final matchesStatus = _statusFilter == 'all' || sub.status == _statusFilter;
+      final matchesStatus =
+          _statusFilter == 'all' || sub.status == _statusFilter;
       return matchesSearch && matchesStatus;
     }).toList();
   }
@@ -6004,7 +6412,9 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
                 const SizedBox(height: 8),
                 Text(
                   l10n.adminAccessDescription,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -6039,11 +6449,18 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                          const Icon(
+                            Icons.error_outline,
+                            size: 48,
+                            color: Colors.red,
+                          ),
                           const SizedBox(height: 16),
                           Text(snapshot.error.toString()),
                           const SizedBox(height: 16),
-                          FilledButton(onPressed: _loadSubscriptions, child: Text(l10n.retry)),
+                          FilledButton(
+                            onPressed: _loadSubscriptions,
+                            child: Text(l10n.retry),
+                          ),
                         ],
                       ),
                     ),
@@ -6058,7 +6475,11 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.assignment_outlined, size: 48, color: Colors.grey[400]),
+                        Icon(
+                          Icons.assignment_outlined,
+                          size: 48,
+                          color: Colors.grey[400],
+                        ),
                         const SizedBox(height: 16),
                         Text(l10n.noProxySubscriptions),
                         const SizedBox(height: 8),
@@ -6118,7 +6539,9 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
                       },
                     )
                   : null,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
             onChanged: (_) => setState(() {}),
           ),
@@ -6127,17 +6550,29 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
             value: _statusFilter,
             decoration: InputDecoration(
               labelText: l10n.status,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               isDense: true,
             ),
             items: [
               DropdownMenuItem(value: 'all', child: Text(l10n.allStatuses)),
               DropdownMenuItem(value: 'active', child: Text(l10n.statusActive)),
-              DropdownMenuItem(value: 'pending', child: Text(l10n.statusPending)),
-              DropdownMenuItem(value: 'cancelled', child: Text(l10n.statusCancelled)),
-              DropdownMenuItem(value: 'expired', child: Text(l10n.statusExpired)),
+              DropdownMenuItem(
+                value: 'pending',
+                child: Text(l10n.statusPending),
+              ),
+              DropdownMenuItem(
+                value: 'cancelled',
+                child: Text(l10n.statusCancelled),
+              ),
+              DropdownMenuItem(
+                value: 'expired',
+                child: Text(l10n.statusExpired),
+              ),
             ],
-            onChanged: (value) => setState(() => _statusFilter = value ?? 'all'),
+            onChanged: (value) =>
+                setState(() => _statusFilter = value ?? 'all'),
           ),
         ],
       ),
@@ -6172,7 +6607,9 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
               const SizedBox(height: 20),
               Text(
                 l10n.proxySubscriptionDetails,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 20),
               _detailRow(l10n.beneficiary, sub.beneficiaryName),
@@ -6184,7 +6621,8 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
               _detailRow(l10n.startDate, _formatDate(sub.startDate)),
               _detailRow(l10n.endDate, _formatDate(sub.endDate)),
               _detailRow(l10n.createdAt, _formatDate(sub.createdAt)),
-              if (sub.transactionId.isNotEmpty) _detailRow(l10n.transactionId, sub.transactionId),
+              if (sub.transactionId.isNotEmpty)
+                _detailRow(l10n.transactionId, sub.transactionId),
             ],
           ),
         ),
@@ -6230,7 +6668,10 @@ class _ProxySubscriptionCard extends StatelessWidget {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: statusColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
