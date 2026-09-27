@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -13,10 +14,58 @@ double _asDouble(dynamic value) =>
 double? _asDoubleOrNull(dynamic value) =>
     value == null ? null : _asDouble(value);
 
+/// Wraps every request with a timeout and reports expired sessions (HTTP 401).
+class _GuardedClient extends http.BaseClient {
+  _GuardedClient(this._inner, this._onUnauthorized);
+
+  static const _timeout = Duration(seconds: 30);
+
+  final http.Client _inner;
+  final void Function() _onUnauthorized;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final http.StreamedResponse response;
+    try {
+      response = await _inner.send(request).timeout(_timeout);
+    } on TimeoutException {
+      // Surface as a network error so existing error handling applies.
+      throw http.ClientException(
+        'The server took too long to respond. Check your connection and try again.',
+        request.url,
+      );
+    }
+
+    final isLogin = request.url.path.endsWith('/auth/login');
+    if (response.statusCode == 401 && !isLogin) {
+      _onUnauthorized();
+    }
+    return response;
+  }
+
+  @override
+  void close() => _inner.close();
+}
+
 class ApiClient {
   ApiClient({http.Client? httpClient, FlutterSecureStorage? storage})
-    : _httpClient = httpClient ?? http.Client(),
-      _storage = storage ?? const FlutterSecureStorage();
+    : _storage = storage ?? const FlutterSecureStorage() {
+    _httpClient = _GuardedClient(httpClient ?? http.Client(), _expireSession);
+  }
+
+  final StreamController<String> _sessionExpired =
+      StreamController<String>.broadcast();
+
+  /// Emits a message when the server rejects the stored token (expired,
+  /// revoked or the account was disabled). The app returns to sign-in.
+  Stream<String> get sessionExpired => _sessionExpired.stream;
+
+  void _expireSession([
+    String message = 'Your session has expired. Please sign in again.',
+  ]) {
+    unawaited(_storage.delete(key: _tokenKey));
+    _sessionExpired.add(message);
+  }
 
   static const baseUrl = String.fromEnvironment(
     'API_BASE_URL',
@@ -26,7 +75,7 @@ class ApiClient {
   );
 
   static const _tokenKey = 'auth_token';
-  final http.Client _httpClient;
+  late final http.Client _httpClient;
   final FlutterSecureStorage _storage;
 
   Future<bool> hasSession() async =>
@@ -1290,11 +1339,21 @@ class ApiClient {
   }
 
   Map<String, dynamic> _decode(http.Response response) {
+    final Map<String, dynamic> body;
     try {
-      return jsonDecode(response.body) as Map<String, dynamic>;
+      body = jsonDecode(response.body) as Map<String, dynamic>;
     } on FormatException {
       throw const ApiException('The server returned an invalid response.');
     }
+
+    if (response.statusCode == 403 &&
+        body['error_code'] == 'ACCOUNT_DISABLED') {
+      _expireSession(
+        body['message'] as String? ??
+            'Your account has been disabled. Contact your administrator.',
+      );
+    }
+    return body;
   }
 
   String _message(Map<String, dynamic> body) =>

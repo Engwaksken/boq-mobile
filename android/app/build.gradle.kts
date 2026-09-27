@@ -24,7 +24,6 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.kemmytech.boq_mobile"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
@@ -69,4 +68,19 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+// Refuse to produce an unsigned release: an APK/AAB without the private key
+// cannot be installed as an update or uploaded to the Play Store.
+gradle.taskGraph.whenReady {
+    val buildsRelease = allTasks.any { task ->
+        (task.name.startsWith("assemble") || task.name.startsWith("bundle")) &&
+            task.name.contains("Release")
+    }
+    if (buildsRelease && !keystorePropertiesFile.exists()) {
+        throw GradleException(
+            "Release signing is not configured: create android/key.properties " +
+                "(see android/key.properties.example) before building a release."
+        )
+    }
 }

@@ -238,11 +238,27 @@ class SessionGate extends StatefulWidget {
 
 class _SessionGateState extends State<SessionGate> {
   late Future<bool> _session;
+  StreamSubscription<String>? _expiredSubscription;
 
   @override
   void initState() {
     super.initState();
     _session = widget.api.hasSession();
+    _expiredSubscription = widget.api.sessionExpired.listen(_onSessionExpired);
+  }
+
+  @override
+  void dispose() {
+    _expiredSubscription?.cancel();
+    super.dispose();
+  }
+
+  /// The server rejected the token: close any open screens and show sign-in.
+  void _onSessionExpired(String message) {
+    if (!mounted) return;
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    _refresh();
   }
 
   void _refresh() {
