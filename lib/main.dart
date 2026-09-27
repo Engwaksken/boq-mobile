@@ -307,11 +307,11 @@ class _LoginPageState extends State<LoginPage> {
   final _password = TextEditingController();
 
   late final BiometricService _biometricService;
-  bool _biometricAvailable = false;
-  bool _biometricEnabled = false;
 
   bool _loading = false;
   bool _obscurePassword = true;
+  bool _biometricAvailable = false;
+  bool _biometricEnabled = false;
   String? _error;
 
   @override
@@ -321,17 +321,6 @@ class _LoginPageState extends State<LoginPage> {
     _checkBiometricStatus();
   }
 
-  Future<void> _checkBiometricStatus() async {
-    final available = await _biometricService.isBiometricAvailable();
-    final enabled = await _biometricService.isBiometricEnabled();
-    if (mounted) {
-      setState(() {
-        _biometricAvailable = available;
-        _biometricEnabled = enabled;
-      });
-    }
-  }
-
   @override
   void dispose() {
     _email.dispose();
@@ -339,22 +328,40 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  Future<void> _checkBiometricStatus() async {
+    final available = await _biometricService.isBiometricAvailable();
+    final enabled = await _biometricService.isBiometricEnabled();
+
+    if (!mounted) return;
+
+    setState(() {
+      _biometricAvailable = available;
+      _biometricEnabled = enabled;
+    });
+  }
+
   Future<void> _authenticateWithBiometric() async {
     final l10n = AppLocalizations.of(context)!;
+
     final success = await _biometricService.authenticate(
       localizedReason: l10n.useBiometricToLogin,
     );
-    if (success && mounted) {
+
+    if (!mounted) return;
+
+    if (success) {
       widget.onSignedIn();
-    } else if (mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(l10n.biometricError)));
+      return;
     }
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.biometricError)));
   }
 
   Future<void> _promptEnableBiometric() async {
     final l10n = AppLocalizations.of(context)!;
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -372,21 +379,24 @@ class _LoginPageState extends State<LoginPage> {
         ],
       ),
     );
-    if (confirm == true && mounted) {
-      await _biometricService.setBiometricEnabled(true);
-      if (mounted) {
-        setState(() => _biometricEnabled = true);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(l10n.biometricEnabled)));
-      }
-    }
+
+    if (confirm != true || !mounted) return;
+
+    await _biometricService.setBiometricEnabled(true);
+
+    if (!mounted) return;
+
+    setState(() => _biometricEnabled = true);
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.biometricEnabled)));
   }
 
   Future<void> _signIn() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    FocusScope.of(context).unfocus();
+
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() {
       _loading = true;
@@ -399,15 +409,13 @@ class _LoginPageState extends State<LoginPage> {
         password: _password.text,
       );
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
-      // Check if biometric is available but not enabled, prompt to enable
       if (_biometricAvailable && !_biometricEnabled) {
         await _promptEnableBiometric();
       }
 
+      if (!mounted) return;
       widget.onSignedIn();
     } on ApiException catch (error) {
       if (mounted) {
@@ -415,7 +423,313 @@ class _LoginPageState extends State<LoginPage> {
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _error = 'Unable to sign in. Please try again.');
+        setState(
+          () => _error =
+              'Unable to sign in. Check your connection and try again.',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  Future<void> _openForgotPassword() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ForgotPasswordPage(api: widget.api),
+      ),
+    );
+  }
+
+  Future<void> _openSignUp() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            SignUpPage(api: widget.api, onSignedIn: widget.onSignedIn),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: AutofillGroup(
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Icon(
+                        Icons.foundation_outlined,
+                        size: 58,
+                        color: Color(0xFF102A43),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        l10n.appTitle,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        l10n.signInDescription,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 30),
+                      TextFormField(
+                        controller: _email,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        autofillHints: const [AutofillHints.email],
+                        decoration: InputDecoration(
+                          labelText: l10n.email,
+                          hintText: l10n.email,
+                          prefixIcon: const Icon(Icons.email_outlined),
+                        ),
+                        validator: (value) {
+                          final email = value?.trim() ?? '';
+                          if (email.isEmpty || !email.contains('@')) {
+                            return l10n.email;
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _password,
+                        obscureText: _obscurePassword,
+                        textInputAction: TextInputAction.done,
+                        autofillHints: const [AutofillHints.password],
+                        onFieldSubmitted: (_) {
+                          if (!_loading) _signIn();
+                        },
+                        decoration: InputDecoration(
+                          labelText: l10n.password,
+                          hintText: l10n.password,
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          suffixIcon: IconButton(
+                            tooltip: _obscurePassword
+                                ? 'Show password'
+                                : 'Hide password',
+                            onPressed: () {
+                              setState(
+                                () => _obscurePassword = !_obscurePassword,
+                              );
+                            },
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                            ),
+                          ),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return l10n.password;
+                          }
+                          return null;
+                        },
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: _loading ? null : _openForgotPassword,
+                          child: Text(l10n.forgotPassword),
+                        ),
+                      ),
+                      if (_error != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF1F2),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFFDA4AF)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(
+                                Icons.error_outline,
+                                color: Color(0xFFBE123C),
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _error!,
+                                  style: const TextStyle(
+                                    color: Color(0xFFBE123C),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      SizedBox(
+                        height: 52,
+                        child: FilledButton(
+                          onPressed: _loading ? null : _signIn,
+                          child: _loading
+                              ? const SizedBox.square(
+                                  dimension: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Text(l10n.signIn),
+                        ),
+                      ),
+                      if (_biometricEnabled && _biometricAvailable) ...[
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          height: 52,
+                          child: OutlinedButton.icon(
+                            onPressed: _loading
+                                ? null
+                                : _authenticateWithBiometric,
+                            icon: const Icon(Icons.fingerprint),
+                            label: Text(l10n.useBiometricToLogin),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 22),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              l10n.noAccount,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _loading ? null : _openSignUp,
+                            child: Text(l10n.signUp),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 4,
+                        runSpacing: 0,
+                        children: [
+                          TextButton(
+                            onPressed: () {},
+                            child: Text(l10n.privacyPolicy),
+                          ),
+                          TextButton(
+                            onPressed: () {},
+                            child: Text(l10n.termsOfUse),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class SignUpPage extends StatefulWidget {
+  const SignUpPage({super.key, required this.api, required this.onSignedIn});
+
+  final ApiClient api;
+  final VoidCallback onSignedIn;
+
+  @override
+  State<SignUpPage> createState() => _SignUpPageState();
+}
+
+class _SignUpPageState extends State<SignUpPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _name = TextEditingController();
+  final _organisation = TextEditingController();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  final _confirmPassword = TextEditingController();
+
+  bool _loading = false;
+  bool _obscurePassword = true;
+  bool _obscureConfirmation = true;
+  bool _acceptTerms = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _organisation.dispose();
+    _email.dispose();
+    _password.dispose();
+    _confirmPassword.dispose();
+    super.dispose();
+  }
+
+  Future<void> _register() async {
+    FocusScope.of(context).unfocus();
+
+    if (!_formKey.currentState!.validate()) return;
+
+    if (!_acceptTerms) {
+      setState(
+        () => _error = 'Please accept the Terms of Use and Privacy Policy.',
+      );
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      await widget.api.register(
+        name: _name.text.trim(),
+        email: _email.text.trim(),
+        password: _password.text,
+        passwordConfirmation: _confirmPassword.text,
+        organisationName: _organisation.text.trim().isEmpty
+            ? null
+            : _organisation.text.trim(),
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Account created successfully.')),
+      );
+
+      widget.onSignedIn();
+      Navigator.of(context).pop();
+    } on ApiException catch (error) {
+      if (mounted) {
+        setState(() => _error = error.message);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'Unable to create your account. Check your connection and try again.',
+        );
       }
     } finally {
       if (mounted) {
@@ -429,32 +743,57 @@ class _LoginPageState extends State<LoginPage> {
     final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
+      appBar: AppBar(title: Text(l10n.signUp)),
       body: SafeArea(
         child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(28),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: AutofillGroup(
               child: Form(
                 key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                child: ListView(
+                  padding: const EdgeInsets.all(24),
                   children: [
                     const Icon(
-                      Icons.foundation_outlined,
-                      size: 54,
+                      Icons.person_add_alt_1_outlined,
+                      size: 52,
                       color: Color(0xFF102A43),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
                     Text(
-                      l10n.appTitle,
+                      l10n.createAccount,
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineMedium
+                      style: Theme.of(context).textTheme.headlineSmall
                           ?.copyWith(fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(height: 8),
-                    Text(l10n.signInDescription, textAlign: TextAlign.center),
-                    const SizedBox(height: 32),
+                    Text(l10n.signUpDescription, textAlign: TextAlign.center),
+                    const SizedBox(height: 28),
+                    TextFormField(
+                      controller: _name,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.name],
+                      decoration: InputDecoration(
+                        labelText: l10n.fullName,
+                        prefixIcon: const Icon(Icons.person_outline),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return l10n.fullName;
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _organisation,
+                      textInputAction: TextInputAction.next,
+                      decoration: InputDecoration(
+                        labelText: l10n.organisationName,
+                        prefixIcon: const Icon(Icons.business_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     TextFormField(
                       controller: _email,
                       keyboardType: TextInputType.emailAddress,
@@ -462,26 +801,13 @@ class _LoginPageState extends State<LoginPage> {
                       autofillHints: const [AutofillHints.email],
                       decoration: InputDecoration(
                         labelText: l10n.email,
-                        hintText: l10n.email,
                         prefixIcon: const Icon(Icons.email_outlined),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF102A43),
-                            width: 1.5,
-                          ),
-                        ),
                       ),
                       validator: (value) {
                         final email = value?.trim() ?? '';
-
                         if (email.isEmpty || !email.contains('@')) {
                           return l10n.email;
                         }
-
                         return null;
                       },
                     ),
@@ -489,22 +815,16 @@ class _LoginPageState extends State<LoginPage> {
                     TextFormField(
                       controller: _password,
                       obscureText: _obscurePassword,
-                      textInputAction: TextInputAction.done,
-                      autofillHints: const [AutofillHints.password],
-                      onFieldSubmitted: (_) {
-                        if (!_loading) {
-                          _signIn();
-                        }
-                      },
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.newPassword],
                       decoration: InputDecoration(
                         labelText: l10n.password,
-                        hintText: l10n.password,
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
                           onPressed: () {
-                            setState(() {
-                              _obscurePassword = !_obscurePassword;
-                            });
+                            setState(
+                              () => _obscurePassword = !_obscurePassword,
+                            );
                           },
                           icon: Icon(
                             _obscurePassword
@@ -512,27 +832,76 @@ class _LoginPageState extends State<LoginPage> {
                                 : Icons.visibility_off_outlined,
                           ),
                         ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(
-                            color: Color(0xFF102A43),
-                            width: 1.5,
+                      ),
+                      validator: (value) {
+                        if (value == null || value.length < 8) {
+                          return l10n.passwordTooShort;
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _confirmPassword,
+                      obscureText: _obscureConfirmation,
+                      textInputAction: TextInputAction.done,
+                      autofillHints: const [AutofillHints.newPassword],
+                      onFieldSubmitted: (_) {
+                        if (!_loading) _register();
+                      },
+                      decoration: InputDecoration(
+                        labelText: l10n.confirmPassword,
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          onPressed: () {
+                            setState(
+                              () =>
+                                  _obscureConfirmation = !_obscureConfirmation,
+                            );
+                          },
+                          icon: Icon(
+                            _obscureConfirmation
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
                           ),
                         ),
                       ),
                       validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return l10n.password;
+                        if (value != _password.text) {
+                          return l10n.passwordMismatch;
                         }
-
                         return null;
                       },
                     ),
+                    const SizedBox(height: 12),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      value: _acceptTerms,
+                      onChanged: _loading
+                          ? null
+                          : (value) {
+                              setState(() => _acceptTerms = value ?? false);
+                            },
+                      title: Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          const Text('I agree to the '),
+                          Text(
+                            l10n.termsOfUse,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const Text(' and '),
+                          Text(
+                            l10n.privacyPolicy,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const Text('.'),
+                        ],
+                      ),
+                    ),
                     if (_error != null) ...[
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -546,24 +915,11 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                     ],
-                    if (_biometricEnabled && _biometricAvailable) ...[
-                      const SizedBox(height: 16),
-                      SizedBox(
-                        height: 50,
-                        child: OutlinedButton.icon(
-                          onPressed: _loading
-                              ? null
-                              : _authenticateWithBiometric,
-                          icon: const Icon(Icons.fingerprint),
-                          label: Text(l10n.useBiometricToLogin),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 22),
                     SizedBox(
-                      height: 50,
+                      height: 52,
                       child: FilledButton(
-                        onPressed: _loading ? null : _signIn,
+                        onPressed: _loading ? null : _register,
                         child: _loading
                             ? const SizedBox.square(
                                 dimension: 20,
@@ -571,12 +927,206 @@ class _LoginPageState extends State<LoginPage> {
                                   strokeWidth: 2,
                                 ),
                               )
-                            : Text(l10n.signIn),
+                            : Text(l10n.createAccount),
                       ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: _loading
+                          ? null
+                          : () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.arrow_back),
+                      label: Text(l10n.backToSignIn),
                     ),
                   ],
                 ),
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class ForgotPasswordPage extends StatefulWidget {
+  const ForgotPasswordPage({super.key, required this.api});
+
+  final ApiClient api;
+
+  @override
+  State<ForgotPasswordPage> createState() => _ForgotPasswordPageState();
+}
+
+class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _email = TextEditingController();
+
+  bool _loading = false;
+  bool _sent = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendResetLink() async {
+    FocusScope.of(context).unfocus();
+
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      await widget.api.forgotPassword(email: _email.text.trim());
+
+      if (!mounted) return;
+
+      setState(() => _sent = true);
+    } on ApiException catch (error) {
+      if (mounted) {
+        setState(() => _error = error.message);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'Unable to send the reset link. Check your connection and try again.',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.forgotPassword)),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: ListView(
+              padding: const EdgeInsets.all(24),
+              children: [
+                const Icon(
+                  Icons.lock_reset_outlined,
+                  size: 54,
+                  color: Color(0xFF102A43),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  l10n.forgotPassword,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  l10n.resetPasswordDescription,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 28),
+                if (_sent)
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFECFDF5),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFF6EE7B7)),
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons.check_circle_outline,
+                          color: Color(0xFF047857),
+                          size: 36,
+                        ),
+                        const SizedBox(height: 10),
+                        Text(l10n.resetEmailSent, textAlign: TextAlign.center),
+                      ],
+                    ),
+                  )
+                else
+                  Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        TextFormField(
+                          controller: _email,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.done,
+                          autofillHints: const [AutofillHints.email],
+                          onFieldSubmitted: (_) {
+                            if (!_loading) _sendResetLink();
+                          },
+                          decoration: InputDecoration(
+                            labelText: l10n.email,
+                            prefixIcon: const Icon(Icons.email_outlined),
+                          ),
+                          validator: (value) {
+                            final email = value?.trim() ?? '';
+                            if (email.isEmpty || !email.contains('@')) {
+                              return l10n.email;
+                            }
+                            return null;
+                          },
+                        ),
+                        if (_error != null) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF1F2),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(0xFFFDA4AF),
+                              ),
+                            ),
+                            child: Text(
+                              _error!,
+                              style: const TextStyle(color: Color(0xFFBE123C)),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 22),
+                        SizedBox(
+                          height: 52,
+                          child: FilledButton.icon(
+                            onPressed: _loading ? null : _sendResetLink,
+                            icon: _loading
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.send_outlined),
+                            label: Text(l10n.sendResetLink),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                TextButton.icon(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.arrow_back),
+                  label: Text(l10n.backToSignIn),
+                ),
+              ],
             ),
           ),
         ),
@@ -627,13 +1177,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final destinations = [
       (Icons.space_dashboard_outlined, Icons.space_dashboard, l10n.dashboard),
       (Icons.account_tree_outlined, Icons.account_tree, l10n.projects),
-      (Icons.inventory_2_outlined, Icons.inventory_2, l10n.hardwarePrices),
+      (Icons.price_check_outlined, Icons.price_check, l10n.hardwarePrices),
       (Icons.document_scanner_outlined, Icons.document_scanner, l10n.importBoq),
       (Icons.person_outline, Icons.person, l10n.account),
     ];
 
     return Scaffold(
       appBar: AppBar(title: Text(destinations[_selectedIndex].$3)),
+
       drawer: Drawer(
         child: SafeArea(
           child: ListView(
@@ -653,6 +1204,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
+
               for (var index = 0; index < destinations.length; index++)
                 ListTile(
                   selected: _selectedIndex == index,
@@ -660,15 +1212,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   title: Text(destinations[index].$3),
                   onTap: () {
                     setState(() => _selectedIndex = index);
+
                     Navigator.of(context).pop();
                   },
                 ),
+
               const Divider(),
+
               ListTile(
                 leading: const Icon(Icons.workspace_premium_outlined),
                 title: Text(l10n.managePlan),
                 onTap: () {
                   Navigator.of(context).pop();
+
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => PlansPage(api: widget.api),
@@ -680,9 +1236,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+
       body: SafeArea(
         child: IndexedStack(index: _selectedIndex, children: pages),
       ),
+
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (index) {
@@ -757,7 +1315,11 @@ class DashboardPage extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  onPressed: () {},
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => NotificationsPage(api: api),
+                    ),
+                  ),
                   tooltip: l10n.notifications,
                   icon: const Icon(Icons.notifications_none_outlined),
                 ),
@@ -844,6 +1406,227 @@ class DashboardPage extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+class NotificationsPage extends StatefulWidget {
+  const NotificationsPage({super.key, required this.api});
+  final ApiClient api;
+
+  @override
+  State<NotificationsPage> createState() => _NotificationsPageState();
+}
+
+class _NotificationsPageState extends State<NotificationsPage> {
+  late Future<List<NotificationItem>> _notifications;
+  int _page = 1;
+  bool _loadingMore = false;
+  bool _hasMore = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotifications();
+  }
+
+  Future<void> _loadNotifications({bool loadMore = false}) async {
+    if (_loadingMore) return;
+    final targetPage = loadMore ? _page + 1 : 1;
+    if (loadMore) {
+      setState(() => _loadingMore = true);
+    } else {
+      setState(() {
+        _notifications = widget.api.getNotifications(page: targetPage);
+      });
+    }
+    try {
+      final notifications = await widget.api.getNotifications(page: targetPage);
+      if (mounted) {
+        setState(() {
+          if (loadMore) {
+            // We need to get the current list and append
+            // For simplicity, we'll just reload the whole list
+            _notifications = widget.api.getNotifications(page: 1);
+            _page = 1;
+          } else {
+            _notifications = Future.value(notifications);
+            _page = targetPage;
+          }
+          _hasMore = notifications.length >= 20;
+          _loadingMore = false;
+        });
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() {
+          _loadingMore = false;
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(e.message)));
+        });
+      }
+    }
+  }
+
+  Future<void> _markAsRead(NotificationItem notification) async {
+    if (notification.isRead) return;
+    try {
+      await widget.api.markNotificationAsRead(notification.id);
+      if (mounted) {
+        setState(() {
+          _loadNotifications();
+        });
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.notifications)),
+      body: FutureBuilder<List<NotificationItem>>(
+        future: _notifications,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  snapshot.error.toString(),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          }
+          final notifications = snapshot.data ?? [];
+          if (notifications.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.notifications_none,
+                    size: 64,
+                    color: Colors.grey[400],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    l10n.noNotifications,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ],
+              ),
+            );
+          }
+          return NotificationListener<ScrollNotification>(
+            onNotification: (notification) {
+              if (notification.metrics.pixels >=
+                      notification.metrics.maxScrollExtent - 200 &&
+                  !_loadingMore &&
+                  _hasMore) {
+                _loadNotifications(loadMore: true);
+              }
+              return false;
+            },
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: notifications.length + (_loadingMore ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index >= notifications.length) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
+                final notification = notifications[index];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  color: notification.isRead
+                      ? null
+                      : Theme.of(
+                          context,
+                        ).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: notification.isRead
+                          ? Colors.grey[300]
+                          : Theme.of(context).colorScheme.primary,
+                      child: Icon(
+                        _iconForType(notification.type),
+                        color: notification.isRead
+                            ? Colors.grey[600]
+                            : Colors.white,
+                      ),
+                    ),
+                    title: Text(
+                      notification.title,
+                      style: TextStyle(
+                        fontWeight: notification.isRead
+                            ? FontWeight.w400
+                            : FontWeight.w700,
+                      ),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(notification.message),
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatDate(notification.createdAt),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                    trailing: !notification.isRead
+                        ? TextButton(
+                            onPressed: () => _markAsRead(notification),
+                            child: Text(l10n.markAsRead),
+                          )
+                        : null,
+                    onTap: () => _markAsRead(notification),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  IconData _iconForType(String type) {
+    switch (type) {
+      case 'success':
+        return Icons.check_circle;
+      case 'warning':
+        return Icons.warning;
+      case 'error':
+        return Icons.error;
+      default:
+        return Icons.info;
+    }
+  }
+
+  String _formatDate(String dateStr) {
+    try {
+      final dt = DateTime.parse(dateStr);
+      return '${dt.day}/${dt.month}/${dt.year} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return dateStr;
+    }
   }
 }
 
@@ -2618,6 +3401,8 @@ class _ProfilePageState extends State<ProfilePage> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _email = TextEditingController();
+  final _phone = TextEditingController();
+  final _location = TextEditingController();
   final _password = TextEditingController();
   late final Future<UserProfile> _profile = widget.api.profile();
   late String _selectedLocale = widget.locale.languageCode;
@@ -2678,6 +3463,8 @@ class _ProfilePageState extends State<ProfilePage> {
   void dispose() {
     _name.dispose();
     _email.dispose();
+    _phone.dispose();
+    _location.dispose();
     _password.dispose();
     super.dispose();
   }
@@ -2698,6 +3485,8 @@ class _ProfilePageState extends State<ProfilePage> {
         email: _email.text.trim(),
         locale: _selectedLocale,
         password: _password.text,
+        phone: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
+        location: _location.text.trim().isEmpty ? null : _location.text.trim(),
       );
       widget.onLocaleChanged(Locale(profile.locale));
       if (mounted) {
@@ -2737,6 +3526,8 @@ class _ProfilePageState extends State<ProfilePage> {
             _loaded = true;
             _name.text = profile.name;
             _email.text = profile.email;
+            _phone.text = profile.phone ?? '';
+            _location.text = profile.location ?? '';
             _selectedLocale = profile.locale;
           }
 
@@ -2759,6 +3550,17 @@ class _ProfilePageState extends State<ProfilePage> {
                   decoration: InputDecoration(labelText: l10n.email),
                   validator: (value) =>
                       value == null || !value.contains('@') ? l10n.email : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _phone,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(labelText: l10n.phoneNumber),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _location,
+                  decoration: InputDecoration(labelText: l10n.location),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
@@ -5602,7 +6404,6 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
   }
 
   Widget _buildBoqHeader(BoqDetail boq, AppLocalizations l10n) {
-    final money = NumberFormat('#,##0.00');
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -6149,7 +6950,6 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(title: const Text('BOQ Item Details')),
       body: FutureBuilder<BoqItemDetail>(
@@ -6309,7 +7109,6 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
   final _searchController = TextEditingController();
   String _statusFilter = 'all';
   bool _isAdmin = true;
-  String? _error;
 
   @override
   void initState() {
@@ -6323,29 +7122,25 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
     super.dispose();
   }
 
-  Future<void> _loadSubscriptions() async {
-    setState(() {
-      _error = null;
-    });
-    try {
-      final subscriptions = await widget.api.listProxySubscriptions();
-      if (mounted) {
-        setState(() {
-          _subscriptions = Future.value(subscriptions);
-          _isAdmin = true;
-        });
-      }
-    } on ApiException catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.message;
-          _isAdmin =
-              e.message.toLowerCase().contains('unauthorized') ||
-              e.message.toLowerCase().contains('forbidden') ||
-              e.message.toLowerCase().contains('admin');
-        });
-      }
-    }
+  void _refresh() => setState(_loadSubscriptions);
+
+  void _loadSubscriptions() {
+    final future = widget.api.listProxySubscriptions();
+    _subscriptions = future;
+    future.then(
+      (_) {
+        if (mounted && !_isAdmin) setState(() => _isAdmin = true);
+      },
+      onError: (Object e) {
+        if (e is! ApiException || !mounted) return;
+        final message = e.message.toLowerCase();
+        final denied =
+            message.contains('unauthorized') ||
+            message.contains('forbidden') ||
+            message.contains('admin');
+        if (denied) setState(() => _isAdmin = false);
+      },
+    );
   }
 
   List<ProxySubscription> _filterSubscriptions(
@@ -6430,7 +7225,7 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadSubscriptions,
+            onPressed: _refresh,
             tooltip: l10n.refresh,
           ),
         ],
@@ -6458,7 +7253,7 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
                           Text(snapshot.error.toString()),
                           const SizedBox(height: 16),
                           FilledButton(
-                            onPressed: _loadSubscriptions,
+                            onPressed: _refresh,
                             child: Text(l10n.retry),
                           ),
                         ],
@@ -6493,7 +7288,10 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
                   );
                 }
                 return RefreshIndicator(
-                  onRefresh: _loadSubscriptions,
+                  onRefresh: () async {
+                    _refresh();
+                    await _subscriptions.catchError((_) => <ProxySubscription>[]);
+                  },
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
                     itemCount: filtered.length,

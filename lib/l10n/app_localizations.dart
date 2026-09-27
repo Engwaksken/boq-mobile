@@ -104,6 +104,12 @@ abstract class AppLocalizations {
   /// **'BOQ Works'**
   String get appTitle;
 
+  /// No description provided for @home.
+  ///
+  /// In en, this message translates to:
+  /// **'Home'**
+  String get home;
+
   /// No description provided for @dashboard.
   ///
   /// In en, this message translates to:
@@ -290,6 +296,18 @@ abstract class AppLocalizations {
   /// **'Notifications'**
   String get notifications;
 
+  /// No description provided for @noNotifications.
+  ///
+  /// In en, this message translates to:
+  /// **'No notifications'**
+  String get noNotifications;
+
+  /// No description provided for @markAsRead.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark as read'**
+  String get markAsRead;
+
   /// No description provided for @profile.
   ///
   /// In en, this message translates to:
@@ -463,6 +481,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Full name'**
   String get fullName;
+
+  /// No description provided for @phoneNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone number'**
+  String get phoneNumber;
+
+  /// No description provided for @location.
+  ///
+  /// In en, this message translates to:
+  /// **'Location'**
+  String get location;
 
   /// No description provided for @newPassword.
   ///
@@ -793,6 +823,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Available: '**
   String get biometricTypes;
+
+  /// No description provided for @deleteBoq.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete BOQ'**
+  String get deleteBoq;
+
+  /// No description provided for @deleteSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Selected'**
+  String get deleteSelected;
+
+  /// No description provided for @selectBoqs.
+  ///
+  /// In en, this message translates to:
+  /// **'Select BOQs'**
+  String get selectBoqs;
+
+  /// No description provided for @selectedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'selected'**
+  String get selectedCount;
+
+  /// No description provided for @locationHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Location History'**
+  String get locationHistory;
+
+  /// No description provided for @recentLocations.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent Locations'**
+  String get recentLocations;
 }
 
 class _AppLocalizationsDelegate

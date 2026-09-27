@@ -1,5 +1,6 @@
 {
   "appTitle": "BOQ Works",
+  "home": "Omwaaka",
   "dashboard": "Ekisengejjero",
   "projects": "Pulojekiti",
   "hardwarePrices": "Ebikwano bya Hardware",
@@ -31,6 +32,8 @@
   "english": "Lungereza",
   "luganda": "Luganda",
   "notifications": "Obubaka",
+  "noNotifications": "Tewali ebibaka",
+  "markAsRead": "Kakasa nk'ebibaka",
   "profile": "Puloofaayiro",
   "signOut": "Fuluma",
   "usage": "Enkozesa",
@@ -60,6 +63,8 @@
   "loadingDashboard": "Ekisengejjero kyo kitikkibwa...",
   "editProfile": "Terereza puloofaayiro",
   "fullName": "Erinnya erijjuvu",
+  "phoneNumber": "Nambala ya simu",
+  "location": "Ekiwaaliro",
   "newPassword": "Ekigambo ekikuumi ekipya",
   "passwordHint": "Kirekeere awo okusigaza ekigambo ekikuumi ekyo",
   "saveChanges": "Tereka enkyukakyuka",
@@ -73,7 +78,7 @@
   "priceComparison": "Ekihinga eky'Ebikwano",
   "bestRecommendations": "Ebisuubizo eby'Abaka",
   "itemsTracked": "Ebintu eby'Ekitegyekeko",
-  "pricesUpdatedToday": "Ebikwano eby'Ekitegyekeko Lero",
+  "pricesUpdatedToday": "Ebikwano eby'Okugeza Lero",
   "averagePriceChange": "Enkyukakyuka y'Omuwendo",
   "suppliersTracked": "Abazimisa ab'Obugayima",
   "lowestPriceOpportunities": "Eby'Olugero lw'Omutono",
@@ -114,5 +119,11 @@
   "biometricDisabled": "Obuyita obulamu bwekkedde",
   "biometricError": "Obuyita obulamu bweleke. Mwongeze omulabe.",
   "biometricAvailable": "Obuyita obulamu buliwo",
-  "biometricTypes": "Ebikozesebwa: "
+  "biometricTypes": "Ebikozesebwa: ",
+  "deleteBoq": "Futa BOQ",
+  "deleteSelected": "Futa ebyakusanyibwa",
+  "selectBoqs": "Kusanya BOQ",
+  "selectedCount": "ebyakusanyibwa",
+  "locationHistory": "Enkuluze ya Ekiwaaliro",
+  "recentLocations": "Eby'Ekiwaaliro eby'Olugendo"
 }

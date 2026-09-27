@@ -12,6 +12,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appTitle => 'BOQ Works';
 
   @override
+  String get home => 'Home';
+
+  @override
   String get dashboard => 'Dashboard';
 
   @override
@@ -106,6 +109,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notifications => 'Notifications';
 
   @override
+  String get noNotifications => 'No notifications';
+
+  @override
+  String get markAsRead => 'Mark as read';
+
+  @override
   String get profile => 'Profile';
 
   @override
@@ -196,6 +205,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fullName => 'Full name';
+
+  @override
+  String get phoneNumber => 'Phone number';
+
+  @override
+  String get location => 'Location';
 
   @override
   String get newPassword => 'New password';
@@ -367,4 +382,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get biometricTypes => 'Available: ';
+
+  @override
+  String get deleteBoq => 'Delete BOQ';
+
+  @override
+  String get deleteSelected => 'Delete Selected';
+
+  @override
+  String get selectBoqs => 'Select BOQs';
+
+  @override
+  String get selectedCount => 'selected';
+
+  @override
+  String get locationHistory => 'Location History';
+
+  @override
+  String get recentLocations => 'Recent Locations';
 }

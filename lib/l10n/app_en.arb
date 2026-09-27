@@ -1,5 +1,6 @@
 {
   "appTitle": "BOQ Works",
+  "home": "Home",
   "dashboard": "Dashboard",
   "projects": "Projects",
   "hardwarePrices": "Hardware Prices",
@@ -31,6 +32,8 @@
   "english": "English",
   "luganda": "Luganda",
   "notifications": "Notifications",
+  "noNotifications": "No notifications",
+  "markAsRead": "Mark as read",
   "profile": "Profile",
   "signOut": "Sign out",
   "usage": "Usage",
@@ -60,6 +63,8 @@
   "loadingDashboard": "Loading your dashboard...",
   "editProfile": "Edit profile",
   "fullName": "Full name",
+  "phoneNumber": "Phone number",
+  "location": "Location",
   "newPassword": "New password",
   "passwordHint": "Leave blank to keep your current password",
   "saveChanges": "Save changes",
@@ -114,5 +119,11 @@
   "biometricDisabled": "Biometric login disabled",
   "biometricError": "Biometric authentication failed. Please try again.",
   "biometricAvailable": "Biometric available",
-  "biometricTypes": "Available: "
+  "biometricTypes": "Available: ",
+  "deleteBoq": "Delete BOQ",
+  "deleteSelected": "Delete Selected",
+  "selectBoqs": "Select BOQs",
+  "selectedCount": "selected",
+  "locationHistory": "Location History",
+  "recentLocations": "Recent Locations"
 }

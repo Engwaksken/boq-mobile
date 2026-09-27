@@ -12,6 +12,9 @@ class AppLocalizationsLg extends AppLocalizations {
   String get appTitle => 'BOQ Works';
 
   @override
+  String get home => 'Omwaaka';
+
+  @override
   String get dashboard => 'Ekisengejjero';
 
   @override
@@ -104,6 +107,12 @@ class AppLocalizationsLg extends AppLocalizations {
 
   @override
   String get notifications => 'Obubaka';
+
+  @override
+  String get noNotifications => 'Tewali ebibaka';
+
+  @override
+  String get markAsRead => 'Kakasa nk\'ebibaka';
 
   @override
   String get profile => 'Puloofaayiro';
@@ -199,6 +208,12 @@ class AppLocalizationsLg extends AppLocalizations {
   String get fullName => 'Erinnya erijjuvu';
 
   @override
+  String get phoneNumber => 'Nambala ya simu';
+
+  @override
+  String get location => 'Ekiwaaliro';
+
+  @override
   String get newPassword => 'Ekigambo ekikuumi ekipya';
 
   @override
@@ -238,7 +253,7 @@ class AppLocalizationsLg extends AppLocalizations {
   String get itemsTracked => 'Ebintu eby\'Ekitegyekeko';
 
   @override
-  String get pricesUpdatedToday => 'Ebikwano eby\'Ekitegyekeko Lero';
+  String get pricesUpdatedToday => 'Ebikwano eby\'Okugeza Lero';
 
   @override
   String get averagePriceChange => 'Enkyukakyuka y\'Omuwendo';
@@ -367,4 +382,22 @@ class AppLocalizationsLg extends AppLocalizations {
 
   @override
   String get biometricTypes => 'Ebikozesebwa: ';
+
+  @override
+  String get deleteBoq => 'Futa BOQ';
+
+  @override
+  String get deleteSelected => 'Futa ebyakusanyibwa';
+
+  @override
+  String get selectBoqs => 'Kusanya BOQ';
+
+  @override
+  String get selectedCount => 'ebyakusanyibwa';
+
+  @override
+  String get locationHistory => 'Enkuluze ya Ekiwaaliro';
+
+  @override
+  String get recentLocations => 'Eby\'Ekiwaaliro eby\'Olugendo';
 }
