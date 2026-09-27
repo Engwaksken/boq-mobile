@@ -104,6 +104,12 @@ abstract class AppLocalizations {
   /// **'BOQ Works'**
   String get appTitle;
 
+  /// No description provided for @home.
+  ///
+  /// In en, this message translates to:
+  /// **'Home'**
+  String get home;
+
   /// No description provided for @dashboard.
   ///
   /// In en, this message translates to:
@@ -290,6 +296,18 @@ abstract class AppLocalizations {
   /// **'Notifications'**
   String get notifications;
 
+  /// No description provided for @noNotifications.
+  ///
+  /// In en, this message translates to:
+  /// **'No notifications'**
+  String get noNotifications;
+
+  /// No description provided for @markAsRead.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark as read'**
+  String get markAsRead;
+
   /// No description provided for @profile.
   ///
   /// In en, this message translates to:
@@ -356,6 +374,96 @@ abstract class AppLocalizations {
   /// **'Unable to sign in. Check your details and try again.'**
   String get signInFailed;
 
+  /// No description provided for @forgotPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Forgot password?'**
+  String get forgotPassword;
+
+  /// No description provided for @noAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t have an account?'**
+  String get noAccount;
+
+  /// No description provided for @signUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign up'**
+  String get signUp;
+
+  /// No description provided for @signUpDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Create an account to start managing your projects and BOQs.'**
+  String get signUpDescription;
+
+  /// No description provided for @organisationName.
+  ///
+  /// In en, this message translates to:
+  /// **'Organisation name (optional)'**
+  String get organisationName;
+
+  /// No description provided for @confirmPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm password'**
+  String get confirmPassword;
+
+  /// No description provided for @passwordTooShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Password must be at least 8 characters.'**
+  String get passwordTooShort;
+
+  /// No description provided for @passwordMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Passwords do not match.'**
+  String get passwordMismatch;
+
+  /// No description provided for @createAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Create account'**
+  String get createAccount;
+
+  /// No description provided for @resetPasswordDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your email address and we will send you a link to reset your password.'**
+  String get resetPasswordDescription;
+
+  /// No description provided for @resetEmailSent.
+  ///
+  /// In en, this message translates to:
+  /// **'If an account exists for that email, a password reset link has been sent. Check your inbox.'**
+  String get resetEmailSent;
+
+  /// No description provided for @sendResetLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Send reset link'**
+  String get sendResetLink;
+
+  /// No description provided for @backToSignIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to sign in'**
+  String get backToSignIn;
+
+  /// No description provided for @privacyPolicy.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy Policy'**
+  String get privacyPolicy;
+
+  /// No description provided for @termsOfUse.
+  ///
+  /// In en, this message translates to:
+  /// **'Terms of Use'**
+  String get termsOfUse;
+
   /// No description provided for @loadingDashboard.
   ///
   /// In en, this message translates to:
@@ -373,6 +481,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Full name'**
   String get fullName;
+
+  /// No description provided for @phoneNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone number'**
+  String get phoneNumber;
+
+  /// No description provided for @location.
+  ///
+  /// In en, this message translates to:
+  /// **'Location'**
+  String get location;
 
   /// No description provided for @newPassword.
   ///
@@ -481,6 +601,264 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'BOQ Items with Updated Prices'**
   String get boqItemsWithUpdatedPrices;
+
+  /// No description provided for @proxySubscriptions.
+  ///
+  /// In en, this message translates to:
+  /// **'Proxy Subscriptions'**
+  String get proxySubscriptions;
+
+  /// No description provided for @beneficiary.
+  ///
+  /// In en, this message translates to:
+  /// **'Beneficiary'**
+  String get beneficiary;
+
+  /// No description provided for @beneficiaryEmail.
+  ///
+  /// In en, this message translates to:
+  /// **'Beneficiary Email'**
+  String get beneficiaryEmail;
+
+  /// No description provided for @payer.
+  ///
+  /// In en, this message translates to:
+  /// **'Payer'**
+  String get payer;
+
+  /// No description provided for @plan.
+  ///
+  /// In en, this message translates to:
+  /// **'Plan'**
+  String get plan;
+
+  /// No description provided for @status.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get status;
+
+  /// No description provided for @paymentStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment Status'**
+  String get paymentStatus;
+
+  /// No description provided for @startDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Start Date'**
+  String get startDate;
+
+  /// No description provided for @endDate.
+  ///
+  /// In en, this message translates to:
+  /// **'End Date'**
+  String get endDate;
+
+  /// No description provided for @createdAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Created At'**
+  String get createdAt;
+
+  /// No description provided for @transactionId.
+  ///
+  /// In en, this message translates to:
+  /// **'Transaction ID'**
+  String get transactionId;
+
+  /// No description provided for @search.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get search;
+
+  /// No description provided for @refresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get refresh;
+
+  /// No description provided for @retry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get retry;
+
+  /// No description provided for @allStatuses.
+  ///
+  /// In en, this message translates to:
+  /// **'All Statuses'**
+  String get allStatuses;
+
+  /// No description provided for @statusActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get statusActive;
+
+  /// No description provided for @statusPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get statusPending;
+
+  /// No description provided for @statusCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelled'**
+  String get statusCancelled;
+
+  /// No description provided for @statusExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Expired'**
+  String get statusExpired;
+
+  /// No description provided for @noProxySubscriptions.
+  ///
+  /// In en, this message translates to:
+  /// **'No proxy subscriptions found'**
+  String get noProxySubscriptions;
+
+  /// No description provided for @noProxySubscriptionsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'There are no proxy subscriptions matching your filters.'**
+  String get noProxySubscriptionsDescription;
+
+  /// No description provided for @proxySubscriptionDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'Proxy Subscription Details'**
+  String get proxySubscriptionDetails;
+
+  /// No description provided for @adminAccessRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Admin Access Required'**
+  String get adminAccessRequired;
+
+  /// No description provided for @adminAccessDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'This page is only accessible to administrators.'**
+  String get adminAccessDescription;
+
+  /// No description provided for @useBiometricToLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Login with Biometric'**
+  String get useBiometricToLogin;
+
+  /// No description provided for @biometricPromptTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Biometric Login'**
+  String get biometricPromptTitle;
+
+  /// No description provided for @biometricPromptMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Would you like to enable biometric login for faster access?'**
+  String get biometricPromptMessage;
+
+  /// No description provided for @biometricPromptEnable.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable'**
+  String get biometricPromptEnable;
+
+  /// No description provided for @biometricPromptCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get biometricPromptCancel;
+
+  /// No description provided for @enableBiometricLogin.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Biometric Login'**
+  String get enableBiometricLogin;
+
+  /// No description provided for @biometricLoginDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Use fingerprint or face recognition to sign in quickly'**
+  String get biometricLoginDescription;
+
+  /// No description provided for @biometricNotAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Biometric authentication is not available on this device'**
+  String get biometricNotAvailable;
+
+  /// No description provided for @biometricEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Biometric login enabled'**
+  String get biometricEnabled;
+
+  /// No description provided for @biometricDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Biometric login disabled'**
+  String get biometricDisabled;
+
+  /// No description provided for @biometricError.
+  ///
+  /// In en, this message translates to:
+  /// **'Biometric authentication failed. Please try again.'**
+  String get biometricError;
+
+  /// No description provided for @biometricAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Biometric available'**
+  String get biometricAvailable;
+
+  /// No description provided for @biometricTypes.
+  ///
+  /// In en, this message translates to:
+  /// **'Available: '**
+  String get biometricTypes;
+
+  /// No description provided for @deleteBoq.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete BOQ'**
+  String get deleteBoq;
+
+  /// No description provided for @deleteSelected.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Selected'**
+  String get deleteSelected;
+
+  /// No description provided for @selectBoqs.
+  ///
+  /// In en, this message translates to:
+  /// **'Select BOQs'**
+  String get selectBoqs;
+
+  /// No description provided for @selectedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'selected'**
+  String get selectedCount;
+
+  /// No description provided for @locationHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Location History'**
+  String get locationHistory;
+
+  /// No description provided for @recentLocations.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent Locations'**
+  String get recentLocations;
 }
 
 class _AppLocalizationsDelegate

@@ -10,6 +10,9 @@ int _asInt(dynamic value) =>
 double _asDouble(dynamic value) =>
     value is num ? value.toDouble() : double.tryParse('$value') ?? 0.0;
 
+double? _asDoubleOrNull(dynamic value) =>
+    value == null ? null : _asDouble(value);
+
 class ApiClient {
   ApiClient({http.Client? httpClient, FlutterSecureStorage? storage})
     : _httpClient = httpClient ?? http.Client(),
@@ -45,6 +48,57 @@ class ApiClient {
       throw const ApiException('The server did not return an access token.');
     }
     await _storage.write(key: _tokenKey, value: token);
+  }
+
+  Future<void> register({
+    required String name,
+    required String email,
+    required String password,
+    required String passwordConfirmation,
+    String? organisationName,
+  }) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/auth/register'),
+      headers: const {'Accept': 'application/json'},
+      body: {
+        'name': name.trim(),
+        'email': email.trim(),
+        'password': password,
+        'password_confirmation': passwordConfirmation,
+        if (organisationName != null && organisationName.trim().isNotEmpty)
+          'organisation_name': organisationName.trim(),
+      },
+    );
+
+    final body = _decode(response);
+
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw ApiException(_message(body));
+    }
+
+    final token = body['data']?['token'] as String?;
+
+    if (token == null || token.isEmpty) {
+      throw const ApiException(
+        'Your account was created, but the server did not return an access token.',
+      );
+    }
+
+    await _storage.write(key: _tokenKey, value: token);
+  }
+
+  Future<void> forgotPassword({required String email}) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/auth/forgot-password'),
+      headers: const {'Accept': 'application/json'},
+      body: {'email': email.trim()},
+    );
+
+    final body = _decode(response);
+
+    if (response.statusCode != 200 && response.statusCode != 202) {
+      throw ApiException(_message(body));
+    }
   }
 
   Future<DashboardSummary> dashboard() async {
@@ -93,11 +147,127 @@ class ApiClient {
         .toList();
   }
 
+  Future<Map<String, dynamic>> createSubscription(int planId) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/subscriptions'),
+      headers: await _headers(),
+      body: {'plan_id': '$planId'},
+    );
+    final body = _decode(response);
+    if (response.statusCode != 201) {
+      throw ApiException(_message(body));
+    }
+    return body['data'] as Map<String, dynamic>;
+  }
+
+  Future<List<Map<String, dynamic>>> paymentGateways() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/payment-gateways'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_message(body));
+    }
+    return (body['data'] as List<dynamic>? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> initiatePayment({
+    required int subscriptionId,
+    required String gatewayCode,
+    required String idempotencyKey,
+    String? paymentMethod,
+    String? phoneNumber,
+    String? network,
+  }) async {
+    final headers = await _headers();
+    headers['Idempotency-Key'] = idempotencyKey;
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/subscriptions/$subscriptionId/payments'),
+      headers: headers,
+      body: {
+        'gateway_code': gatewayCode,
+        if (paymentMethod != null && paymentMethod.isNotEmpty)
+          'payment_method': paymentMethod,
+        if (phoneNumber != null && phoneNumber.trim().isNotEmpty)
+          'phone_number': phoneNumber.trim(),
+        if (network != null && network.trim().isNotEmpty)
+          'network': network.trim(),
+      },
+    );
+    final body = _decode(response);
+    if (response.statusCode != 201) {
+      throw ApiException(_message(body));
+    }
+    return body['data'] as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> transaction(int transactionId) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/transactions/$transactionId'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_message(body));
+    }
+    return body['data'] as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> paymentReceipt(int transactionId) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/transactions/$transactionId/receipt'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_message(body));
+    }
+    return body['data'] as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> verifyPayment(
+    int transactionId, {
+    String? gatewayTransactionId,
+  }) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/transactions/$transactionId/verify'),
+      headers: await _headers(),
+      body: {
+        if (gatewayTransactionId != null && gatewayTransactionId.isNotEmpty)
+          'gateway_transaction_id': gatewayTransactionId,
+      },
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_message(body));
+    }
+    return body['data'] as Map<String, dynamic>;
+  }
+
+  Future<List<Map<String, dynamic>>> subscriptions() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/subscriptions'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_message(body));
+    }
+    return (body['data'] as List<dynamic>? ?? [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+  }
+
   Future<UserProfile> updateProfile({
     required String name,
     required String email,
     required String locale,
     String? password,
+    String? phone,
+    String? location,
   }) async {
     final response = await _httpClient.put(
       Uri.parse('$baseUrl/auth/profile'),
@@ -106,6 +276,8 @@ class ApiClient {
         'name': name,
         'email': email,
         'locale': locale,
+        if (phone != null && phone.isNotEmpty) 'phone': phone,
+        if (location != null && location.isNotEmpty) 'location': location,
         if (password != null && password.isNotEmpty) ...{
           'password': password,
           'password_confirmation': password,
@@ -119,17 +291,25 @@ class ApiClient {
     return UserProfile.fromJson(body['data']['user'] as Map<String, dynamic>);
   }
 
-  Future<List<ProjectSummary>> projects() async {
+  Future<List<ProjectSummary>> projects({
+    int page = 1,
+    int perPage = 20,
+  }) async {
     final response = await _httpClient.get(
-      Uri.parse('$baseUrl/projects'),
+      Uri.parse('$baseUrl/projects').replace(
+        queryParameters: {
+          'page': page.toString(),
+          'per_page': perPage.toString(),
+        },
+      ),
       headers: await _headers(),
     );
     final body = _decode(response);
     if (response.statusCode != 200) {
       throw ApiException(_message(body));
     }
-    final page = body['data'] as Map<String, dynamic>;
-    return (page['data'] as List<dynamic>)
+    final pageData = body['data'] as Map<String, dynamic>;
+    return (pageData['data'] as List<dynamic>)
         .cast<Map<String, dynamic>>()
         .map(ProjectSummary.fromJson)
         .toList();
@@ -149,6 +329,24 @@ class ApiClient {
     required String name,
     String? code,
     required String currency,
+    String? client,
+    String? contractor,
+    String? consultant,
+    String? quantitySurveyor,
+    String? projectManager,
+    String? siteEngineer,
+    String? fundingOrganisation,
+    String? country,
+    String? district,
+    String? location,
+    String? projectType,
+    String? startDate,
+    String? expectedCompletionDate,
+    double? contractValue,
+    String? description,
+    String? status,
+    String? originalLanguage,
+    String? reportLanguage,
   }) async {
     final response = await _httpClient.post(
       Uri.parse('$baseUrl/projects'),
@@ -157,6 +355,26 @@ class ApiClient {
         'name': name,
         if (code != null && code.isNotEmpty) 'code': code,
         'currency': currency,
+        if (client != null) 'client': client,
+        if (contractor != null) 'contractor': contractor,
+        if (consultant != null) 'consultant': consultant,
+        if (quantitySurveyor != null) 'quantity_surveyor': quantitySurveyor,
+        if (projectManager != null) 'project_manager': projectManager,
+        if (siteEngineer != null) 'site_engineer': siteEngineer,
+        if (fundingOrganisation != null)
+          'funding_organisation': fundingOrganisation,
+        if (country != null) 'country': country,
+        if (district != null) 'district': district,
+        if (location != null) 'location': location,
+        if (projectType != null) 'project_type': projectType,
+        if (startDate != null) 'start_date': startDate,
+        if (expectedCompletionDate != null)
+          'expected_completion_date': expectedCompletionDate,
+        if (contractValue != null) 'contract_value': contractValue.toString(),
+        if (description != null) 'description': description,
+        if (status != null) 'status': status,
+        if (originalLanguage != null) 'original_language': originalLanguage,
+        if (reportLanguage != null) 'report_language': reportLanguage,
       },
     );
     final body = _decode(response);
@@ -187,6 +405,8 @@ class ApiClient {
     String? currency,
     String? description,
     String? status,
+    String? originalLanguage,
+    String? reportLanguage,
   }) async {
     final response = await _httpClient.put(
       Uri.parse('$baseUrl/projects/$id'),
@@ -213,6 +433,8 @@ class ApiClient {
         if (currency != null) 'currency': currency,
         if (description != null) 'description': description,
         if (status != null) 'status': status,
+        if (originalLanguage != null) 'original_language': originalLanguage,
+        if (reportLanguage != null) 'report_language': reportLanguage,
       },
     );
     final body = _decode(response);
@@ -400,21 +622,28 @@ class ApiClient {
     return BoqItemDetail.fromJson(body['data'] as Map<String, dynamic>);
   }
 
-  Future<void> uploadBoq({
+  Future<BoqSummary> uploadBoq({
     required int projectId,
     required String filePath,
+    String? name,
   }) async {
     final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/boqs'));
     request.headers.addAll(await _headers());
     request.fields['project_id'] = '$projectId';
+    if (name != null && name.isNotEmpty) request.fields['name'] = name;
     request.files.add(await http.MultipartFile.fromPath('file', filePath));
     final streamed = await request.send().timeout(const Duration(seconds: 120));
     final response = await http.Response.fromStream(streamed);
-    if (response.statusCode != 201)
-      throw ApiException('Upload failed: ${response.statusCode}');
+    final body = _decode(response);
+    if (response.statusCode != 201) throw ApiException(_message(body));
+    final data = body['data'];
+    if (data is! Map<String, dynamic>) {
+      throw const ApiException('The server did not return the created BOQ.');
+    }
+    return BoqSummary.fromJson(data);
   }
 
-  Future<void> uploadBoqFromBytes({
+  Future<BoqSummary> uploadBoqFromBytes({
     required int projectId,
     required String fileName,
     required Uint8List bytes,
@@ -428,8 +657,13 @@ class ApiClient {
     );
     final streamed = await request.send().timeout(const Duration(seconds: 120));
     final response = await http.Response.fromStream(streamed);
-    if (response.statusCode != 201)
-      throw ApiException('Upload failed: ${response.statusCode}');
+    final body = _decode(response);
+    if (response.statusCode != 201) throw ApiException(_message(body));
+    final data = body['data'];
+    if (data is! Map<String, dynamic>) {
+      throw const ApiException('The server did not return the created BOQ.');
+    }
+    return BoqSummary.fromJson(data);
   }
 
   Future<int> processBoq(int id) async {
@@ -438,34 +672,84 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
-    return body['data']['items_created'] as int? ?? 0;
+    if (response.statusCode != 200) {
+      throw ApiException(_message(body));
+    }
+    final meta = body['meta'];
+    if (meta is Map && meta['items_imported'] is int) {
+      return meta['items_imported'] as int;
+    }
+    final data = body['data'];
+    if (data is Map && data['items_created'] is int) {
+      return data['items_created'] as int;
+    }
+    return 0;
   }
 
-  Future<List<BoqItemSummary>> boqItems(int id) async {
+  Future<List<BoqItemSummary>> boqItems(
+    int id, {
+    String? search,
+    String? status,
+    String? pricingStatus,
+    String? facility,
+    int page = 1,
+    int perPage = 50,
+  }) async {
+    final queryParams = <String, String>{
+      'page': page.toString(),
+      'per_page': perPage.toString(),
+    };
+    if (search != null && search.isNotEmpty) queryParams['search'] = search;
+    if (status != null && status.isNotEmpty) queryParams['status'] = status;
+    if (pricingStatus != null && pricingStatus.isNotEmpty) {
+      queryParams['pricing_status'] = pricingStatus;
+    }
+    if (facility != null && facility.isNotEmpty) {
+      queryParams['facility'] = facility;
+    }
+
     final response = await _httpClient.get(
-      Uri.parse('$baseUrl/boqs/$id'),
+      Uri.parse(
+        '$baseUrl/boqs/$id/items',
+      ).replace(queryParameters: queryParams),
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
-    final boq = BoqDetail.fromJson(body['data'] as Map<String, dynamic>);
-    return _flattenBoqItems(boq);
+    if (response.statusCode != 200) {
+      throw ApiException(_message(body));
+    }
+    final pageData = body['data'] as Map<String, dynamic>;
+    return (pageData['data'] as List<dynamic>)
+        .cast<Map<String, dynamic>>()
+        .map(BoqItemSummary.fromJson)
+        .toList();
   }
 
-  List<BoqItemSummary> _flattenBoqItems(BoqDetail boq) {
-    final items = <BoqItemSummary>[];
-    for (final facility in boq.facilities) {
-      for (final bill in facility.bills) {
-        for (final element in bill.elements) {
-          items.addAll(element.items);
-          for (final subElement in element.subElements) {
-            items.addAll(subElement.items);
-          }
-        }
-      }
-    }
-    return items;
+  /// Fetches every BOQ item across all pages of the paginated items endpoint.
+  Future<List<BoqItemSummary>> allBoqItems(int id) async {
+    final all = <BoqItemSummary>[];
+    var page = 1;
+    var lastPage = 1;
+    do {
+      final response = await _httpClient.get(
+        Uri.parse(
+          '$baseUrl/boqs/$id/items',
+        ).replace(queryParameters: {'page': '$page', 'per_page': '100'}),
+        headers: await _headers(),
+      );
+      final body = _decode(response);
+      if (response.statusCode != 200) throw ApiException(_message(body));
+      final pageData = body['data'];
+      if (pageData is! Map<String, dynamic>) break;
+      final rows = pageData['data'];
+      if (rows is! List) break;
+      all.addAll(
+        rows.cast<Map<String, dynamic>>().map(BoqItemSummary.fromJson),
+      );
+      lastPage = pageData['last_page'] as int? ?? page;
+      page++;
+    } while (page <= lastPage);
+    return all;
   }
 
   Future<Map<String, dynamic>> priceItem(int id, String location) async {
@@ -534,7 +818,9 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) {
+      throw ApiException(_message(body));
+    }
     return PricingBatch.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -543,8 +829,9 @@ class ApiClient {
       Uri.parse('$baseUrl/boqs/$boqId/pdf'),
       headers: await _headers(),
     );
-    if (response.statusCode != 200)
+    if (response.statusCode != 200) {
       throw const ApiException('Unable to generate the BOQ PDF.');
+    }
     return response.bodyBytes;
   }
 
@@ -559,6 +846,46 @@ class ApiClient {
     await _storage.delete(key: _tokenKey);
   }
 
+  Future<List<NotificationItem>> getNotifications({
+    int page = 1,
+    int perPage = 20,
+  }) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/notifications').replace(
+        queryParameters: {
+          'page': page.toString(),
+          'per_page': perPage.toString(),
+        },
+      ),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    final pageData = body['data'] as Map<String, dynamic>;
+    return (pageData['data'] as List<dynamic>)
+        .cast<Map<String, dynamic>>()
+        .map(NotificationItem.fromJson)
+        .toList();
+  }
+
+  Future<void> markNotificationAsRead(int id) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/notifications/$id/read'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+  }
+
+  Future<void> deleteBoq(int id) async {
+    final response = await _httpClient.delete(
+      Uri.parse('$baseUrl/boqs/$id'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+  }
+
   Future<Map<String, dynamic>> fetchDailyPrices() async {
     final response = await _httpClient.post(
       Uri.parse('$baseUrl/hardware-prices/fetch'),
@@ -567,6 +894,391 @@ class ApiClient {
     final body = _decode(response);
     if (response.statusCode != 200) throw ApiException(_message(body));
     return body['data'] as Map<String, dynamic>;
+  }
+
+  // Proxy subscription API methods.
+
+  Future<List<BeneficiaryUser>> searchBeneficiaries(String query) async {
+    final response = await _httpClient.get(
+      Uri.parse(
+        '$baseUrl/proxy-subscriptions/beneficiaries/search',
+      ).replace(queryParameters: {'q': query}),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return (body['data'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>()
+        .map(BeneficiaryUser.fromJson)
+        .toList();
+  }
+
+  Future<ProxySubscription> createProxySubscription({
+    required int planId,
+    required int beneficiaryId,
+  }) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/proxy-subscriptions'),
+      headers: await _headers(),
+      body: {
+        'plan_id': planId.toString(),
+        'beneficiary_id': beneficiaryId.toString(),
+      },
+    );
+    final body = _decode(response);
+    if (response.statusCode != 201) throw ApiException(_message(body));
+    return ProxySubscription.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<Map<String, dynamic>> initiateProxyPayment({
+    required int proxySubscriptionId,
+    required String gatewayCode,
+    String? paymentMethod,
+    String? phoneNumber,
+    String? network,
+  }) async {
+    final response = await _httpClient.post(
+      Uri.parse(
+        '$baseUrl/proxy-subscriptions/$proxySubscriptionId/initiate-payment',
+      ),
+      headers: await _headers(),
+      body: {
+        'gateway_code': gatewayCode,
+        if (paymentMethod != null && paymentMethod.isNotEmpty)
+          'payment_method': paymentMethod,
+        if (phoneNumber != null && phoneNumber.trim().isNotEmpty)
+          'phone_number': phoneNumber.trim(),
+        if (network != null && network.trim().isNotEmpty)
+          'network': network.trim(),
+      },
+    );
+    final body = _decode(response);
+    if (response.statusCode != 201) throw ApiException(_message(body));
+    return body['data'] as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> verifyProxyPayment(
+    int proxySubscriptionId, {
+    String? gatewayTransactionId,
+  }) async {
+    final response = await _httpClient.post(
+      Uri.parse(
+        '$baseUrl/proxy-subscriptions/$proxySubscriptionId/verify-payment',
+      ),
+      headers: await _headers(),
+      body: {
+        if (gatewayTransactionId != null && gatewayTransactionId.isNotEmpty)
+          'gateway_transaction_id': gatewayTransactionId,
+      },
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return body['data'] as Map<String, dynamic>;
+  }
+
+  Future<List<ProxySubscription>> listProxySubscriptions() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/proxy-subscriptions'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return (body['data'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>()
+        .map(ProxySubscription.fromJson)
+        .toList();
+  }
+
+  Future<ProxySubscription> getProxySubscription(int id) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/proxy-subscriptions/$id'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return ProxySubscription.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<void> cancelProxySubscription(int id) async {
+    final response = await _httpClient.delete(
+      Uri.parse('$baseUrl/proxy-subscriptions/$id'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+  }
+
+  // BOQ pricing job API methods.
+
+  Future<BoqPricingJob> startPricingJob(int boqId, {int batchSize = 25}) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/boqs/$boqId/pricing-jobs'),
+      headers: await _headers(),
+      body: {'batch_size': batchSize.toString()},
+    );
+    final body = _decode(response);
+    if (response.statusCode != 201) throw ApiException(_message(body));
+    return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<BoqPricingJob> getPricingJob(int boqId, int jobId) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/boqs/$boqId/pricing-jobs/$jobId'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<BoqPricingJob> startPricingJobProcessing(int boqId, int jobId) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/boqs/$boqId/pricing-jobs/$jobId/start'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<BoqPricingJobProgress> processNextBatch(int boqId, int jobId) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/boqs/$boqId/pricing-jobs/$jobId/next-batch'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return BoqPricingJobProgress.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<BoqPricingJob> pausePricingJob(int boqId, int jobId) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/boqs/$boqId/pricing-jobs/$jobId/pause'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<BoqPricingJob> resumePricingJob(int boqId, int jobId) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/boqs/$boqId/pricing-jobs/$jobId/resume'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<BoqPricingJob> cancelPricingJob(int boqId, int jobId) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/boqs/$boqId/pricing-jobs/$jobId/cancel'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<BoqPricingJob> retryFailedItems(int boqId, int jobId) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/boqs/$boqId/pricing-jobs/$jobId/retry-failed'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<BoqPricingJobProgress> getPricingJobProgress(
+    int boqId,
+    int jobId,
+  ) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/boqs/$boqId/pricing-jobs/$jobId/progress'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return BoqPricingJobProgress.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  // AI provider admin API methods.
+
+  Future<List<AiProvider>> aiProviders() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/admin/ai-providers'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return (body['data'] as List<dynamic>? ?? [])
+        .cast<Map<String, dynamic>>()
+        .map(AiProvider.fromJson)
+        .toList();
+  }
+
+  Future<AiProvider> createAiProvider({
+    required String name,
+    required String code,
+    required String apiKey,
+    Map<String, dynamic>? config,
+    bool isDefault = false,
+    bool isEnabled = true,
+  }) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/admin/ai-providers'),
+      headers: await _headers(),
+      body: {
+        'name': name,
+        'code': code,
+        'api_key': apiKey,
+        if (config != null) 'config': jsonEncode(config),
+        'is_default': isDefault.toString(),
+        'is_enabled': isEnabled.toString(),
+      },
+    );
+    final body = _decode(response);
+    if (response.statusCode != 201) throw ApiException(_message(body));
+    return AiProvider.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<AiProvider> updateAiProvider(
+    int id, {
+    String? name,
+    String? apiKey,
+    Map<String, dynamic>? config,
+    bool? isDefault,
+    bool? isEnabled,
+  }) async {
+    final body = <String, String>{};
+    if (name != null) body['name'] = name;
+    if (apiKey != null) body['api_key'] = apiKey;
+    if (config != null) body['config'] = jsonEncode(config);
+    if (isDefault != null) body['is_default'] = isDefault.toString();
+    if (isEnabled != null) body['is_enabled'] = isEnabled.toString();
+
+    final response = await _httpClient.put(
+      Uri.parse('$baseUrl/admin/ai-providers/$id'),
+      headers: await _headers(),
+      body: body,
+    );
+    final responseBody = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(responseBody));
+    return AiProvider.fromJson(responseBody['data'] as Map<String, dynamic>);
+  }
+
+  Future<void> deleteAiProvider(int id) async {
+    final response = await _httpClient.delete(
+      Uri.parse('$baseUrl/admin/ai-providers/$id'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+  }
+
+  Future<Map<String, dynamic>> testAiProvider(int id) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/admin/ai-providers/$id/test'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return body['data'] as Map<String, dynamic>;
+  }
+
+  Future<AiProvider> setDefaultAiProvider(int id) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/admin/ai-providers/$id/set-default'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return AiProvider.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  // Hardware category admin API methods.
+
+  Future<List<HardwareCategory>> hardwareCategoriesAdmin() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/hardware-categories'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    final raw = body['data'];
+    final list = raw is List
+        ? raw
+        : raw is Map && raw['data'] is List
+        ? raw['data'] as List
+        : <dynamic>[];
+    return list
+        .cast<Map<String, dynamic>>()
+        .map(HardwareCategory.fromJson)
+        .toList();
+  }
+
+  Future<HardwareCategory> createHardwareCategory({
+    required String name,
+    String? description,
+    bool isActive = true,
+  }) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/hardware-categories'),
+      headers: await _headers(),
+      body: {
+        'name': name,
+        if (description != null && description.isNotEmpty)
+          'description': description,
+        'is_active': isActive.toString(),
+      },
+    );
+    final body = _decode(response);
+    if (response.statusCode != 201) throw ApiException(_message(body));
+    return HardwareCategory.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  Future<HardwareCategory> updateHardwareCategory(
+    int id, {
+    String? name,
+    String? description,
+    bool? isActive,
+  }) async {
+    final body = <String, String>{};
+    if (name != null) body['name'] = name;
+    if (description != null) body['description'] = description;
+    if (isActive != null) body['is_active'] = isActive.toString();
+
+    final response = await _httpClient.put(
+      Uri.parse('$baseUrl/hardware-categories/$id'),
+      headers: await _headers(),
+      body: body,
+    );
+    final responseBody = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(responseBody));
+    return HardwareCategory.fromJson(
+      responseBody['data'] as Map<String, dynamic>,
+    );
+  }
+
+  Future<void> deleteHardwareCategory(int id) async {
+    final response = await _httpClient.delete(
+      Uri.parse('$baseUrl/hardware-categories/$id'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+  }
+
+  Future<HardwareCategory> toggleHardwareCategory(int id) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/hardware-categories/$id/toggle-active'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return HardwareCategory.fromJson(body['data'] as Map<String, dynamic>);
   }
 
   Future<Map<String, String>> _headers() async {
@@ -622,17 +1334,56 @@ class UserProfile {
     required this.name,
     required this.email,
     required this.locale,
+    this.phone,
+    this.location,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
     name: json['name'] as String? ?? '',
     email: json['email'] as String? ?? '',
     locale: json['locale'] as String? ?? 'en',
+    phone: json['phone'] as String?,
+    location: json['location'] as String?,
   );
 
   final String name;
   final String email;
   final String locale;
+  final String? phone;
+  final String? location;
+}
+
+class NotificationItem {
+  const NotificationItem({
+    required this.id,
+    required this.title,
+    required this.message,
+    required this.type,
+    required this.readAt,
+    required this.createdAt,
+    this.data,
+  });
+
+  factory NotificationItem.fromJson(Map<String, dynamic> json) =>
+      NotificationItem(
+        id: _asInt(json['id']),
+        title: json['title'] as String? ?? '',
+        message: json['message'] as String? ?? '',
+        type: json['type'] as String? ?? 'info',
+        readAt: json['read_at'] as String?,
+        createdAt: json['created_at'] as String? ?? '',
+        data: json['data'] as Map<String, dynamic>?,
+      );
+
+  final int id;
+  final String title;
+  final String message;
+  final String type;
+  final String? readAt;
+  final String createdAt;
+  final Map<String, dynamic>? data;
+
+  bool get isRead => readAt != null;
 }
 
 class ProjectSummary {
@@ -682,6 +1433,8 @@ class ProjectDetail {
     required this.description,
     required this.status,
     required this.ownerName,
+    required this.originalLanguage,
+    required this.reportLanguage,
     required this.boqs,
   });
   factory ProjectDetail.fromJson(Map<String, dynamic> json) => ProjectDetail(
@@ -706,6 +1459,8 @@ class ProjectDetail {
     description: json['description'] as String? ?? '',
     status: json['status'] as String? ?? 'draft',
     ownerName: json['user']?['name'] as String? ?? '',
+    originalLanguage: json['original_language'] as String? ?? '',
+    reportLanguage: json['report_language'] as String? ?? '',
     boqs: (json['boqs'] as List<dynamic>? ?? [])
         .cast<Map<String, dynamic>>()
         .map(BoqSummary.fromJson)
@@ -732,6 +1487,8 @@ class ProjectDetail {
   final String description;
   final String status;
   final String ownerName;
+  final String originalLanguage;
+  final String reportLanguage;
   final List<BoqSummary> boqs;
 }
 
@@ -786,6 +1543,9 @@ class BoqItemSummary {
 class ApiException implements Exception {
   const ApiException(this.message);
   final String message;
+
+  @override
+  String toString() => message;
 }
 
 class PricingBatch {
@@ -1216,7 +1976,8 @@ class Facility {
     name: json['name'] as String? ?? '',
     nameTranslations: json['name_translations'] != null
         ? (json['name_translations'] as Map<String, dynamic>).map(
-            (k, v) => MapEntry(k, v as String))
+            (k, v) => MapEntry(k, v as String),
+          )
         : null,
     description: json['description'] as String?,
     displayOrder: _asInt(json['display_order']),
@@ -1253,7 +2014,8 @@ class Bill {
     name: json['name'] as String? ?? '',
     nameTranslations: json['name_translations'] != null
         ? (json['name_translations'] as Map<String, dynamic>).map(
-            (k, v) => MapEntry(k, v as String))
+            (k, v) => MapEntry(k, v as String),
+          )
         : null,
     description: json['description'] as String?,
     displayOrder: _asInt(json['display_order']),
@@ -1290,7 +2052,8 @@ class Element {
     name: json['name'] as String? ?? '',
     nameTranslations: json['name_translations'] != null
         ? (json['name_translations'] as Map<String, dynamic>).map(
-            (k, v) => MapEntry(k, v as String))
+            (k, v) => MapEntry(k, v as String),
+          )
         : null,
     description: json['description'] as String?,
     displayOrder: _asInt(json['display_order']),
@@ -1326,7 +2089,8 @@ class SubElement {
     name: json['name'] as String? ?? '',
     nameTranslations: json['name_translations'] != null
         ? (json['name_translations'] as Map<String, dynamic>).map(
-            (k, v) => MapEntry(k, v as String))
+            (k, v) => MapEntry(k, v as String),
+          )
         : null,
     description: json['description'] as String?,
     displayOrder: _asInt(json['display_order']),
@@ -1417,17 +2181,17 @@ class BoqItemDetail extends BoqItemSummary {
     billId: json['bill_id'] as int?,
     elementId: json['element_id'] as int?,
     subElementId: json['sub_element_id'] as int?,
-    originalRate: (json['original_rate'] as num?)?.toDouble(),
-    approvedRate: (json['approved_rate'] as num?)?.toDouble(),
-    aiSuggestedRate: (json['ai_suggested_rate'] as num?)?.toDouble(),
+    originalRate: _asDoubleOrNull(json['original_rate']),
+    approvedRate: _asDoubleOrNull(json['approved_rate']),
+    aiSuggestedRate: _asDoubleOrNull(json['ai_suggested_rate']),
     currency: json['currency'] as String? ?? 'UGX',
     workCategory: json['work_category'] as String?,
     materialCategory: json['material_category'] as String?,
     location: json['location'] as String?,
     pricingSource: json['pricing_source'] as String?,
     pricingDate: json['pricing_date'] as String?,
-    aiConfidence: (json['ai_confidence'] as num?)?.toDouble(),
-    translationConfidence: (json['translation_confidence'] as num?)?.toDouble(),
+    aiConfidence: _asDoubleOrNull(json['ai_confidence']),
+    translationConfidence: _asDoubleOrNull(json['translation_confidence']),
     notes: json['notes'] as String?,
     status: json['status'] as String? ?? 'pending',
     translations: (json['translations'] as List<dynamic>? ?? [])
@@ -1465,15 +2229,16 @@ class BoqItemTranslation {
     this.status,
     this.reviewedAt,
   });
-  factory BoqItemTranslation.fromJson(Map<String, dynamic> json) => BoqItemTranslation(
-    id: _asInt(json['id']),
-    locale: json['locale'] as String? ?? '',
-    translatedDescription: json['translated_description'] as String? ?? '',
-    provider: json['provider'] as String?,
-    confidence: (json['confidence'] as num?)?.toDouble(),
-    status: json['status'] as String? ?? 'pending_review',
-    reviewedAt: json['reviewed_at'] as String?,
-  );
+  factory BoqItemTranslation.fromJson(Map<String, dynamic> json) =>
+      BoqItemTranslation(
+        id: _asInt(json['id']),
+        locale: json['locale'] as String? ?? '',
+        translatedDescription: json['translated_description'] as String? ?? '',
+        provider: json['provider'] as String?,
+        confidence: (json['confidence'] as num?)?.toDouble(),
+        status: json['status'] as String? ?? 'pending_review',
+        reviewedAt: json['reviewed_at'] as String?,
+      );
   final int id;
   final String locale;
   final String translatedDescription;
@@ -1481,4 +2246,236 @@ class BoqItemTranslation {
   final double? confidence;
   final String? status;
   final String? reviewedAt;
+}
+
+// Proxy subscription models.
+
+class ProxySubscription {
+  const ProxySubscription({
+    required this.id,
+    required this.beneficiaryId,
+    required this.beneficiaryName,
+    required this.beneficiaryEmail,
+    required this.payerId,
+    required this.payerName,
+    required this.planId,
+    required this.planName,
+    required this.status,
+    required this.startDate,
+    required this.endDate,
+    required this.paymentStatus,
+    required this.transactionId,
+    required this.createdAt,
+  });
+
+  factory ProxySubscription.fromJson(Map<String, dynamic> json) =>
+      ProxySubscription(
+        id: _asInt(json['id']),
+        beneficiaryId: _asInt(json['beneficiary_id']),
+        beneficiaryName: json['beneficiary_name'] as String? ?? '',
+        beneficiaryEmail: json['beneficiary_email'] as String? ?? '',
+        payerId: _asInt(json['payer_id']),
+        payerName: json['payer_name'] as String? ?? '',
+        planId: _asInt(json['plan_id']),
+        planName: json['plan_name'] as String? ?? '',
+        status: json['status'] as String? ?? 'pending',
+        startDate: json['start_date'] as String? ?? '',
+        endDate: json['end_date'] as String? ?? '',
+        paymentStatus: json['payment_status'] as String? ?? 'pending',
+        transactionId: json['transaction_id'] as String? ?? '',
+        createdAt: json['created_at'] as String? ?? '',
+      );
+
+  final int id;
+  final int beneficiaryId;
+  final String beneficiaryName;
+  final String beneficiaryEmail;
+  final int payerId;
+  final String payerName;
+  final int planId;
+  final String planName;
+  final String status;
+  final String startDate;
+  final String endDate;
+  final String paymentStatus;
+  final String transactionId;
+  final String createdAt;
+}
+
+class BeneficiaryUser {
+  const BeneficiaryUser({
+    required this.id,
+    required this.name,
+    required this.email,
+  });
+
+  factory BeneficiaryUser.fromJson(Map<String, dynamic> json) =>
+      BeneficiaryUser(
+        id: _asInt(json['id']),
+        name: json['name'] as String? ?? '',
+        email: json['email'] as String? ?? '',
+      );
+
+  final int id;
+  final String name;
+  final String email;
+}
+
+// BOQ pricing job models.
+
+class BoqPricingJob {
+  const BoqPricingJob({
+    required this.id,
+    required this.boqId,
+    required this.status,
+    required this.currentBatch,
+    required this.totalBatches,
+    required this.batchSize,
+    required this.totalItems,
+    required this.processedItems,
+    required this.failedItems,
+    this.lockedAt,
+    this.lockedBy,
+    this.startedAt,
+    this.completedAt,
+    required this.createdAt,
+  });
+
+  factory BoqPricingJob.fromJson(Map<String, dynamic> json) => BoqPricingJob(
+    id: _asInt(json['id']),
+    boqId: _asInt(json['boq_id']),
+    status: json['status'] as String? ?? 'pending',
+    currentBatch: _asInt(json['current_batch']),
+    totalBatches: _asInt(json['total_batches']),
+    batchSize: _asInt(json['batch_size']),
+    totalItems: _asInt(json['total_items']),
+    processedItems: _asInt(json['processed_items']),
+    failedItems: _asInt(json['failed_items']),
+    lockedAt: json['locked_at'] as String?,
+    lockedBy: json['locked_by'] as int?,
+    startedAt: json['started_at'] as String?,
+    completedAt: json['completed_at'] as String?,
+    createdAt: json['created_at'] as String? ?? '',
+  );
+
+  final int id;
+  final int boqId;
+  final String status;
+  final int currentBatch;
+  final int totalBatches;
+  final int batchSize;
+  final int totalItems;
+  final int processedItems;
+  final int failedItems;
+  final String? lockedAt;
+  final int? lockedBy;
+  final String? startedAt;
+  final String? completedAt;
+  final String createdAt;
+}
+
+class BoqPricingJobProgress {
+  const BoqPricingJobProgress({
+    required this.jobId,
+    required this.percentage,
+    required this.currentBatch,
+    required this.totalBatches,
+    required this.itemsPricedThisBatch,
+    required this.totalPriced,
+    required this.remaining,
+    required this.failedItems,
+    required this.status,
+  });
+
+  factory BoqPricingJobProgress.fromJson(Map<String, dynamic> json) =>
+      BoqPricingJobProgress(
+        jobId: _asInt(json['job_id']),
+        percentage: (json['percentage'] as num?)?.toDouble() ?? 0.0,
+        currentBatch: _asInt(json['current_batch']),
+        totalBatches: _asInt(json['total_batches']),
+        itemsPricedThisBatch: _asInt(json['items_priced_this_batch']),
+        totalPriced: _asInt(json['total_priced']),
+        remaining: _asInt(json['remaining']),
+        failedItems: _asInt(json['failed_items']),
+        status: json['status'] as String? ?? 'unknown',
+      );
+
+  final int jobId;
+  final double percentage;
+  final int currentBatch;
+  final int totalBatches;
+  final int itemsPricedThisBatch;
+  final int totalPriced;
+  final int remaining;
+  final int failedItems;
+  final String status;
+}
+
+// AI provider and hardware category models.
+
+class AiProvider {
+  const AiProvider({
+    required this.id,
+    required this.name,
+    required this.code,
+    required this.apiKeyEncrypted,
+    required this.isDefault,
+    required this.isEnabled,
+    required this.config,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  factory AiProvider.fromJson(Map<String, dynamic> json) => AiProvider(
+    id: _asInt(json['id']),
+    name: json['name'] as String? ?? '',
+    code: json['code'] as String? ?? '',
+    apiKeyEncrypted: json['api_key_encrypted'] as String? ?? '',
+    isDefault: json['is_default'] as bool? ?? false,
+    isEnabled: json['is_enabled'] as bool? ?? true,
+    config: json['config'] as Map<String, dynamic>? ?? {},
+    createdAt: json['created_at'] as String? ?? '',
+    updatedAt: json['updated_at'] as String? ?? '',
+  );
+
+  final int id;
+  final String name;
+  final String code;
+  final String apiKeyEncrypted;
+  final bool isDefault;
+  final bool isEnabled;
+  final Map<String, dynamic> config;
+  final String createdAt;
+  final String updatedAt;
+}
+
+class HardwareCategory {
+  const HardwareCategory({
+    required this.id,
+    required this.name,
+    this.code = '',
+    this.description,
+    required this.isActive,
+    this.createdAt = '',
+    this.updatedAt = '',
+  });
+
+  factory HardwareCategory.fromJson(Map<String, dynamic> json) =>
+      HardwareCategory(
+        id: _asInt(json['id']),
+        name: json['name'] as String? ?? '',
+        code: json['code'] as String? ?? '',
+        description: json['description'] as String?,
+        isActive: json['is_active'] as bool? ?? true,
+        createdAt: json['created_at'] as String? ?? '',
+        updatedAt: json['updated_at'] as String? ?? '',
+      );
+
+  final int id;
+  final String name;
+  final String code;
+  final String? description;
+  final bool isActive;
+  final String createdAt;
+  final String updatedAt;
 }

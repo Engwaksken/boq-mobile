@@ -4,17 +4,115 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart' hide Element;
 import 'package:flutter/material.dart' hide Element;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:boq_mobile/l10n/app_localizations.dart';
 
 import 'api_client.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+/// Service for handling biometric authentication operations.
+class BiometricService {
+  final LocalAuthentication _localAuth = LocalAuthentication();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  static const String _biometricEnabledKey = 'biometric_enabled';
+
+  /// Checks if biometric hardware is available on the device.
+  Future<bool> isBiometricAvailable() async {
+    try {
+      return await _localAuth.canCheckBiometrics;
+    } on PlatformException catch (_) {
+      return false;
+    }
+  }
+
+  /// Gets the list of available biometric types on the device.
+  Future<List<BiometricType>> getAvailableBiometrics() async {
+    try {
+      return await _localAuth.getAvailableBiometrics();
+    } on PlatformException catch (_) {
+      return <BiometricType>[];
+    }
+  }
+
+  /// Authenticates the user using biometric authentication.
+  /// Returns true if authentication succeeds, false otherwise.
+  Future<bool> authenticate({required String localizedReason}) async {
+    try {
+      return await _localAuth.authenticate(
+        localizedReason: localizedReason,
+        options: const AuthenticationOptions(
+          biometricOnly: true,
+          stickyAuth: true,
+        ),
+      );
+    } on PlatformException catch (_) {
+      return false;
+    }
+  }
+
+  /// Checks if the user has enabled biometric login.
+  Future<bool> isBiometricEnabled() async {
+    try {
+      final value = await _secureStorage.read(key: _biometricEnabledKey);
+      return value == 'true';
+    } on PlatformException catch (_) {
+      return false;
+    }
+  }
+
+  /// Enables or disables biometric login for the user.
+  Future<void> setBiometricEnabled(bool enabled) async {
+    try {
+      await _secureStorage.write(
+        key: _biometricEnabledKey,
+        value: enabled.toString(),
+      );
+    } on PlatformException catch (_) {
+      // Ignore storage errors
+    }
+  }
+
+  /// Gets a localized name for the given biometric type.
+  String getBiometricTypeName(BiometricType type) {
+    switch (type) {
+      case BiometricType.fingerprint:
+        return 'Fingerprint';
+      case BiometricType.face:
+        return 'Face Recognition';
+      case BiometricType.iris:
+        return 'Iris Scan';
+      case BiometricType.strong:
+        return 'Strong Biometric';
+      case BiometricType.weak:
+        return 'Weak Biometric';
+    }
+  }
+}
 
 void main() {
   runApp(const BoqApp());
+}
+
+Future<T?> _loadOrNull<T>(Future<T> Function() load) async {
+  try {
+    return await load();
+  } on Object catch (error) {
+    if (error is ApiException ||
+        error is http.ClientException ||
+        error is IOException) {
+      return null;
+    }
+    rethrow;
+  }
 }
 
 class BoqApp extends StatefulWidget {
@@ -208,9 +306,20 @@ class _LoginPageState extends State<LoginPage> {
   final _email = TextEditingController();
   final _password = TextEditingController();
 
+  late final BiometricService _biometricService;
+
   bool _loading = false;
   bool _obscurePassword = true;
+  bool _biometricAvailable = false;
+  bool _biometricEnabled = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _biometricService = BiometricService();
+    _checkBiometricStatus();
+  }
 
   @override
   void dispose() {
@@ -219,10 +328,75 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  Future<void> _signIn() async {
-    if (!_formKey.currentState!.validate()) {
+  Future<void> _checkBiometricStatus() async {
+    final available = await _biometricService.isBiometricAvailable();
+    final enabled = await _biometricService.isBiometricEnabled();
+
+    if (!mounted) return;
+
+    setState(() {
+      _biometricAvailable = available;
+      _biometricEnabled = enabled;
+    });
+  }
+
+  Future<void> _authenticateWithBiometric() async {
+    final l10n = AppLocalizations.of(context)!;
+
+    final success = await _biometricService.authenticate(
+      localizedReason: l10n.useBiometricToLogin,
+    );
+
+    if (!mounted) return;
+
+    if (success) {
+      widget.onSignedIn();
       return;
     }
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.biometricError)));
+  }
+
+  Future<void> _promptEnableBiometric() async {
+    final l10n = AppLocalizations.of(context)!;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.biometricPromptTitle),
+        content: Text(l10n.biometricPromptMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(l10n.biometricPromptCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(l10n.biometricPromptEnable),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    await _biometricService.setBiometricEnabled(true);
+
+    if (!mounted) return;
+
+    setState(() => _biometricEnabled = true);
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(l10n.biometricEnabled)));
+  }
+
+  Future<void> _signIn() async {
+    FocusScope.of(context).unfocus();
+
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() {
       _loading = true;
@@ -235,10 +409,13 @@ class _LoginPageState extends State<LoginPage> {
         password: _password.text,
       );
 
-      if (!mounted) {
-        return;
+      if (!mounted) return;
+
+      if (_biometricAvailable && !_biometricEnabled) {
+        await _promptEnableBiometric();
       }
 
+      if (!mounted) return;
       widget.onSignedIn();
     } on ApiException catch (error) {
       if (mounted) {
@@ -246,7 +423,313 @@ class _LoginPageState extends State<LoginPage> {
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _error = 'Unable to sign in. Please try again.');
+        setState(
+          () => _error =
+              'Unable to sign in. Check your connection and try again.',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  Future<void> _openForgotPassword() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => ForgotPasswordPage(api: widget.api),
+      ),
+    );
+  }
+
+  Future<void> _openSignUp() async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            SignUpPage(api: widget.api, onSignedIn: widget.onSignedIn),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    return Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: AutofillGroup(
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Icon(
+                        Icons.foundation_outlined,
+                        size: 58,
+                        color: Color(0xFF102A43),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        l10n.appTitle,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        l10n.signInDescription,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 30),
+                      TextFormField(
+                        controller: _email,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        autofillHints: const [AutofillHints.email],
+                        decoration: InputDecoration(
+                          labelText: l10n.email,
+                          hintText: l10n.email,
+                          prefixIcon: const Icon(Icons.email_outlined),
+                        ),
+                        validator: (value) {
+                          final email = value?.trim() ?? '';
+                          if (email.isEmpty || !email.contains('@')) {
+                            return l10n.email;
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _password,
+                        obscureText: _obscurePassword,
+                        textInputAction: TextInputAction.done,
+                        autofillHints: const [AutofillHints.password],
+                        onFieldSubmitted: (_) {
+                          if (!_loading) _signIn();
+                        },
+                        decoration: InputDecoration(
+                          labelText: l10n.password,
+                          hintText: l10n.password,
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          suffixIcon: IconButton(
+                            tooltip: _obscurePassword
+                                ? 'Show password'
+                                : 'Hide password',
+                            onPressed: () {
+                              setState(
+                                () => _obscurePassword = !_obscurePassword,
+                              );
+                            },
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                            ),
+                          ),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return l10n.password;
+                          }
+                          return null;
+                        },
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: _loading ? null : _openForgotPassword,
+                          child: Text(l10n.forgotPassword),
+                        ),
+                      ),
+                      if (_error != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF1F2),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFFDA4AF)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(
+                                Icons.error_outline,
+                                color: Color(0xFFBE123C),
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _error!,
+                                  style: const TextStyle(
+                                    color: Color(0xFFBE123C),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      SizedBox(
+                        height: 52,
+                        child: FilledButton(
+                          onPressed: _loading ? null : _signIn,
+                          child: _loading
+                              ? const SizedBox.square(
+                                  dimension: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Text(l10n.signIn),
+                        ),
+                      ),
+                      if (_biometricEnabled && _biometricAvailable) ...[
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          height: 52,
+                          child: OutlinedButton.icon(
+                            onPressed: _loading
+                                ? null
+                                : _authenticateWithBiometric,
+                            icon: const Icon(Icons.fingerprint),
+                            label: Text(l10n.useBiometricToLogin),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 22),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              l10n.noAccount,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _loading ? null : _openSignUp,
+                            child: Text(l10n.signUp),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 4,
+                        runSpacing: 0,
+                        children: [
+                          TextButton(
+                            onPressed: () {},
+                            child: Text(l10n.privacyPolicy),
+                          ),
+                          TextButton(
+                            onPressed: () {},
+                            child: Text(l10n.termsOfUse),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class SignUpPage extends StatefulWidget {
+  const SignUpPage({super.key, required this.api, required this.onSignedIn});
+
+  final ApiClient api;
+  final VoidCallback onSignedIn;
+
+  @override
+  State<SignUpPage> createState() => _SignUpPageState();
+}
+
+class _SignUpPageState extends State<SignUpPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _name = TextEditingController();
+  final _organisation = TextEditingController();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  final _confirmPassword = TextEditingController();
+
+  bool _loading = false;
+  bool _obscurePassword = true;
+  bool _obscureConfirmation = true;
+  bool _acceptTerms = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _organisation.dispose();
+    _email.dispose();
+    _password.dispose();
+    _confirmPassword.dispose();
+    super.dispose();
+  }
+
+  Future<void> _register() async {
+    FocusScope.of(context).unfocus();
+
+    if (!_formKey.currentState!.validate()) return;
+
+    if (!_acceptTerms) {
+      setState(
+        () => _error = 'Please accept the Terms of Use and Privacy Policy.',
+      );
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      await widget.api.register(
+        name: _name.text.trim(),
+        email: _email.text.trim(),
+        password: _password.text,
+        passwordConfirmation: _confirmPassword.text,
+        organisationName: _organisation.text.trim().isEmpty
+            ? null
+            : _organisation.text.trim(),
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Account created successfully.')),
+      );
+
+      widget.onSignedIn();
+      Navigator.of(context).pop();
+    } on ApiException catch (error) {
+      if (mounted) {
+        setState(() => _error = error.message);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'Unable to create your account. Check your connection and try again.',
+        );
       }
     } finally {
       if (mounted) {
@@ -260,32 +743,57 @@ class _LoginPageState extends State<LoginPage> {
     final l10n = AppLocalizations.of(context)!;
 
     return Scaffold(
+      appBar: AppBar(title: Text(l10n.signUp)),
       body: SafeArea(
         child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(28),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: AutofillGroup(
               child: Form(
                 key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                child: ListView(
+                  padding: const EdgeInsets.all(24),
                   children: [
                     const Icon(
-                      Icons.foundation_outlined,
-                      size: 54,
+                      Icons.person_add_alt_1_outlined,
+                      size: 52,
                       color: Color(0xFF102A43),
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
                     Text(
-                      l10n.appTitle,
+                      l10n.createAccount,
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineMedium
+                      style: Theme.of(context).textTheme.headlineSmall
                           ?.copyWith(fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(height: 8),
-                    Text(l10n.signInDescription, textAlign: TextAlign.center),
-                    const SizedBox(height: 32),
+                    Text(l10n.signUpDescription, textAlign: TextAlign.center),
+                    const SizedBox(height: 28),
+                    TextFormField(
+                      controller: _name,
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.name],
+                      decoration: InputDecoration(
+                        labelText: l10n.fullName,
+                        prefixIcon: const Icon(Icons.person_outline),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return l10n.fullName;
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _organisation,
+                      textInputAction: TextInputAction.next,
+                      decoration: InputDecoration(
+                        labelText: l10n.organisationName,
+                        prefixIcon: const Icon(Icons.business_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     TextFormField(
                       controller: _email,
                       keyboardType: TextInputType.emailAddress,
@@ -297,11 +805,9 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                       validator: (value) {
                         final email = value?.trim() ?? '';
-
                         if (email.isEmpty || !email.contains('@')) {
                           return l10n.email;
                         }
-
                         return null;
                       },
                     ),
@@ -309,21 +815,16 @@ class _LoginPageState extends State<LoginPage> {
                     TextFormField(
                       controller: _password,
                       obscureText: _obscurePassword,
-                      textInputAction: TextInputAction.done,
-                      autofillHints: const [AutofillHints.password],
-                      onFieldSubmitted: (_) {
-                        if (!_loading) {
-                          _signIn();
-                        }
-                      },
+                      textInputAction: TextInputAction.next,
+                      autofillHints: const [AutofillHints.newPassword],
                       decoration: InputDecoration(
                         labelText: l10n.password,
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
                           onPressed: () {
-                            setState(() {
-                              _obscurePassword = !_obscurePassword;
-                            });
+                            setState(
+                              () => _obscurePassword = !_obscurePassword,
+                            );
                           },
                           icon: Icon(
                             _obscurePassword
@@ -333,15 +834,74 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                       validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return l10n.password;
+                        if (value == null || value.length < 8) {
+                          return l10n.passwordTooShort;
                         }
-
                         return null;
                       },
                     ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _confirmPassword,
+                      obscureText: _obscureConfirmation,
+                      textInputAction: TextInputAction.done,
+                      autofillHints: const [AutofillHints.newPassword],
+                      onFieldSubmitted: (_) {
+                        if (!_loading) _register();
+                      },
+                      decoration: InputDecoration(
+                        labelText: l10n.confirmPassword,
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          onPressed: () {
+                            setState(
+                              () =>
+                                  _obscureConfirmation = !_obscureConfirmation,
+                            );
+                          },
+                          icon: Icon(
+                            _obscureConfirmation
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                          ),
+                        ),
+                      ),
+                      validator: (value) {
+                        if (value != _password.text) {
+                          return l10n.passwordMismatch;
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      value: _acceptTerms,
+                      onChanged: _loading
+                          ? null
+                          : (value) {
+                              setState(() => _acceptTerms = value ?? false);
+                            },
+                      title: Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          const Text('I agree to the '),
+                          Text(
+                            l10n.termsOfUse,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const Text(' and '),
+                          Text(
+                            l10n.privacyPolicy,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const Text('.'),
+                        ],
+                      ),
+                    ),
                     if (_error != null) ...[
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -355,11 +915,11 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                     ],
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 22),
                     SizedBox(
-                      height: 50,
+                      height: 52,
                       child: FilledButton(
-                        onPressed: _loading ? null : _signIn,
+                        onPressed: _loading ? null : _register,
                         child: _loading
                             ? const SizedBox.square(
                                 dimension: 20,
@@ -367,12 +927,206 @@ class _LoginPageState extends State<LoginPage> {
                                   strokeWidth: 2,
                                 ),
                               )
-                            : Text(l10n.signIn),
+                            : Text(l10n.createAccount),
                       ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: _loading
+                          ? null
+                          : () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.arrow_back),
+                      label: Text(l10n.backToSignIn),
                     ),
                   ],
                 ),
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class ForgotPasswordPage extends StatefulWidget {
+  const ForgotPasswordPage({super.key, required this.api});
+
+  final ApiClient api;
+
+  @override
+  State<ForgotPasswordPage> createState() => _ForgotPasswordPageState();
+}
+
+class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _email = TextEditingController();
+
+  bool _loading = false;
+  bool _sent = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendResetLink() async {
+    FocusScope.of(context).unfocus();
+
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      await widget.api.forgotPassword(email: _email.text.trim());
+
+      if (!mounted) return;
+
+      setState(() => _sent = true);
+    } on ApiException catch (error) {
+      if (mounted) {
+        setState(() => _error = error.message);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'Unable to send the reset link. Check your connection and try again.',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.forgotPassword)),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 520),
+            child: ListView(
+              padding: const EdgeInsets.all(24),
+              children: [
+                const Icon(
+                  Icons.lock_reset_outlined,
+                  size: 54,
+                  color: Color(0xFF102A43),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  l10n.forgotPassword,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  l10n.resetPasswordDescription,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 28),
+                if (_sent)
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFECFDF5),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFF6EE7B7)),
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons.check_circle_outline,
+                          color: Color(0xFF047857),
+                          size: 36,
+                        ),
+                        const SizedBox(height: 10),
+                        Text(l10n.resetEmailSent, textAlign: TextAlign.center),
+                      ],
+                    ),
+                  )
+                else
+                  Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        TextFormField(
+                          controller: _email,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.done,
+                          autofillHints: const [AutofillHints.email],
+                          onFieldSubmitted: (_) {
+                            if (!_loading) _sendResetLink();
+                          },
+                          decoration: InputDecoration(
+                            labelText: l10n.email,
+                            prefixIcon: const Icon(Icons.email_outlined),
+                          ),
+                          validator: (value) {
+                            final email = value?.trim() ?? '';
+                            if (email.isEmpty || !email.contains('@')) {
+                              return l10n.email;
+                            }
+                            return null;
+                          },
+                        ),
+                        if (_error != null) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF1F2),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: const Color(0xFFFDA4AF),
+                              ),
+                            ),
+                            child: Text(
+                              _error!,
+                              style: const TextStyle(color: Color(0xFFBE123C)),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 22),
+                        SizedBox(
+                          height: 52,
+                          child: FilledButton.icon(
+                            onPressed: _loading ? null : _sendResetLink,
+                            icon: _loading
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.send_outlined),
+                            label: Text(l10n.sendResetLink),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                TextButton.icon(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.arrow_back),
+                  label: Text(l10n.backToSignIn),
+                ),
+              ],
             ),
           ),
         ),
@@ -423,13 +1177,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final destinations = [
       (Icons.space_dashboard_outlined, Icons.space_dashboard, l10n.dashboard),
       (Icons.account_tree_outlined, Icons.account_tree, l10n.projects),
-      (Icons.inventory_2_outlined, Icons.inventory_2, l10n.hardwarePrices),
+      (Icons.price_check_outlined, Icons.price_check, l10n.hardwarePrices),
       (Icons.document_scanner_outlined, Icons.document_scanner, l10n.importBoq),
       (Icons.person_outline, Icons.person, l10n.account),
     ];
 
     return Scaffold(
       appBar: AppBar(title: Text(destinations[_selectedIndex].$3)),
+
       drawer: Drawer(
         child: SafeArea(
           child: ListView(
@@ -449,6 +1204,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
+
               for (var index = 0; index < destinations.length; index++)
                 ListTile(
                   selected: _selectedIndex == index,
@@ -456,15 +1212,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   title: Text(destinations[index].$3),
                   onTap: () {
                     setState(() => _selectedIndex = index);
+
                     Navigator.of(context).pop();
                   },
                 ),
+
               const Divider(),
+
               ListTile(
                 leading: const Icon(Icons.workspace_premium_outlined),
                 title: Text(l10n.managePlan),
                 onTap: () {
                   Navigator.of(context).pop();
+
                   Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => PlansPage(api: widget.api),
@@ -476,9 +1236,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+
       body: SafeArea(
         child: IndexedStack(index: _selectedIndex, children: pages),
       ),
+
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (index) {
@@ -553,7 +1315,11 @@ class DashboardPage extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  onPressed: () {},
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => NotificationsPage(api: api),
+                    ),
+                  ),
                   tooltip: l10n.notifications,
                   icon: const Icon(Icons.notifications_none_outlined),
                 ),
@@ -640,6 +1406,227 @@ class DashboardPage extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+class NotificationsPage extends StatefulWidget {
+  const NotificationsPage({super.key, required this.api});
+  final ApiClient api;
+
+  @override
+  State<NotificationsPage> createState() => _NotificationsPageState();
+}
+
+class _NotificationsPageState extends State<NotificationsPage> {
+  late Future<List<NotificationItem>> _notifications;
+  int _page = 1;
+  bool _loadingMore = false;
+  bool _hasMore = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotifications();
+  }
+
+  Future<void> _loadNotifications({bool loadMore = false}) async {
+    if (_loadingMore) return;
+    final targetPage = loadMore ? _page + 1 : 1;
+    if (loadMore) {
+      setState(() => _loadingMore = true);
+    } else {
+      setState(() {
+        _notifications = widget.api.getNotifications(page: targetPage);
+      });
+    }
+    try {
+      final notifications = await widget.api.getNotifications(page: targetPage);
+      if (mounted) {
+        setState(() {
+          if (loadMore) {
+            // We need to get the current list and append
+            // For simplicity, we'll just reload the whole list
+            _notifications = widget.api.getNotifications(page: 1);
+            _page = 1;
+          } else {
+            _notifications = Future.value(notifications);
+            _page = targetPage;
+          }
+          _hasMore = notifications.length >= 20;
+          _loadingMore = false;
+        });
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() {
+          _loadingMore = false;
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(e.message)));
+        });
+      }
+    }
+  }
+
+  Future<void> _markAsRead(NotificationItem notification) async {
+    if (notification.isRead) return;
+    try {
+      await widget.api.markNotificationAsRead(notification.id);
+      if (mounted) {
+        setState(() {
+          _loadNotifications();
+        });
+      }
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.notifications)),
+      body: FutureBuilder<List<NotificationItem>>(
+        future: _notifications,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  snapshot.error.toString(),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          }
+          final notifications = snapshot.data ?? [];
+          if (notifications.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.notifications_none,
+                    size: 64,
+                    color: Colors.grey[400],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    l10n.noNotifications,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ],
+              ),
+            );
+          }
+          return NotificationListener<ScrollNotification>(
+            onNotification: (notification) {
+              if (notification.metrics.pixels >=
+                      notification.metrics.maxScrollExtent - 200 &&
+                  !_loadingMore &&
+                  _hasMore) {
+                _loadNotifications(loadMore: true);
+              }
+              return false;
+            },
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: notifications.length + (_loadingMore ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index >= notifications.length) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
+                final notification = notifications[index];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  color: notification.isRead
+                      ? null
+                      : Theme.of(
+                          context,
+                        ).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: notification.isRead
+                          ? Colors.grey[300]
+                          : Theme.of(context).colorScheme.primary,
+                      child: Icon(
+                        _iconForType(notification.type),
+                        color: notification.isRead
+                            ? Colors.grey[600]
+                            : Colors.white,
+                      ),
+                    ),
+                    title: Text(
+                      notification.title,
+                      style: TextStyle(
+                        fontWeight: notification.isRead
+                            ? FontWeight.w400
+                            : FontWeight.w700,
+                      ),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(notification.message),
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatDate(notification.createdAt),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                    trailing: !notification.isRead
+                        ? TextButton(
+                            onPressed: () => _markAsRead(notification),
+                            child: Text(l10n.markAsRead),
+                          )
+                        : null,
+                    onTap: () => _markAsRead(notification),
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  IconData _iconForType(String type) {
+    switch (type) {
+      case 'success':
+        return Icons.check_circle;
+      case 'warning':
+        return Icons.warning;
+      case 'error':
+        return Icons.error;
+      default:
+        return Icons.info;
+    }
+  }
+
+  String _formatDate(String dateStr) {
+    try {
+      final dt = DateTime.parse(dateStr);
+      return '${dt.day}/${dt.month}/${dt.year} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return dateStr;
+    }
   }
 }
 
@@ -764,7 +1751,25 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _code = TextEditingController();
-  String _currency = 'UGX';
+  final _client = TextEditingController();
+  final _contractor = TextEditingController();
+  final _consultant = TextEditingController();
+  final _quantitySurveyor = TextEditingController();
+  final _projectManager = TextEditingController();
+  final _siteEngineer = TextEditingController();
+  final _fundingOrganisation = TextEditingController();
+  final _country = TextEditingController();
+  final _district = TextEditingController();
+  final _location = TextEditingController();
+  final _projectType = TextEditingController();
+  final _startDate = TextEditingController();
+  final _expectedCompletionDate = TextEditingController();
+  final _contractValue = TextEditingController();
+  final _currency = TextEditingController(text: 'UGX');
+  final _description = TextEditingController();
+  final _originalLanguage = TextEditingController();
+  final _reportLanguage = TextEditingController();
+  String _status = 'draft';
   bool _saving = false;
   String? _error;
 
@@ -772,7 +1777,35 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
   void dispose() {
     _name.dispose();
     _code.dispose();
+    _client.dispose();
+    _contractor.dispose();
+    _consultant.dispose();
+    _quantitySurveyor.dispose();
+    _projectManager.dispose();
+    _siteEngineer.dispose();
+    _fundingOrganisation.dispose();
+    _country.dispose();
+    _district.dispose();
+    _location.dispose();
+    _projectType.dispose();
+    _startDate.dispose();
+    _expectedCompletionDate.dispose();
+    _contractValue.dispose();
+    _currency.dispose();
+    _description.dispose();
+    _originalLanguage.dispose();
+    _reportLanguage.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickDate(TextEditingController controller) async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (date != null) controller.text = date.toIso8601String().split('T').first;
   }
 
   Future<void> _save(AppLocalizations l10n) async {
@@ -784,8 +1817,50 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
     try {
       await widget.api.createProject(
         name: _name.text.trim(),
-        code: _code.text.trim(),
-        currency: _currency,
+        code: _code.text.trim().isEmpty ? null : _code.text.trim(),
+        client: _client.text.trim().isEmpty ? null : _client.text.trim(),
+        contractor: _contractor.text.trim().isEmpty
+            ? null
+            : _contractor.text.trim(),
+        consultant: _consultant.text.trim().isEmpty
+            ? null
+            : _consultant.text.trim(),
+        quantitySurveyor: _quantitySurveyor.text.trim().isEmpty
+            ? null
+            : _quantitySurveyor.text.trim(),
+        projectManager: _projectManager.text.trim().isEmpty
+            ? null
+            : _projectManager.text.trim(),
+        siteEngineer: _siteEngineer.text.trim().isEmpty
+            ? null
+            : _siteEngineer.text.trim(),
+        fundingOrganisation: _fundingOrganisation.text.trim().isEmpty
+            ? null
+            : _fundingOrganisation.text.trim(),
+        country: _country.text.trim().isEmpty ? null : _country.text.trim(),
+        district: _district.text.trim().isEmpty ? null : _district.text.trim(),
+        location: _location.text.trim().isEmpty ? null : _location.text.trim(),
+        projectType: _projectType.text.trim().isEmpty
+            ? null
+            : _projectType.text.trim(),
+        startDate: _startDate.text.isEmpty ? null : _startDate.text,
+        expectedCompletionDate: _expectedCompletionDate.text.isEmpty
+            ? null
+            : _expectedCompletionDate.text,
+        contractValue: _contractValue.text.trim().isEmpty
+            ? null
+            : double.tryParse(_contractValue.text.trim()),
+        currency: _currency.text.trim(),
+        description: _description.text.trim().isEmpty
+            ? null
+            : _description.text.trim(),
+        status: _status,
+        originalLanguage: _originalLanguage.text.trim().isEmpty
+            ? null
+            : _originalLanguage.text.trim(),
+        reportLanguage: _reportLanguage.text.trim().isEmpty
+            ? null
+            : _reportLanguage.text.trim(),
       );
       if (mounted) {
         ScaffoldMessenger.of(
@@ -812,9 +1887,9 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
           children: [
             TextFormField(
               controller: _name,
-              decoration: InputDecoration(labelText: l10n.projects),
+              decoration: const InputDecoration(labelText: 'Project Name *'),
               validator: (value) =>
-                  value == null || value.trim().isEmpty ? l10n.projects : null,
+                  value == null || value.trim().isEmpty ? 'Required' : null,
             ),
             const SizedBox(height: 16),
             TextFormField(
@@ -822,15 +1897,121 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
               decoration: InputDecoration(labelText: l10n.projectCode),
             ),
             const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              initialValue: _currency,
+            TextFormField(
+              controller: _client,
+              decoration: const InputDecoration(labelText: 'Client'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _contractor,
+              decoration: const InputDecoration(labelText: 'Contractor'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _consultant,
+              decoration: const InputDecoration(labelText: 'Consultant'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _quantitySurveyor,
+              decoration: const InputDecoration(labelText: 'Quantity Surveyor'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _projectManager,
+              decoration: const InputDecoration(labelText: 'Project Manager'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _siteEngineer,
+              decoration: const InputDecoration(labelText: 'Site Engineer'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _fundingOrganisation,
+              decoration: const InputDecoration(
+                labelText: 'Funding Organisation',
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _country,
+              decoration: const InputDecoration(labelText: 'Country'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _district,
+              decoration: const InputDecoration(labelText: 'District'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _location,
+              decoration: const InputDecoration(labelText: 'Location'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _projectType,
+              decoration: const InputDecoration(labelText: 'Project Type'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _startDate,
+              decoration: const InputDecoration(
+                labelText: 'Start Date',
+                suffixIcon: Icon(Icons.calendar_today),
+              ),
+              readOnly: true,
+              onTap: () => _pickDate(_startDate),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _expectedCompletionDate,
+              decoration: const InputDecoration(
+                labelText: 'Expected Completion Date',
+                suffixIcon: Icon(Icons.calendar_today),
+              ),
+              readOnly: true,
+              onTap: () => _pickDate(_expectedCompletionDate),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _contractValue,
+              decoration: const InputDecoration(labelText: 'Contract Value'),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _currency,
               decoration: InputDecoration(labelText: l10n.currency),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _description,
+              decoration: const InputDecoration(labelText: 'Description'),
+              maxLines: 3,
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _originalLanguage,
+              decoration: const InputDecoration(labelText: 'Original Language'),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _reportLanguage,
+              decoration: const InputDecoration(labelText: 'Report Language'),
+            ),
+            const SizedBox(height: 16),
+            DropdownButtonFormField<String>(
+              value: _status,
+              decoration: const InputDecoration(labelText: 'Status'),
               items: const [
-                DropdownMenuItem(value: 'UGX', child: Text('UGX')),
-                DropdownMenuItem(value: 'USD', child: Text('USD')),
+                DropdownMenuItem(value: 'draft', child: Text('Draft')),
+                DropdownMenuItem(value: 'active', child: Text('Active')),
+                DropdownMenuItem(value: 'completed', child: Text('Completed')),
+                DropdownMenuItem(value: 'archived', child: Text('Archived')),
               ],
               onChanged: (value) {
-                if (value != null) setState(() => _currency = value);
+                if (value != null) setState(() => _status = value);
               },
             ),
             if (_error != null)
@@ -872,36 +2053,38 @@ class _ImportPageState extends State<ImportPage> {
   late final Future<List<ProjectSummary>> _projects = widget.api.projects();
   int? _projectId;
   bool _uploading = false;
+  XFile? _pickedImage;
 
-  Future<void> _upload() async {
-    if (_projectId == null) return;
-    final selected = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['xlsx', 'xls', 'csv', 'pdf', 'jpg', 'jpeg', 'png'],
-      // Android content URIs are not always readable through file.path.
-      // Request bytes so uploads work consistently on physical devices.
-      withData: true,
+  Future<void> _pickImage() async {
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.camera,
+      maxWidth: 2048,
+      maxHeight: 2048,
+      imageQuality: 85,
     );
-    if (selected == null || selected.files.isEmpty) return;
-    final file = selected.files.single;
-    final bytes = file.bytes;
-    final path = file.path;
-    if (bytes == null && path == null) return;
+    if (picked != null) {
+      setState(() => _pickedImage = picked);
+      _uploadPickedImage();
+    }
+  }
+
+  Future<void> _uploadPickedImage() async {
+    if (_projectId == null) return;
+    final bytes = await _pickedImage!.readAsBytes();
     setState(() => _uploading = true);
     try {
-      if (bytes != null) {
-        await widget.api.uploadBoqFromBytes(
-          projectId: _projectId!,
-          fileName: file.name,
-          bytes: bytes,
-        );
-      } else if (path != null) {
-        await widget.api.uploadBoq(projectId: _projectId!, filePath: path);
-      }
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${widget.l10n.imported}: ${file.name}')),
-        );
+      final boq = await widget.api.uploadBoqFromBytes(
+        projectId: _projectId!,
+        fileName: _pickedImage!.name,
+        bytes: bytes,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${widget.l10n.imported}: ${_pickedImage!.name}'),
+        ),
+      );
+      await _reviewUploadedBoq(boq);
     } on ApiException catch (error) {
       if (mounted)
         ScaffoldMessenger.of(
@@ -916,6 +2099,87 @@ class _ImportPageState extends State<ImportPage> {
         );
     } finally {
       if (mounted) setState(() => _uploading = false);
+      if (mounted) setState(() => _pickedImage = null);
+    }
+  }
+
+  Future<void> _upload() async {
+    if (_projectId == null) return;
+    final selected = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['xlsx', 'xls', 'csv', 'pdf', 'jpg', 'jpeg', 'png'],
+      withData: true,
+    );
+    if (selected == null || selected.files.isEmpty) return;
+    final file = selected.files.single;
+    final bytes = file.bytes;
+    final path = file.path;
+    if (bytes == null && path == null) return;
+    setState(() => _uploading = true);
+    try {
+      final boq = bytes != null
+          ? await widget.api.uploadBoqFromBytes(
+              projectId: _projectId!,
+              fileName: file.name,
+              bytes: bytes,
+            )
+          : await widget.api.uploadBoq(
+              projectId: _projectId!,
+              filePath: path!,
+              name: file.name,
+            );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${widget.l10n.imported}: ${file.name}')),
+      );
+      await _reviewUploadedBoq(boq);
+    } on ApiException catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Upload failed: check the file and try again'),
+          ),
+        );
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  /// Auto-processes the uploaded BOQ ("Generate BOQ") then opens its
+  /// review page so the user can verify items and fetch prices. Falls back
+  /// to the project page when processing fails so nothing is lost.
+  Future<void> _reviewUploadedBoq(BoqSummary boq) async {
+    if (!mounted) return;
+    try {
+      final imported = await widget.api.processBoq(boq.id);
+      if (!mounted) return;
+      if (imported > 0) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Imported $imported BOQ items')));
+      }
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              BoqItemsPage(api: widget.api, boqId: boq.id, title: boq.name),
+        ),
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${error.message} (open the project to retry)')),
+      );
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              ProjectDetailPage(api: widget.api, projectId: _projectId!),
+        ),
+      );
     }
   }
 
@@ -989,7 +2253,7 @@ class _ImportPageState extends State<ImportPage> {
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(
-            onPressed: _projectId == null || _uploading ? null : _upload,
+            onPressed: _projectId == null || _uploading ? null : _pickImage,
             icon: const Icon(Icons.document_scanner_outlined),
             label: Text(l10n.scanPages),
           ),
@@ -1028,6 +2292,31 @@ class _AccountPageState extends State<AccountPage> {
     _subscription = widget.api.currentSubscription();
   }
 
+  void _reloadSubscription() {
+    if (!mounted) return;
+    setState(() {
+      _subscription = widget.api.currentSubscription();
+    });
+  }
+
+  double? _subscriptionProgress(Map<String, dynamic> subscription) {
+    final start = DateTime.tryParse('${subscription['start_date'] ?? ''}');
+    final end = DateTime.tryParse('${subscription['end_date'] ?? ''}');
+    if (start == null || end == null || !end.isAfter(start)) return null;
+
+    final total = end.difference(start).inSeconds;
+    final elapsed = DateTime.now().difference(start).inSeconds;
+    return (elapsed / total).clamp(0.0, 1.0).toDouble();
+  }
+
+  int? _daysRemaining(Map<String, dynamic> subscription) {
+    final end = DateTime.tryParse('${subscription['end_date'] ?? ''}');
+    if (end == null) return null;
+    final remaining = end.difference(DateTime.now());
+    if (remaining.isNegative) return 0;
+    return (remaining.inHours / 24).ceil();
+  }
+
   Future<void> _signOut() async {
     await widget.api.logout();
     widget.onSignedOut();
@@ -1057,14 +2346,22 @@ class _AccountPageState extends State<AccountPage> {
                     children: [
                       Text(
                         widget.l10n.subscription,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 8),
                       const Text('No active plan'),
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
-                          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => PlansPage(api: widget.api))),
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => PlansPage(
+                                api: widget.api,
+                                onSubscriptionCreated: _reloadSubscription,
+                              ),
+                            ),
+                          ),
                           child: Text(widget.l10n.managePlan),
                         ),
                       ),
@@ -1075,6 +2372,10 @@ class _AccountPageState extends State<AccountPage> {
             }
             if (snapshot.hasData) {
               final sub = snapshot.data!;
+              final progress = _subscriptionProgress(sub);
+              final daysRemaining = _daysRemaining(sub);
+              final status = '${sub['status'] ?? 'N/A'}';
+              final isTrial = status.toLowerCase() == 'trial';
               return Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -1089,25 +2390,53 @@ class _AccountPageState extends State<AccountPage> {
                       const SizedBox(height: 12),
                       Text(sub['plan']?['name'] ?? 'No Active Plan'),
                       const SizedBox(height: 4),
-                      Text(
-                        sub['status'] ?? 'N/A',
-                        style: Theme.of(context).textTheme.bodySmall,
+                      Row(
+                        children: [
+                          Chip(
+                            avatar: Icon(
+                              isTrial
+                                  ? Icons.hourglass_top
+                                  : Icons.verified_outlined,
+                              size: 16,
+                            ),
+                            label: Text(
+                              isTrial ? '7-day trial' : status.toUpperCase(),
+                            ),
+                          ),
+                          if (daysRemaining != null) ...[
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                daysRemaining == 0
+                                    ? 'Expires today'
+                                    : '$daysRemaining day${daysRemaining == 1 ? '' : 's'} remaining',
+                                textAlign: TextAlign.end,
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                      const SizedBox(height: 16),
-                      const LinearProgressIndicator(value: 0.58),
-                      const SizedBox(height: 8),
+                      if (progress != null) ...[
+                        const SizedBox(height: 12),
+                        LinearProgressIndicator(value: progress),
+                      ],
+                      const SizedBox(height: 12),
                       Text(
-                        '${widget.l10n.aiCredits}: ${sub['plan']?['ai_credits'] ?? 'N/A'}',
+                        '${widget.l10n.aiCredits}: ${sub['plan']?['max_ai_credits'] ?? 'N/A'}',
                       ),
                       Text(
-                        '${widget.l10n.ocrPages}: ${sub['plan']?['ocr_pages'] ?? 'N/A'}',
+                        '${widget.l10n.ocrPages}: ${sub['plan']?['max_ocr_pages'] ?? 'N/A'}',
                       ),
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
                           onPressed: () => Navigator.of(context).push(
                             MaterialPageRoute<void>(
-                              builder: (_) => PlansPage(api: widget.api),
+                              builder: (_) => PlansPage(
+                                api: widget.api,
+                                onSubscriptionCreated: _reloadSubscription,
+                              ),
                             ),
                           ),
                           child: Text(widget.l10n.managePlan),
@@ -1194,10 +2523,92 @@ class _AccountPageState extends State<AccountPage> {
   }
 }
 
-class PlansPage extends StatelessWidget {
-  const PlansPage({super.key, required this.api});
+class PlansPage extends StatefulWidget {
+  const PlansPage({super.key, required this.api, this.onSubscriptionCreated});
 
   final ApiClient api;
+  final VoidCallback? onSubscriptionCreated;
+
+  @override
+  State<PlansPage> createState() => _PlansPageState();
+}
+
+class _PlansPageState extends State<PlansPage> {
+  late Future<List<Map<String, dynamic>>> _plans;
+  int? _submittingPlanId;
+
+  @override
+  void initState() {
+    super.initState();
+    _plans = widget.api.plans();
+  }
+
+  Future<void> _selectPlan(Map<String, dynamic> plan) async {
+    final id = int.tryParse('${plan['id'] ?? ''}');
+    if (id == null || _submittingPlanId != null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Select subscription plan'),
+        content: Text(
+          'Create a pending subscription for ${plan['name'] ?? 'this plan'}? '
+          'Your plan becomes active only after payment is confirmed.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _submittingPlanId = id);
+    try {
+      final subscription = await widget.api.createSubscription(id);
+      if (!mounted) return;
+      widget.onSubscriptionCreated?.call();
+      final status = '${subscription['status'] ?? 'pending'}';
+
+      if (status == 'pending') {
+        final activated = await Navigator.of(context).push<bool>(
+          MaterialPageRoute<bool>(
+            builder: (_) =>
+                PaymentPage(api: widget.api, subscription: subscription),
+          ),
+        );
+        if (activated == true) {
+          widget.onSubscriptionCreated?.call();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Payment confirmed. Your subscription is now active.',
+              ),
+            ),
+          );
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Subscription updated successfully.')),
+        );
+      }
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _submittingPlanId = null);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1205,39 +2616,764 @@ class PlansPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text(l10n.managePlan)),
       body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: api.plans(),
+        future: _plans,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(20),
-                child: Text(snapshot.error.toString()),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 42),
+                    const SizedBox(height: 12),
+                    const Text('Unable to load subscription plans.'),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: () =>
+                          setState(() => _plans = widget.api.plans()),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
               ),
             );
           }
-          if (!snapshot.hasData)
+          if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
+          }
           final plans = snapshot.data!;
-          if (plans.isEmpty)
+          if (plans.isEmpty) {
             return const Center(
               child: Text('No plans are currently available.'),
             );
+          }
           return ListView.builder(
             padding: const EdgeInsets.all(20),
             itemCount: plans.length,
             itemBuilder: (context, index) {
               final plan = plans[index];
+              final id = int.tryParse('${plan['id'] ?? ''}');
+              final busy = id != null && _submittingPlanId == id;
+              final features =
+                  (plan['included_features'] as List<dynamic>? ?? const [])
+                      .map((item) => '$item')
+                      .where((item) => item.trim().isNotEmpty)
+                      .take(4)
+                      .toList();
+
               return Card(
-                child: ListTile(
-                  leading: const Icon(Icons.workspace_premium_outlined),
-                  title: Text('${plan['name'] ?? 'Plan'}'),
-                  subtitle: Text('${plan['description'] ?? ''}'),
-                  trailing: Text(
-                    '${plan['currency'] ?? ''} ${plan['price'] ?? ''}',
+                margin: const EdgeInsets.only(bottom: 14),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.workspace_premium_outlined),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              '${plan['name'] ?? 'Plan'}',
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          Text(
+                            '${plan['currency'] ?? 'UGX'} ${plan['price'] ?? '0'}',
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                        ],
+                      ),
+                      if ('${plan['description'] ?? ''}'.trim().isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Text('${plan['description']}'),
+                      ],
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          if (plan['trial_days'] != null)
+                            Chip(
+                              label: Text('${plan['trial_days']} day trial'),
+                            ),
+                          if (plan['max_projects'] != null)
+                            Chip(
+                              label: Text('${plan['max_projects']} projects'),
+                            ),
+                          if (plan['max_boqs'] != null)
+                            Chip(label: Text('${plan['max_boqs']} BOQs')),
+                          if (plan['max_ai_credits'] != null)
+                            Chip(
+                              label: Text(
+                                '${plan['max_ai_credits']} AI credits',
+                              ),
+                            ),
+                        ],
+                      ),
+                      if (features.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        ...features.map(
+                          (feature) => Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.check_circle_outline,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(child: Text(feature)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: busy ? null : () => _selectPlan(plan),
+                          child: busy
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text('Select plan'),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               );
             },
+          );
+        },
+      ),
+    );
+  }
+}
+
+class PaymentPage extends StatefulWidget {
+  const PaymentPage({super.key, required this.api, required this.subscription});
+
+  final ApiClient api;
+  final Map<String, dynamic> subscription;
+
+  @override
+  State<PaymentPage> createState() => _PaymentPageState();
+}
+
+class _PaymentPageState extends State<PaymentPage> {
+  late Future<List<Map<String, dynamic>>> _gateways;
+  String? _selectedGatewayCode;
+  String? _selectedMethod;
+  Map<String, dynamic>? _paymentData;
+  bool _initiating = false;
+  bool _verifying = false;
+  bool _successHandled = false;
+  String? _idempotencyKey;
+  Timer? _statusTimer;
+  int _pollCount = 0;
+  Map<String, dynamic>? _receipt;
+  final TextEditingController _phoneNumber = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _gateways = widget.api.paymentGateways();
+  }
+
+  @override
+  void dispose() {
+    _statusTimer?.cancel();
+    _phoneNumber.dispose();
+    super.dispose();
+  }
+
+  int? get _subscriptionId =>
+      int.tryParse('${widget.subscription['id'] ?? ''}');
+
+  Map<String, dynamic>? get _transaction =>
+      _paymentData?['transaction'] as Map<String, dynamic>?;
+
+  Map<String, dynamic>? get _gatewayResult =>
+      _paymentData?['gateway'] as Map<String, dynamic>?;
+
+  Future<void> _initiate(Map<String, dynamic> gateway) async {
+    final subscriptionId = _subscriptionId;
+    final code = '${gateway['code'] ?? ''}'.trim();
+    if (subscriptionId == null || code.isEmpty || _initiating) return;
+
+    setState(() {
+      _initiating = true;
+      _selectedGatewayCode = code;
+    });
+    try {
+      _idempotencyKey ??=
+          'mobile-$subscriptionId-$code-${DateTime.now().microsecondsSinceEpoch}';
+      final data = await widget.api.initiatePayment(
+        subscriptionId: subscriptionId,
+        gatewayCode: code,
+        idempotencyKey: _idempotencyKey!,
+        paymentMethod: _selectedMethod,
+        phoneNumber: _phoneNumber.text,
+        network: _selectedMethod,
+      );
+      if (!mounted) return;
+      setState(() => _paymentData = data);
+      _startStatusPolling();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Payment started. Follow the instructions below, then verify the payment.',
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _initiating = false);
+    }
+  }
+
+  void _startStatusPolling() {
+    _statusTimer?.cancel();
+    _pollCount = 0;
+    _statusTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      _pollCount++;
+      if (_pollCount > 24 || !mounted) {
+        timer.cancel();
+        return;
+      }
+      await _refreshTransaction(silent: true);
+    });
+  }
+
+  Future<void> _loadReceipt(int transactionId) async {
+    try {
+      final receipt = await widget.api.paymentReceipt(transactionId);
+      if (!mounted) return;
+      setState(() => _receipt = receipt);
+    } on ApiException {
+      return;
+    }
+  }
+
+  Future<void> _handleSuccessfulPayment(
+    Map<String, dynamic> transaction,
+  ) async {
+    if (_successHandled || !mounted) return;
+    _successHandled = true;
+    _statusTimer?.cancel();
+    final transactionId = int.tryParse('${transaction['id'] ?? ''}');
+    if (transactionId != null) {
+      await _loadReceipt(transactionId);
+    }
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Payment confirmed'),
+        content: const Text(
+          'Your subscription has been activated successfully.',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    if (mounted) Navigator.of(context).pop(true);
+  }
+
+  Future<void> _verify() async {
+    final transaction = _transaction;
+    final transactionId = int.tryParse('${transaction?['id'] ?? ''}');
+    if (transactionId == null || _verifying) return;
+
+    setState(() => _verifying = true);
+    try {
+      final verified = await widget.api.verifyPayment(transactionId);
+      if (!mounted) return;
+      setState(() {
+        _paymentData = {...?_paymentData, 'transaction': verified};
+      });
+      final status = '${verified['status'] ?? ''}'.toLowerCase();
+      if (status == 'successful') {
+        await _handleSuccessfulPayment(verified);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              status == 'under_review'
+                  ? 'Payment submitted for review. Your plan will activate after confirmation.'
+                  : 'Payment status: ${status.isEmpty ? 'pending' : status}.',
+            ),
+          ),
+        );
+      }
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } finally {
+      if (mounted) setState(() => _verifying = false);
+    }
+  }
+
+  Future<void> _refreshTransaction({bool silent = false}) async {
+    final transactionId = int.tryParse('${_transaction?['id'] ?? ''}');
+    if (transactionId == null) return;
+    try {
+      final refreshed = await widget.api.transaction(transactionId);
+      if (!mounted) return;
+      setState(() {
+        _paymentData = {...?_paymentData, 'transaction': refreshed};
+        final invoice = refreshed['invoice'];
+        if (invoice is Map<String, dynamic>) {
+          _receipt = invoice;
+        }
+      });
+      final status = '${refreshed['status'] ?? ''}'.toLowerCase();
+      if (status == 'successful') {
+        await _handleSuccessfulPayment(refreshed);
+      }
+    } on ApiException catch (e) {
+      if (!mounted || silent) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Widget _receiptCard() {
+    final receipt = _receipt;
+    if (receipt == null || receipt.isEmpty) return const SizedBox.shrink();
+    final currency = '${receipt['currency'] ?? ''}';
+    final total = receipt['total_amount'] ?? receipt['amount'] ?? '';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.receipt_long_outlined),
+                const SizedBox(width: 8),
+                Text(
+                  'Payment receipt',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SelectableText('Invoice: ${receipt['invoice_number'] ?? ''}'),
+            SelectableText(
+              'Reference: ${receipt['transaction_reference'] ?? _transaction?['reference'] ?? ''}',
+            ),
+            Text('Amount: $currency $total'),
+            if (receipt['payment_date'] != null)
+              Text('Paid: ${receipt['payment_date']}'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _gatewayInstructions() {
+    final gateway = _gatewayResult;
+    if (gateway == null || gateway.isEmpty) return const SizedBox.shrink();
+    final rows = <Widget>[];
+
+    void addRow(String label, dynamic value) {
+      if (value == null || '$value'.trim().isEmpty) return;
+      rows.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 105,
+                child: Text(
+                  label,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+              Expanded(child: SelectableText('$value')),
+            ],
+          ),
+        ),
+      );
+    }
+
+    addRow('Reference', gateway['transaction_reference']);
+    addRow('Provider', gateway['provider']);
+    addRow('Phone', gateway['phone']);
+    addRow('Mode', gateway['mode']);
+    addRow('Instructions', gateway['instructions']);
+
+    final checkoutUrl = '${gateway['checkout_url'] ?? ''}'.trim();
+    if (checkoutUrl.isNotEmpty) {
+      rows.add(
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.link),
+          title: const Text('Checkout URL'),
+          subtitle: SelectableText(checkoutUrl),
+          trailing: Wrap(
+            spacing: 2,
+            children: [
+              IconButton(
+                tooltip: 'Open secure checkout',
+                onPressed: () async {
+                  final uri = Uri.tryParse(checkoutUrl);
+                  if (uri == null ||
+                      !await launchUrl(
+                        uri,
+                        mode: LaunchMode.externalApplication,
+                      )) {
+                    if (!mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Unable to open checkout. You can copy the link instead.',
+                        ),
+                      ),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.open_in_new),
+              ),
+              IconButton(
+                tooltip: 'Copy',
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: checkoutUrl));
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Checkout URL copied.')),
+                  );
+                },
+                icon: const Icon(Icons.copy_outlined),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final bankDetails = gateway['bank_details'];
+    if (bankDetails is Map) {
+      for (final entry in bankDetails.entries) {
+        addRow('${entry.key}', entry.value);
+      }
+    } else if (bankDetails != null) {
+      addRow('Bank details', bankDetails);
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Payment instructions',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 12),
+            ...rows,
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final plan =
+        widget.subscription['plan'] as Map<String, dynamic>? ?? const {};
+    final transaction = _transaction;
+    final status = '${transaction?['status'] ?? 'not started'}';
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Complete payment')),
+      body: FutureBuilder<List<Map<String, dynamic>>>(
+        future: _gateways,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 44),
+                    const SizedBox(height: 12),
+                    const Text('Unable to load payment methods.'),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: () => setState(
+                        () => _gateways = widget.api.paymentGateways(),
+                      ),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final gateways = snapshot.data!;
+          return ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${plan['name'] ?? 'Subscription plan'}',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${plan['currency'] ?? 'UGX'} ${plan['price'] ?? '0'}',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Subscription status: ${widget.subscription['status'] ?? 'pending'}',
+                      ),
+                      if (transaction != null) ...[
+                        const Divider(height: 24),
+                        Text(
+                          'Transaction: ${transaction['reference'] ?? transaction['id'] ?? ''}',
+                        ),
+                        Text('Payment status: $status'),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (gateways.isEmpty)
+                const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(18),
+                    child: Text(
+                      'No payment methods are currently enabled. Please contact the administrator.',
+                    ),
+                  ),
+                )
+              else ...[
+                Text(
+                  'Choose payment method',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ...gateways.map((gateway) {
+                  final code = '${gateway['code'] ?? ''}';
+                  final methods =
+                      (gateway['supported_methods'] as List<dynamic>? ??
+                              const [])
+                          .map((e) => '$e')
+                          .where((e) => e.trim().isNotEmpty)
+                          .toList();
+                  final selected = _selectedGatewayCode == code;
+                  return Card(
+                    child: RadioListTile<String>(
+                      value: code,
+                      groupValue: _selectedGatewayCode,
+                      onChanged: _paymentData != null
+                          ? null
+                          : (value) => setState(() {
+                              _selectedGatewayCode = value;
+                              _selectedMethod = methods.isNotEmpty
+                                  ? methods.first
+                                  : null;
+                              _idempotencyKey = null;
+                            }),
+                      title: Text('${gateway['name'] ?? code}'),
+                      subtitle: Text(
+                        '${gateway['description'] ?? gateway['driver'] ?? ''}'
+                        '${gateway['is_aggregator'] == true ? ' • Aggregator' : ''}'
+                        '${gateway['is_test_mode'] == true ? ' • Test mode' : ''}',
+                      ),
+                      secondary: selected
+                          ? const Icon(Icons.check_circle)
+                          : const Icon(Icons.payments_outlined),
+                    ),
+                  );
+                }),
+                if (_selectedGatewayCode != null && _paymentData == null) ...[
+                  const SizedBox(height: 10),
+                  Builder(
+                    builder: (context) {
+                      final selected = gateways.firstWhere(
+                        (g) => '${g['code'] ?? ''}' == _selectedGatewayCode,
+                        orElse: () => const <String, dynamic>{},
+                      );
+                      final methods =
+                          (selected['supported_methods'] as List<dynamic>? ??
+                                  const [])
+                              .map((e) => '$e')
+                              .where((e) => e.trim().isNotEmpty)
+                              .toList();
+                      final driver = '${selected['driver'] ?? ''}';
+                      final isAggregator = selected['is_aggregator'] == true;
+                      final effectiveMethod = methods.contains(_selectedMethod)
+                          ? _selectedMethod
+                          : (methods.isNotEmpty ? methods.first : null);
+                      final aggregatorMobile =
+                          isAggregator &&
+                          ![
+                            'card',
+                            'visa',
+                            'mastercard',
+                          ].contains('${effectiveMethod ?? ''}'.toLowerCase());
+                      final needsPhone =
+                          driver == 'mtn_momo' ||
+                          driver == 'airtel_money' ||
+                          aggregatorMobile;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (needsPhone) ...[
+                            TextField(
+                              controller: _phoneNumber,
+                              keyboardType: TextInputType.phone,
+                              onChanged: (_) => setState(() {}),
+                              decoration: InputDecoration(
+                                labelText: driver == 'mtn_momo'
+                                    ? 'MTN MoMo number'
+                                    : driver == 'airtel_money'
+                                    ? 'Airtel Money number'
+                                    : 'Mobile money number',
+                                hintText: 'e.g. 0772 123 456',
+                                prefixIcon: const Icon(Icons.phone_android),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          if (methods.length > 1)
+                            DropdownButtonFormField<String>(
+                              value: methods.contains(_selectedMethod)
+                                  ? _selectedMethod
+                                  : methods.first,
+                              decoration: const InputDecoration(
+                                labelText: 'Payment option',
+                              ),
+                              items: methods
+                                  .map(
+                                    (method) => DropdownMenuItem(
+                                      value: method,
+                                      child: Text(method),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (value) =>
+                                  setState(() => _selectedMethod = value),
+                            ),
+                          if (methods.length > 1) const SizedBox(height: 12),
+                          FilledButton.icon(
+                            onPressed:
+                                _initiating ||
+                                    (needsPhone &&
+                                        _phoneNumber.text.trim().isEmpty)
+                                ? null
+                                : () => _initiate(selected),
+                            icon: _initiating
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.lock_outline),
+                            label: Text(
+                              _initiating
+                                  ? 'Starting payment…'
+                                  : 'Continue to payment',
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+              ],
+              if (_paymentData != null) ...[
+                const SizedBox(height: 12),
+                _gatewayInstructions(),
+                if (_receipt != null) ...[
+                  const SizedBox(height: 12),
+                  _receiptCard(),
+                ],
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _refreshTransaction,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Refresh status'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _verifying ? null : _verify,
+                        icon: _verifying
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.verified_outlined),
+                        label: Text(
+                          _verifying ? 'Checking…' : 'Verify payment',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Your plan is activated only after the server confirms a successful payment. Closing this screen does not delete the pending subscription.',
+                  style: TextStyle(fontSize: 12),
+                ),
+              ],
+            ],
           );
         },
       ),
@@ -1265,6 +3401,8 @@ class _ProfilePageState extends State<ProfilePage> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
   final _email = TextEditingController();
+  final _phone = TextEditingController();
+  final _location = TextEditingController();
   final _password = TextEditingController();
   late final Future<UserProfile> _profile = widget.api.profile();
   late String _selectedLocale = widget.locale.languageCode;
@@ -1272,10 +3410,61 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _saving = false;
   String? _error;
 
+  late final BiometricService _biometricService;
+  bool _biometricAvailable = false;
+  bool _biometricEnabled = false;
+  List<BiometricType> _availableBiometrics = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _biometricService = BiometricService();
+    _loadBiometricStatus();
+  }
+
+  Future<void> _loadBiometricStatus() async {
+    final available = await _biometricService.isBiometricAvailable();
+    final enabled = await _biometricService.isBiometricEnabled();
+    final biometrics = await _biometricService.getAvailableBiometrics();
+    if (mounted) {
+      setState(() {
+        _biometricAvailable = available;
+        _biometricEnabled = enabled;
+        _availableBiometrics = biometrics;
+      });
+    }
+  }
+
+  Future<void> _toggleBiometric(bool value) async {
+    final l10n = AppLocalizations.of(context)!;
+    try {
+      await _biometricService.setBiometricEnabled(value);
+      if (mounted) {
+        setState(() => _biometricEnabled = value);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              value ? l10n.biometricEnabled : l10n.biometricDisabled,
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _biometricEnabled = !value);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.biometricError)));
+      }
+    }
+  }
+
   @override
   void dispose() {
     _name.dispose();
     _email.dispose();
+    _phone.dispose();
+    _location.dispose();
     _password.dispose();
     super.dispose();
   }
@@ -1296,6 +3485,8 @@ class _ProfilePageState extends State<ProfilePage> {
         email: _email.text.trim(),
         locale: _selectedLocale,
         password: _password.text,
+        phone: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
+        location: _location.text.trim().isEmpty ? null : _location.text.trim(),
       );
       widget.onLocaleChanged(Locale(profile.locale));
       if (mounted) {
@@ -1335,6 +3526,8 @@ class _ProfilePageState extends State<ProfilePage> {
             _loaded = true;
             _name.text = profile.name;
             _email.text = profile.email;
+            _phone.text = profile.phone ?? '';
+            _location.text = profile.location ?? '';
             _selectedLocale = profile.locale;
           }
 
@@ -1359,6 +3552,17 @@ class _ProfilePageState extends State<ProfilePage> {
                       value == null || !value.contains('@') ? l10n.email : null,
                 ),
                 const SizedBox(height: 16),
+                TextFormField(
+                  controller: _phone,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(labelText: l10n.phoneNumber),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _location,
+                  decoration: InputDecoration(labelText: l10n.location),
+                ),
+                const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: _selectedLocale,
                   decoration: InputDecoration(labelText: l10n.language),
@@ -1371,6 +3575,52 @@ class _ProfilePageState extends State<ProfilePage> {
                       setState(() => _selectedLocale = value);
                     }
                   },
+                ),
+                const SizedBox(height: 16),
+                // Biometric section
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l10n.enableBiometricLogin,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _biometricAvailable
+                              ? '${l10n.biometricAvailable} - ${l10n.biometricTypes}${_availableBiometrics.map((t) => _biometricService.getBiometricTypeName(t)).join(', ')}'
+                              : l10n.biometricNotAvailable,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: _biometricAvailable
+                                    ? null
+                                    : Colors.grey[600],
+                              ),
+                        ),
+                        const SizedBox(height: 12),
+                        SwitchListTile(
+                          title: Text(l10n.enableBiometricLogin),
+                          subtitle: Text(l10n.biometricLoginDescription),
+                          value: _biometricEnabled,
+                          onChanged: _biometricAvailable
+                              ? _toggleBiometric
+                              : null,
+                          secondary: Icon(
+                            _biometricAvailable
+                                ? Icons.fingerprint
+                                : Icons.fingerprint_outlined,
+                            color: _biometricAvailable
+                                ? Theme.of(context).colorScheme.primary
+                                : Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -1527,15 +3777,12 @@ class ProjectDetailPage extends StatelessWidget {
         PopupMenuButton<String>(
           onSelected: (value) async {
             if (value == 'edit') {
-              final updated = await Navigator.of(context).push<bool>(
+              await Navigator.of(context).push<bool>(
                 MaterialPageRoute(
                   builder: (_) =>
                       EditProjectPage(api: api, projectId: projectId),
                 ),
               );
-              if (updated == true && context.mounted) {
-                // Refresh will happen automatically when popping back
-              }
             } else if (value == 'delete') {
               final confirm = await showDialog<bool>(
                 context: context,
@@ -1560,9 +3807,7 @@ class ProjectDetailPage extends StatelessWidget {
                 try {
                   await api.deleteProject(projectId);
                   if (context.mounted) {
-                    Navigator.of(
-                      context,
-                    ).pop(true); // Return true to indicate deletion
+                    Navigator.of(context).pop(true);
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Project deleted')),
                     );
@@ -1748,14 +3993,91 @@ class ProjectDetailPage extends StatelessWidget {
                   trailing: boq.status == 'uploaded'
                       ? FilledButton(
                           onPressed: () async {
+                            final place = [
+                              project.country,
+                              project.district,
+                              project.location,
+                            ].where((e) => e.isNotEmpty).toList().join(', ');
                             try {
-                              final items = await api.processBoq(boq.id);
-                              if (context.mounted)
+                              final created = await api.processBoq(boq.id);
+                              if (!context.mounted) return;
+                              final items = await api.allBoqItems(boq.id);
+                              if (!context.mounted) return;
+                              if (items.isEmpty) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
-                                    content: Text('$items BOQ items created'),
+                                    content: Text('$created BOQ items created'),
                                   ),
                                 );
+                                return;
+                              }
+                              if (place.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Set a location on the project to fetch prices.',
+                                    ),
+                                  ),
+                                );
+                                return;
+                              }
+                              final progress = ValueNotifier<String>(
+                                'Preparing to fetch prices...',
+                              );
+                              final reportFuture = _priceBoqItems(
+                                api,
+                                items,
+                                place,
+                                onProgress: (done, total, description) {
+                                  progress.value =
+                                      'Fetching $done/$total: $description';
+                                },
+                              );
+                              await showDialog<void>(
+                                context: context,
+                                barrierDismissible: false,
+                                builder: (dialogContext) {
+                                  reportFuture.then((_) {
+                                    if (dialogContext.mounted) {
+                                      Navigator.of(dialogContext).pop();
+                                    }
+                                  });
+                                  return AlertDialog(
+                                    title: const Text('Generating BOQ prices'),
+                                    content: ValueListenableBuilder<String>(
+                                      valueListenable: progress,
+                                      builder: (context, value, _) => Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const CircularProgressIndicator(),
+                                          const SizedBox(width: 16),
+                                          Expanded(child: Text(value)),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
+                              final report = await reportFuture;
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    report.failedMessages.isEmpty
+                                        ? 'Generated prices for ${report.priced} items'
+                                        : 'Generated ${report.priced} of ${items.length} (${report.failedMessages.length} failed)',
+                                  ),
+                                ),
+                              );
+                              await Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => BoqItemsPage(
+                                    api: api,
+                                    boqId: boq.id,
+                                    title: boq.name,
+                                  ),
+                                ),
+                              );
                             } on ApiException catch (error) {
                               if (context.mounted)
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -1804,6 +4126,49 @@ String _formatLocation(String country, String district, String location) {
   return parts.isEmpty ? '—' : parts.join(', ');
 }
 
+class ItemPricingReport {
+  const ItemPricingReport({
+    required this.priced,
+    required this.failedMessages,
+    required this.failedItems,
+  });
+  final int priced;
+  final List<String> failedMessages;
+  final List<BoqItemSummary> failedItems;
+}
+
+Future<ItemPricingReport> _priceBoqItems(
+  ApiClient api,
+  List<BoqItemSummary> targets,
+  String location, {
+  void Function(int done, int total, String description)? onProgress,
+}) async {
+  var priced = 0;
+  final failedMessages = <String>[];
+  final failedItems = <BoqItemSummary>[];
+  for (var i = 0; i < targets.length; i++) {
+    final item = targets[i];
+    onProgress?.call(i + 1, targets.length, item.description);
+    try {
+      await api.priceItem(item.id, location);
+      priced++;
+    } on ApiException catch (error) {
+      failedMessages.add(
+        '${item.description} (${item.unit}): ${error.message}',
+      );
+      failedItems.add(item);
+    } catch (_) {
+      failedMessages.add('${item.description} (${item.unit}): failed');
+      failedItems.add(item);
+    }
+  }
+  return ItemPricingReport(
+    priced: priced,
+    failedMessages: failedMessages,
+    failedItems: failedItems,
+  );
+}
+
 extension StringCapitalize on String {
   String capitalize() =>
       isEmpty ? this : '${this[0].toUpperCase()}${substring(1)}';
@@ -1842,6 +4207,8 @@ class _EditProjectPageState extends State<EditProjectPage> {
   final _contractValue = TextEditingController();
   final _currency = TextEditingController(text: 'UGX');
   final _description = TextEditingController();
+  final _originalLanguage = TextEditingController();
+  final _reportLanguage = TextEditingController();
   String _status = 'draft';
   bool _loading = false;
   ProjectDetail? _project;
@@ -1876,6 +4243,8 @@ class _EditProjectPageState extends State<EditProjectPage> {
           _contractValue.text = project.contractValue.toString();
           _currency.text = project.currency;
           _description.text = project.description;
+          _originalLanguage.text = project.originalLanguage;
+          _reportLanguage.text = project.reportLanguage;
           _status = project.status;
         });
       }
@@ -1932,6 +4301,12 @@ class _EditProjectPageState extends State<EditProjectPage> {
         currency: _currency.text,
         description: _description.text.isEmpty ? null : _description.text,
         status: _status,
+        originalLanguage: _originalLanguage.text.isEmpty
+            ? null
+            : _originalLanguage.text,
+        reportLanguage: _reportLanguage.text.isEmpty
+            ? null
+            : _reportLanguage.text,
       );
       if (mounted) {
         Navigator.pop(context, true);
@@ -1966,60 +4341,73 @@ class _EditProjectPageState extends State<EditProjectPage> {
                   ),
                   validator: (v) => v!.isEmpty ? 'Required' : null,
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _code,
                   decoration: const InputDecoration(labelText: 'Project Code'),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _client,
                   decoration: const InputDecoration(labelText: 'Client'),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _contractor,
                   decoration: const InputDecoration(labelText: 'Contractor'),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _consultant,
                   decoration: const InputDecoration(labelText: 'Consultant'),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _quantitySurveyor,
                   decoration: const InputDecoration(
                     labelText: 'Quantity Surveyor',
                   ),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _projectManager,
                   decoration: const InputDecoration(
                     labelText: 'Project Manager',
                   ),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _siteEngineer,
                   decoration: const InputDecoration(labelText: 'Site Engineer'),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _fundingOrganisation,
                   decoration: const InputDecoration(
                     labelText: 'Funding Organisation',
                   ),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _country,
                   decoration: const InputDecoration(labelText: 'Country'),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _district,
                   decoration: const InputDecoration(labelText: 'District'),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _location,
                   decoration: const InputDecoration(labelText: 'Location'),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _projectType,
                   decoration: const InputDecoration(labelText: 'Project Type'),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _startDate,
                   decoration: const InputDecoration(
@@ -2029,6 +4417,7 @@ class _EditProjectPageState extends State<EditProjectPage> {
                   readOnly: true,
                   onTap: () => _pickDate(_startDate),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _expectedCompletionDate,
                   decoration: const InputDecoration(
@@ -2038,6 +4427,7 @@ class _EditProjectPageState extends State<EditProjectPage> {
                   readOnly: true,
                   onTap: () => _pickDate(_expectedCompletionDate),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _contractValue,
                   decoration: const InputDecoration(
@@ -2045,15 +4435,32 @@ class _EditProjectPageState extends State<EditProjectPage> {
                   ),
                   keyboardType: TextInputType.number,
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _currency,
                   decoration: const InputDecoration(labelText: 'Currency'),
                 ),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _description,
                   decoration: const InputDecoration(labelText: 'Description'),
                   maxLines: 3,
                 ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _originalLanguage,
+                  decoration: const InputDecoration(
+                    labelText: 'Original Language',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _reportLanguage,
+                  decoration: const InputDecoration(
+                    labelText: 'Report Language',
+                  ),
+                ),
+                const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   value: _status,
                   decoration: const InputDecoration(labelText: 'Status'),
@@ -2105,6 +4512,9 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
   String? _progress;
   List<Map<String, dynamic>> _history = [];
   bool _historyVisible = false;
+  bool _pricing = false;
+  List<String> _failedReport = [];
+  List<BoqItemSummary> _retryItems = [];
   _BoqItemsPageState() : _boqDetail = null;
   @override
   void initState() {
@@ -2119,7 +4529,8 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
   }
 
   Future<void> _refreshItems() async {
-    if (mounted) setState(() => _boqDetail = widget.api.boqDetail(widget.boqId));
+    if (mounted)
+      setState(() => _boqDetail = widget.api.boqDetail(widget.boqId));
   }
 
   List<BoqItemSummary> _flattenBoqItems(BoqDetail boq) {
@@ -2138,40 +4549,91 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
   }
 
   Future<void> _price() async {
-    if (_location.text.trim().isEmpty) return;
+    final location = _location.text.trim();
+    if (location.isEmpty || _pricing) return;
     setState(() {
-      _progress = 'Starting...';
+      _pricing = true;
+      _progress = 'Loading BOQ items...';
       _history = [];
       _historyVisible = false;
+      _failedReport = [];
+      _retryItems = [];
     });
     try {
-      var batch = await widget.api.startPricingBatch(
-        widget.boqId,
-        _location.text.trim(),
-      );
-      if (mounted) {
-        setState(() => _progress = '0/${batch.total} fetched (${batch.status})');
-      }
-      while (batch.status == 'queued' || batch.status == 'running') {
-        await Future<void>.delayed(const Duration(seconds: 2));
-        batch = await widget.api.pricingBatch(batch.id);
-        if (mounted)
-          setState(
-            () => _progress =
-                '${batch.processed}/${batch.total} fetched (${batch.status})',
-          );
-      }
-      if (mounted) {
-        await _refreshItems();
+      final items = await widget.api.allBoqItems(widget.boqId);
+      if (!mounted) return;
+      if (items.isEmpty) {
         setState(() {
-          _progress = 'Saved ${batch.processed} prices for ${_location.text.trim()}';
-          _historyVisible = true;
+          _pricing = false;
+          _progress = 'No BOQ items found to price';
         });
-        await _loadHistory();
+        return;
       }
+      await _runPricing(items, location);
     } on ApiException catch (error) {
       if (mounted) {
-        setState(() => _progress = error.message);
+        setState(() {
+          _pricing = false;
+          _progress = error.message;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _pricing = false;
+          _progress = 'Failed to load BOQ items';
+        });
+      }
+    }
+  }
+
+  Future<void> _runPricing(
+    List<BoqItemSummary> targets,
+    String location,
+  ) async {
+    final report = await _priceBoqItems(
+      widget.api,
+      targets,
+      location,
+      onProgress: (done, total, description) {
+        if (mounted) {
+          setState(() => _progress = 'Fetching $done/$total: $description');
+        }
+      },
+    );
+    await _refreshItems();
+    if (!mounted) return;
+    setState(() {
+      _pricing = false;
+      _failedReport = report.failedMessages;
+      _retryItems = report.failedItems;
+      _progress = report.failedMessages.isEmpty
+          ? 'Fetched prices for ${report.priced} items'
+          : 'Fetched ${report.priced} of ${targets.length} items (${report.failedMessages.length} failed)';
+      _historyVisible = true;
+    });
+    await _loadHistory();
+  }
+
+  Future<void> _retry() async {
+    if (_retryItems.isEmpty || _pricing) return;
+    final location = _location.text.trim();
+    if (location.isEmpty) return;
+    final targets = _retryItems;
+    setState(() {
+      _pricing = true;
+      _failedReport = [];
+      _retryItems = [];
+      _progress = 'Retrying ${targets.length} failed items...';
+    });
+    try {
+      await _runPricing(targets, location);
+    } on ApiException catch (error) {
+      if (mounted) {
+        setState(() {
+          _pricing = false;
+          _progress = error.message;
+        });
       }
     }
   }
@@ -2211,7 +4673,11 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
           icon: const Icon(Icons.account_tree),
           onPressed: () => Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => BoqDetailPage(api: widget.api, boqId: widget.boqId, title: widget.title),
+              builder: (_) => BoqDetailPage(
+                api: widget.api,
+                boqId: widget.boqId,
+                title: widget.title,
+              ),
             ),
           ),
           tooltip: 'View Hierarchy',
@@ -2272,7 +4738,7 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
             ),
             const SizedBox(height: 10),
             FilledButton.icon(
-              onPressed: _price,
+              onPressed: _pricing ? null : _price,
               icon: const Icon(Icons.auto_awesome),
               label: const Text('Get Prices'),
             ),
@@ -2286,12 +4752,58 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
                     const Icon(Icons.schedule),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        'Progress: $_progress',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Text(
+                          'Progress: $_progress',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
                       ),
                     ),
                   ],
+                ),
+              ),
+            if (_pricing)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: LinearProgressIndicator(),
+              ),
+            if (_failedReport.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.all(14),
+                margin: const EdgeInsets.only(top: 8),
+                color: const Color(0xFFFFEBEE),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${_failedReport.length} item(s) could not be priced:',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFB71C1C),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      for (final failure in _failedReport)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Text(
+                            '- $failure',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      if (_retryItems.isNotEmpty)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed: _pricing ? null : _retry,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Retry failed items'),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             const SizedBox(height: 16),
@@ -2480,7 +4992,9 @@ class HardwarePricesPage extends StatefulWidget {
   State<HardwarePricesPage> createState() => _HardwarePricesPageState();
 }
 
-class _HardwarePricesPageState extends State<HardwarePricesPage> {
+class _HardwarePricesPageState extends State<HardwarePricesPage>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
   int _page = 1;
   bool _loading = false;
   bool _loadingMore = false;
@@ -2493,35 +5007,48 @@ class _HardwarePricesPageState extends State<HardwarePricesPage> {
   List<String> _categories = [];
   List<String> _suppliers = [];
   List<String> _locations = [];
+  List<HardwarePriceCategory> _categoryStats = [];
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 2, vsync: this);
     _fetch();
     _fetchFilters();
   }
 
   @override
   void dispose() {
+    _tabController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
   Future<void> _fetchFilters() async {
-    try {
-      final cats = await widget.api.hardwarePriceCategories();
-      if (mounted) {
-        setState(() {
-          _categories = cats.map((c) => c.name).toList();
-        });
-      }
-    } catch (e) {
-      // Ignore filter fetch errors
+    final names = <String>{};
+    final stats = <HardwarePriceCategory>[];
+    final priceCats =
+        await _loadOrNull(widget.api.hardwarePriceCategories) ??
+        const <HardwarePriceCategory>[];
+    stats.addAll(priceCats);
+    names.addAll(priceCats.map((c) => c.name).where((n) => n.isNotEmpty));
+    final hardwareCats =
+        await _loadOrNull(widget.api.hardwareCategoriesAdmin) ??
+        const <HardwareCategory>[];
+    names.addAll(hardwareCats.map((c) => c.name).where((n) => n.isNotEmpty));
+    if (mounted) {
+      setState(() {
+        _categories = names.toList()..sort();
+        if (stats.isNotEmpty) {
+          _categoryStats = stats..sort((a, b) => a.name.compareTo(b.name));
+        }
+      });
     }
   }
 
-  Future<void> _fetch({bool loadMore = false}) async {
+  Future<void> _fetch({bool loadMore = false, int? page}) async {
     if (_loading) return;
+    final target = page ?? (loadMore ? _page + 1 : 1);
     if (loadMore) {
       setState(() => _loadingMore = true);
     } else {
@@ -2536,7 +5063,7 @@ class _HardwarePricesPageState extends State<HardwarePricesPage> {
         supplier: _selectedSupplier,
         location: _selectedLocation,
         search: _searchController.text.isEmpty ? null : _searchController.text,
-        page: loadMore ? _page + 1 : 1,
+        page: target,
         perPage: 20,
       );
       if (mounted) {
@@ -2552,7 +5079,7 @@ class _HardwarePricesPageState extends State<HardwarePricesPage> {
             _page = result.currentPage;
           } else {
             _result = result;
-            _page = 1;
+            _page = target;
           }
           _loading = false;
           _loadingMore = false;
@@ -2607,11 +5134,132 @@ class _HardwarePricesPageState extends State<HardwarePricesPage> {
     ),
     body: Column(
       children: [
-        _buildFilters(),
-        Expanded(child: _buildList()),
+        Material(
+          color: Colors.white,
+          child: TabBar(
+            controller: _tabController,
+            tabs: const [
+              Tab(text: 'All Prices'),
+              Tab(text: 'Categories'),
+            ],
+          ),
+        ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [_buildAllTab(), _buildCategoriesTab()],
+          ),
+        ),
       ],
     ),
   );
+
+  Widget _buildAllTab() => Column(
+    children: [
+      _buildFilters(),
+      Expanded(child: _buildList()),
+      if (_result != null && _result!.data.isNotEmpty) _buildPaginationFooter(),
+    ],
+  );
+
+  Widget _buildPaginationFooter() {
+    final last = _result?.lastPage ?? 1;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Colors.grey[200]!)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            'Page $_page of $last',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          Row(
+            children: [
+              if (_loadingMore)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              IconButton(
+                icon: const Icon(Icons.chevron_left),
+                tooltip: 'Previous page',
+                onPressed: _page <= 1 ? null : () => _goToPage(_page - 1),
+              ),
+              IconButton(
+                icon: const Icon(Icons.chevron_right),
+                tooltip: 'Next page',
+                onPressed: _page >= last ? null : () => _goToPage(_page + 1),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _goToPage(int page) => _fetch(page: page);
+
+  Widget _buildCategoriesTab() {
+    if (_categoryStats.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('No categories loaded'),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _fetchFilters,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Load categories'),
+            ),
+          ],
+        ),
+      );
+    }
+    final total = _categoryStats.fold<int>(0, (sum, c) => sum + c.count);
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _categoryStats.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.apps)),
+              title: const Text('All categories'),
+              subtitle: Text('$total items'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                setState(() => _selectedCategory = null);
+                _tabController.animateTo(0);
+                _fetch();
+              },
+            ),
+          );
+        }
+        final cat = _categoryStats[index - 1];
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            leading: const CircleAvatar(child: Icon(Icons.category_outlined)),
+            title: Text(cat.name),
+            subtitle: Text('${cat.count} items'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () {
+              setState(() => _selectedCategory = cat.name);
+              _tabController.animateTo(0);
+              _fetch();
+            },
+          ),
+        );
+      },
+    );
+  }
 
   Widget _buildFilters() => Container(
     padding: const EdgeInsets.all(16),
@@ -2812,6 +5460,11 @@ class _HardwarePricesPageState extends State<HardwarePricesPage> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 }
@@ -3409,11 +6062,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   }
 
   Future<void> _fetchCategories() async {
-    try {
-      final cats = await widget.api.hardwarePriceCategories();
-      if (mounted)
-        setState(() => _categories = cats.map((c) => c.name).toList());
-    } catch (_) {}
+    final cats = await _loadOrNull(widget.api.hardwarePriceCategories);
+    if (cats == null || !mounted) return;
+    setState(() => _categories = cats.map((c) => c.name).toList());
   }
 
   Future<void> _fetch() async {
@@ -3716,9 +6367,9 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
                 );
               } on ApiException catch (error) {
                 if (context.mounted)
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(error.message)),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(error.message)));
               }
             },
             tooltip: 'Export PDF',
@@ -3753,7 +6404,6 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
   }
 
   Widget _buildBoqHeader(BoqDetail boq, AppLocalizations l10n) {
-    final money = NumberFormat('#,##0.00');
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -3765,8 +6415,9 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
                 Expanded(
                   child: Text(
                     boq.name,
-                    style: Theme.of(context).textTheme.headlineSmall
-                        ?.copyWith(fontWeight: FontWeight.w700),
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
                 _statusChip(boq.status),
@@ -3774,11 +6425,12 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
             ),
             const SizedBox(height: 8),
             if (boq.code.isNotEmpty)
-              Text('Code: ${boq.code}',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(color: Colors.grey[600])),
+              Text(
+                'Code: ${boq.code}',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+              ),
             if (boq.description.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(boq.description),
@@ -3816,27 +6468,36 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
           children: [
             Text(
               'Summary',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w700),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
-            _summaryRow('Subtotal', '${boq.currency} ${money.format(grandSummary.subtotal)}'),
-            _summaryRow('VAT (18%)', '${boq.currency} ${money.format(grandSummary.vat)}'),
-            _summaryRow('Contingency (5%)',
-                '${boq.currency} ${money.format(grandSummary.contingency)}'),
+            _summaryRow(
+              'Subtotal',
+              '${boq.currency} ${money.format(grandSummary.subtotal)}',
+            ),
+            _summaryRow(
+              'VAT (18%)',
+              '${boq.currency} ${money.format(grandSummary.vat)}',
+            ),
+            _summaryRow(
+              'Contingency (5%)',
+              '${boq.currency} ${money.format(grandSummary.contingency)}',
+            ),
             const Divider(),
-            _summaryRow('Grand Total', '${boq.currency} ${money.format(grandSummary.grandTotal)}',
-                isTotal: true),
+            _summaryRow(
+              'Grand Total',
+              '${boq.currency} ${money.format(grandSummary.grandTotal)}',
+              isTotal: true,
+            ),
             if (boq.summaries.length > 1) ...[
               const SizedBox(height: 16),
               Text(
                 'Breakdown',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 8),
               ...boq.summaries
@@ -3885,8 +6546,11 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
               children: [
                 _miniSummary('Subtotal', '${money.format(summary.subtotal)}'),
                 _miniSummary('VAT', '${money.format(summary.vat)}'),
-                _miniSummary('Total', '${money.format(summary.grandTotal)}',
-                    isTotal: true),
+                _miniSummary(
+                  'Total',
+                  '${money.format(summary.grandTotal)}',
+                  isTotal: true,
+                ),
               ],
             ),
           ],
@@ -3905,10 +6569,9 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
           children: [
             Text(
               'Import Metadata',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
             if (metadata['import_sheets'] != null) ...[
@@ -3949,10 +6612,9 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
           children: [
             Text(
               'BOQ Structure',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(fontWeight: FontWeight.w700),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
             if (boq.facilities.isEmpty)
@@ -3988,7 +6650,11 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
         style: const TextStyle(fontWeight: FontWeight.w700),
       ),
       subtitle: facility.description != null
-          ? Text(facility.description!, maxLines: 1, overflow: TextOverflow.ellipsis)
+          ? Text(
+              facility.description!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            )
           : null,
       children: [
         ...facility.bills
@@ -4007,14 +6673,22 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
       initiallyExpanded: depth <= 1,
       leading: CircleAvatar(
         backgroundColor: const Color(0xFF047857).withValues(alpha: 0.12),
-        child: const Icon(Icons.receipt_long, color: Color(0xFF047857), size: 18),
+        child: const Icon(
+          Icons.receipt_long,
+          color: Color(0xFF047857),
+          size: 18,
+        ),
       ),
       title: Text(
         _localizedName(bill.name, bill.nameTranslations),
         style: const TextStyle(fontWeight: FontWeight.w600),
       ),
       subtitle: bill.description != null
-          ? Text(bill.description!, maxLines: 1, overflow: TextOverflow.ellipsis)
+          ? Text(
+              bill.description!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            )
           : null,
       children: [
         ...bill.elements
@@ -4040,7 +6714,11 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
         style: const TextStyle(fontWeight: FontWeight.w600),
       ),
       subtitle: element.description != null
-          ? Text(element.description!, maxLines: 1, overflow: TextOverflow.ellipsis)
+          ? Text(
+              element.description!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            )
           : null,
       children: [
         if (element.items.isNotEmpty)
@@ -4058,14 +6736,22 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
       initiallyExpanded: false,
       leading: CircleAvatar(
         backgroundColor: const Color(0xFF7C3AED).withValues(alpha: 0.12),
-        child: const Icon(Icons.subdirectory_arrow_right, color: Color(0xFF7C3AED), size: 18),
+        child: const Icon(
+          Icons.subdirectory_arrow_right,
+          color: Color(0xFF7C3AED),
+          size: 18,
+        ),
       ),
       title: Text(
         _localizedName(subElement.name, subElement.nameTranslations),
         style: const TextStyle(fontWeight: FontWeight.w600),
       ),
       subtitle: subElement.description != null
-          ? Text(subElement.description!, maxLines: 1, overflow: TextOverflow.ellipsis)
+          ? Text(
+              subElement.description!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            )
           : null,
       children: subElement.items.map((item) => _buildItemTile(item)).toList(),
     );
@@ -4075,7 +6761,11 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
     return ListTile(
       dense: true,
       contentPadding: const EdgeInsets.only(left: 72, right: 16),
-      leading: const Icon(Icons.format_list_numbered, size: 18, color: Colors.grey),
+      leading: const Icon(
+        Icons.format_list_numbered,
+        size: 18,
+        color: Colors.grey,
+      ),
       title: Text(
         item.description,
         style: const TextStyle(fontWeight: FontWeight.w500),
@@ -4118,7 +6808,10 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
       ),
       trailing: Text(
         '${money.format(summary.grandTotal)}',
-        style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF047857)),
+        style: const TextStyle(
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF047857),
+        ),
       ),
     );
   }
@@ -4257,7 +6950,6 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(title: const Text('BOQ Item Details')),
       body: FutureBuilder<BoqItemDetail>(
@@ -4284,16 +6976,20 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
                       ),
                       const SizedBox(height: 8),
                       if (item.code.isNotEmpty)
-                        Text('Code: ${item.code}',
-                            style: TextStyle(color: Colors.grey[600])),
+                        Text(
+                          'Code: ${item.code}',
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
                       const SizedBox(height: 16),
                       _detailRow('Quantity', '${item.quantity} ${item.unit}'),
                       _detailRow('Amount', item.amount),
                       if (item.originalRate != null)
                         _detailRow('Original Rate', '${item.originalRate}'),
                       if (item.aiSuggestedRate != null)
-                        _detailRow('AI Suggested Rate',
-                            '${item.aiSuggestedRate} (confidence: ${item.aiConfidence?.toStringAsFixed(0)}%)'),
+                        _detailRow(
+                          'AI Suggested Rate',
+                          '${item.aiSuggestedRate} (confidence: ${item.aiConfidence?.toStringAsFixed(0)}%)',
+                        ),
                       if (item.approvedRate != null)
                         _detailRow('Approved Rate', '${item.approvedRate}'),
                       _detailRow('Status', item.status!.capitalize()),
@@ -4309,7 +7005,10 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
                         _detailRow('Pricing Date', item.pricingDate!),
                       if (item.notes != null && item.notes!.isNotEmpty) ...[
                         const SizedBox(height: 8),
-                        Text('Notes', style: Theme.of(context).textTheme.labelLarge),
+                        Text(
+                          'Notes',
+                          style: Theme.of(context).textTheme.labelLarge,
+                        ),
                         const SizedBox(height: 4),
                         Text(item.notes!),
                       ],
@@ -4331,7 +7030,9 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 12),
-                        ...item.translations.map((t) => _translationTile(t)).toList(),
+                        ...item.translations
+                            .map((t) => _translationTile(t))
+                            .toList(),
                       ],
                     ),
                   ),
@@ -4350,18 +7051,22 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: Colors.blue[50],
-          child: Text(t.locale.toUpperCase(),
-              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
+          child: Text(
+            t.locale.toUpperCase(),
+            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+          ),
         ),
         title: Text(t.translatedDescription),
         subtitle: Text(
           'Provider: ${t.provider ?? 'unknown'}  |  Confidence: ${t.confidence?.toStringAsFixed(0) ?? 'N/A'}%',
         ),
-        trailing: Text(t.status!.capitalize(),
-            style: TextStyle(
-              color: t.status == 'accepted' ? Colors.green : Colors.orange,
-              fontWeight: FontWeight.w600,
-            )),
+        trailing: Text(
+          t.status!.capitalize(),
+          style: TextStyle(
+            color: t.status == 'accepted' ? Colors.green : Colors.orange,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
     );
   }
@@ -4384,6 +7089,448 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
           ),
           Expanded(child: Text(value)),
         ],
+      ),
+    );
+  }
+}
+
+class ProxySubscriptionListPage extends StatefulWidget {
+  const ProxySubscriptionListPage({super.key, required this.api});
+
+  final ApiClient api;
+
+  @override
+  State<ProxySubscriptionListPage> createState() =>
+      _ProxySubscriptionListPageState();
+}
+
+class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
+  late Future<List<ProxySubscription>> _subscriptions;
+  final _searchController = TextEditingController();
+  String _statusFilter = 'all';
+  bool _isAdmin = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSubscriptions();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _refresh() => setState(_loadSubscriptions);
+
+  void _loadSubscriptions() {
+    final future = widget.api.listProxySubscriptions();
+    _subscriptions = future;
+    future.then(
+      (_) {
+        if (mounted && !_isAdmin) setState(() => _isAdmin = true);
+      },
+      onError: (Object e) {
+        if (e is! ApiException || !mounted) return;
+        final message = e.message.toLowerCase();
+        final denied =
+            message.contains('unauthorized') ||
+            message.contains('forbidden') ||
+            message.contains('admin');
+        if (denied) setState(() => _isAdmin = false);
+      },
+    );
+  }
+
+  List<ProxySubscription> _filterSubscriptions(
+    List<ProxySubscription> subscriptions,
+  ) {
+    final query = _searchController.text.toLowerCase().trim();
+    return subscriptions.where((sub) {
+      final matchesSearch =
+          query.isEmpty ||
+          sub.beneficiaryName.toLowerCase().contains(query) ||
+          sub.beneficiaryEmail.toLowerCase().contains(query) ||
+          sub.planName.toLowerCase().contains(query) ||
+          sub.payerName.toLowerCase().contains(query);
+      final matchesStatus =
+          _statusFilter == 'all' || sub.status == _statusFilter;
+      return matchesSearch && matchesStatus;
+    }).toList();
+  }
+
+  String _formatDate(String dateStr) {
+    try {
+      final dt = DateTime.parse(dateStr);
+      return '${dt.day}/${dt.month}/${dt.year}';
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'active':
+        return const Color(0xFF047857);
+      case 'pending':
+        return const Color(0xFFB45309);
+      case 'cancelled':
+        return const Color(0xFFBE123C);
+      case 'expired':
+        return Colors.grey;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    if (!_isAdmin) {
+      return Scaffold(
+        appBar: AppBar(title: Text(l10n.proxySubscriptions)),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.lock_outline, size: 48, color: Colors.grey),
+                const SizedBox(height: 16),
+                Text(
+                  l10n.adminAccessRequired,
+                  style: Theme.of(context).textTheme.titleMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  l10n.adminAccessDescription,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l10n.proxySubscriptions),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _refresh,
+            tooltip: l10n.refresh,
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          _buildFilters(l10n),
+          Expanded(
+            child: FutureBuilder<List<ProxySubscription>>(
+              future: _subscriptions,
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.error_outline,
+                            size: 48,
+                            color: Colors.red,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(snapshot.error.toString()),
+                          const SizedBox(height: 16),
+                          FilledButton(
+                            onPressed: _refresh,
+                            child: Text(l10n.retry),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final filtered = _filterSubscriptions(snapshot.data!);
+                if (filtered.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.assignment_outlined,
+                          size: 48,
+                          color: Colors.grey[400],
+                        ),
+                        const SizedBox(height: 16),
+                        Text(l10n.noProxySubscriptions),
+                        const SizedBox(height: 8),
+                        Text(
+                          l10n.noProxySubscriptionsDescription,
+                          style: TextStyle(color: Colors.grey[600]),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return RefreshIndicator(
+                  onRefresh: () async {
+                    _refresh();
+                    await _subscriptions.catchError((_) => <ProxySubscription>[]);
+                  },
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: filtered.length,
+                    itemBuilder: (context, index) {
+                      final sub = filtered[index];
+                      return _ProxySubscriptionCard(
+                        subscription: sub,
+                        onTap: () => _showDetails(sub),
+                        statusColor: _statusColor(sub.status),
+                        formatDate: _formatDate,
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilters(AppLocalizations l10n) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+      ),
+      child: Column(
+        children: [
+          TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              labelText: l10n.search,
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() {});
+                      },
+                    )
+                  : null,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            value: _statusFilter,
+            decoration: InputDecoration(
+              labelText: l10n.status,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              isDense: true,
+            ),
+            items: [
+              DropdownMenuItem(value: 'all', child: Text(l10n.allStatuses)),
+              DropdownMenuItem(value: 'active', child: Text(l10n.statusActive)),
+              DropdownMenuItem(
+                value: 'pending',
+                child: Text(l10n.statusPending),
+              ),
+              DropdownMenuItem(
+                value: 'cancelled',
+                child: Text(l10n.statusCancelled),
+              ),
+              DropdownMenuItem(
+                value: 'expired',
+                child: Text(l10n.statusExpired),
+              ),
+            ],
+            onChanged: (value) =>
+                setState(() => _statusFilter = value ?? 'all'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDetails(ProxySubscription sub) {
+    final l10n = AppLocalizations.of(context)!;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => Container(
+          padding: const EdgeInsets.all(20),
+          child: ListView(
+            controller: scrollController,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                l10n.proxySubscriptionDetails,
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 20),
+              _detailRow(l10n.beneficiary, sub.beneficiaryName),
+              _detailRow(l10n.beneficiaryEmail, sub.beneficiaryEmail),
+              _detailRow(l10n.plan, sub.planName),
+              _detailRow(l10n.payer, sub.payerName),
+              _detailRow(l10n.status, sub.status.capitalize()),
+              _detailRow(l10n.paymentStatus, sub.paymentStatus.capitalize()),
+              _detailRow(l10n.startDate, _formatDate(sub.startDate)),
+              _detailRow(l10n.endDate, _formatDate(sub.endDate)),
+              _detailRow(l10n.createdAt, _formatDate(sub.createdAt)),
+              if (sub.transactionId.isNotEmpty)
+                _detailRow(l10n.transactionId, sub.transactionId),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProxySubscriptionCard extends StatelessWidget {
+  const _ProxySubscriptionCard({
+    required this.subscription,
+    required this.onTap,
+    required this.statusColor,
+    required this.formatDate,
+  });
+
+  final ProxySubscription subscription;
+  final VoidCallback onTap;
+  final Color statusColor;
+  final String Function(String) formatDate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      subscription.beneficiaryName,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      subscription.status.capitalize(),
+                      style: TextStyle(
+                        color: statusColor,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subscription.beneficiaryEmail,
+                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  Chip(
+                    label: Text(subscription.planName),
+                    backgroundColor: Colors.blue[50],
+                  ),
+                  Chip(
+                    label: Text(subscription.payerName),
+                    backgroundColor: Colors.green[50],
+                  ),
+                  Chip(
+                    label: Text('${subscription.paymentStatus.capitalize()}'),
+                    backgroundColor: subscription.paymentStatus == 'paid'
+                        ? Colors.green[50]
+                        : Colors.orange[50],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(Icons.calendar_today, size: 14, color: Colors.grey[500]),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${formatDate(subscription.createdAt)}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                  const Spacer(),
+                  if (subscription.transactionId.isNotEmpty)
+                    Text(
+                      subscription.transactionId,
+                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

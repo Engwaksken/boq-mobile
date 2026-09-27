@@ -24,6 +24,6 @@ void main() {
     );
 
     expect(find.text('Yingira'), findsOneWidget);
-    expect(find.text('Endagiriro ya email'), findsOneWidget);
+    expect(find.text('Endagiriro ya email'), findsWidgets);
   });
 }
