@@ -6,6 +6,8 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'theme/app_theme.dart';
+
 /// Shows a "No Internet Connection" screen whenever the device is offline and
 /// puts the app back automatically once Wi-Fi or mobile data returns.
 ///
@@ -65,8 +67,9 @@ class _ConnectivityGateState extends State<ConnectivityGate>
     var online = false;
     try {
       final results = await _connectivity.checkConnectivity();
-      final hasNetwork =
-          results.any((result) => result != ConnectivityResult.none);
+      final hasNetwork = results.any(
+        (result) => result != ConnectivityResult.none,
+      );
       online = hasNetwork && await (widget.hostLookup ?? _canReachInternet)();
     } on Object {
       online = false;
@@ -82,8 +85,9 @@ class _ConnectivityGateState extends State<ConnectivityGate>
   static Future<bool> _canReachInternet() async {
     if (kIsWeb) return true;
     try {
-      final result = await InternetAddress.lookup('boq.kemmytech.com')
-          .timeout(const Duration(seconds: 6));
+      final result = await InternetAddress.lookup(
+        'boq.kemmytech.com',
+      ).timeout(const Duration(seconds: 6));
       return result.isNotEmpty && result.first.rawAddress.isNotEmpty;
     } on Object {
       return false;
@@ -128,83 +132,122 @@ class NoInternetScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final isAndroid = !kIsWeb && Platform.isAndroid;
+    const buttonSize = Size.fromHeight(AppSizes.buttonHeight);
 
     return Material(
       color: theme.scaffoldBackgroundColor,
       child: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CircleAvatar(
-                  radius: 44,
-                  backgroundColor: theme.colorScheme.primary.withValues(alpha: .1),
-                  child: Icon(
-                    Icons.wifi_off_rounded,
-                    size: 44,
-                    color: theme.colorScheme.primary,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.xxl,
+              vertical: AppSpacing.xxxl,
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 128,
+                    height: 128,
+                    decoration: BoxDecoration(
+                      color: scheme.primary.withValues(alpha: 0.06),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Container(
+                      width: 92,
+                      height: 92,
+                      decoration: BoxDecoration(
+                        color: scheme.primaryContainer,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.wifi_off_rounded,
+                        size: 44,
+                        color: scheme.primary,
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  'No Internet Connection',
-                  style: theme.textTheme.headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.w700),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Please connect to Wi-Fi or mobile data to continue.',
-                  style: theme.textTheme.bodyMedium,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 28),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
+                  const SizedBox(height: AppSpacing.xxl),
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      'No Internet Connection',
+                      style: theme.textTheme.headlineSmall,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Please connect to Wi-Fi or mobile data to continue.',
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: AppSpacing.xxxl),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(minimumSize: buttonSize),
                     onPressed: checking ? null : onRetry,
                     icon: checking
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 18,
                             height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: scheme.onSurface.withValues(alpha: 0.6),
+                            ),
                           )
-                        : const Icon(Icons.refresh),
+                        : const Icon(Icons.refresh_rounded),
                     label: Text(checking ? 'Checking...' : 'Retry'),
                   ),
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
+                  const SizedBox(height: AppSpacing.md),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(minimumSize: buttonSize),
                     onPressed: () => _open(AppSettingsType.wifi),
-                    icon: const Icon(Icons.wifi),
+                    icon: const Icon(Icons.wifi_rounded),
                     label: const Text('Open Wi-Fi Settings'),
                   ),
-                ),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
+                  const SizedBox(height: AppSpacing.md),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(minimumSize: buttonSize),
                     onPressed: () => _open(
-                      isAndroid ? AppSettingsType.dataRoaming : AppSettingsType.settings,
+                      isAndroid
+                          ? AppSettingsType.dataRoaming
+                          : AppSettingsType.settings,
                     ),
-                    icon: const Icon(Icons.signal_cellular_alt),
+                    icon: const Icon(Icons.signal_cellular_alt_rounded),
                     label: Text(
-                      isAndroid ? 'Open Mobile Data Settings' : 'Open Network Settings',
+                      isAndroid
+                          ? 'Open Mobile Data Settings'
+                          : 'Open Network Settings',
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'The app continues automatically once you are back online.',
-                  style: theme.textTheme.bodySmall,
-                  textAlign: TextAlign.center,
-                ),
-              ],
+                  const SizedBox(height: AppSpacing.xl),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.info_outline_rounded,
+                        size: 16,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: AppSpacing.xs + 2),
+                      Flexible(
+                        child: Text(
+                          'The app continues automatically once you are back online.',
+                          style: theme.textTheme.bodySmall,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),

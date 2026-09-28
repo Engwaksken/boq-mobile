@@ -82,132 +82,213 @@ class _NotificationsPageState extends State<NotificationsPage> {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.notifications)),
-      body: FutureBuilder<List<NotificationItem>>(
-        future: _notifications,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  friendlyError(snapshot.error),
-                  textAlign: TextAlign.center,
+      body: RefreshIndicator(
+        onRefresh: () => _loadNotifications(),
+        child: FutureBuilder<List<NotificationItem>>(
+          future: _notifications,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const SkeletonList();
+            }
+            if (snapshot.hasError) {
+              return _fillScrollable(
+                ErrorState(
+                  error: snapshot.error,
+                  onRetry: () => _loadNotifications(),
+                  compact: true,
                 ),
-              ),
-            );
-          }
-          final notifications = snapshot.data ?? [];
-          if (notifications.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.notifications_none,
-                    size: 64,
-                    color: Colors.grey[400],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    l10n.noNotifications,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ],
-              ),
-            );
-          }
-          return NotificationListener<ScrollNotification>(
-            onNotification: (notification) {
-              if (notification.metrics.pixels >=
-                      notification.metrics.maxScrollExtent - 200 &&
-                  !_loadingMore &&
-                  _hasMore) {
-                _loadNotifications(loadMore: true);
-              }
-              return false;
-            },
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: notifications.length + (_loadingMore ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index >= notifications.length) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: CircularProgressIndicator(),
-                    ),
-                  );
+              );
+            }
+            final notifications = snapshot.data ?? [];
+            if (notifications.isEmpty) {
+              return _fillScrollable(
+                EmptyState(
+                  icon: Icons.notifications_none_rounded,
+                  title: l10n.noNotifications,
+                  compact: true,
+                ),
+              );
+            }
+            return NotificationListener<ScrollNotification>(
+              onNotification: (notification) {
+                if (notification.metrics.pixels >=
+                        notification.metrics.maxScrollExtent - 200 &&
+                    !_loadingMore &&
+                    _hasMore) {
+                  _loadNotifications(loadMore: true);
                 }
-                final notification = notifications[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  color: notification.isRead
-                      ? null
-                      : Theme.of(
-                          context,
-                        ).colorScheme.primaryContainer.withValues(alpha: 0.3),
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: notification.isRead
-                          ? Colors.grey[300]
-                          : Theme.of(context).colorScheme.primary,
-                      child: Icon(
-                        _iconForType(notification.type),
-                        color: notification.isRead
-                            ? Colors.grey[600]
-                            : Colors.white,
-                      ),
-                    ),
-                    title: Text(
-                      notification.title,
-                      style: TextStyle(
-                        fontWeight: notification.isRead
-                            ? FontWeight.w400
-                            : FontWeight.w700,
-                      ),
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(notification.message),
-                        const SizedBox(height: 4),
-                        Text(
-                          _formatDate(notification.createdAt),
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: Colors.grey[600]),
-                        ),
-                      ],
-                    ),
-                    trailing: !notification.isRead
-                        ? TextButton(
-                            onPressed: () => _markAsRead(notification),
-                            child: Text(l10n.markAsRead),
-                          )
-                        : null,
-                    onTap: () => _markAsRead(notification),
-                  ),
-                );
+                return false;
               },
-            ),
-          );
-        },
+              child: ListView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: AppSpacing.page,
+                itemCount: notifications.length + (_loadingMore ? 1 : 0),
+                itemBuilder: (context, index) {
+                  if (index >= notifications.length) {
+                    return const Padding(
+                      padding: EdgeInsets.all(AppSpacing.lg),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  final notification = notifications[index];
+                  return ContentWidth(
+                    child: _buildNotificationRow(context, l10n, notification),
+                  );
+                },
+              ),
+            );
+          },
+        ),
       ),
     );
+  }
+
+  /// Centres a compact state inside a scrollable so pull-to-refresh works.
+  Widget _fillScrollable(Widget child) {
+    return LayoutBuilder(
+      builder: (context, constraints) => ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: AppSpacing.page,
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight * 0.7),
+            child: Center(child: child),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotificationRow(
+    BuildContext context,
+    AppLocalizations l10n,
+    NotificationItem notification,
+  ) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final unread = !notification.isRead;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.itemGap),
+      child: Card(
+        color: unread ? scheme.primaryContainer.withValues(alpha: 0.35) : null,
+        child: InkWell(
+          onTap: () => _markAsRead(notification),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.md + 2,
+              AppSpacing.sm,
+              AppSpacing.md + 2,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                IconTile(
+                  icon: _iconForType(notification.type),
+                  tone: _toneForType(notification.type),
+                ),
+                const SizedBox(width: AppSpacing.md + 2),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              notification.title,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: unread
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          if (unread) ...[
+                            const SizedBox(width: AppSpacing.sm),
+                            Semantics(
+                              label: 'Unread',
+                              child: Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: scheme.primary,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        notification.message,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.schedule_rounded,
+                            size: 14,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: AppSpacing.xs),
+                          Expanded(
+                            child: Text(
+                              _formatDate(notification.createdAt),
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ),
+                          if (unread)
+                            TextButton.icon(
+                              onPressed: () => _markAsRead(notification),
+                              icon: const Icon(
+                                Icons.done_all_rounded,
+                                size: 18,
+                              ),
+                              label: Text(l10n.markAsRead),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  StatusTone _toneForType(String type) {
+    switch (type) {
+      case 'success':
+        return StatusTone.success;
+      case 'warning':
+        return StatusTone.warning;
+      case 'error':
+        return StatusTone.danger;
+      default:
+        return StatusTone.info;
+    }
   }
 
   IconData _iconForType(String type) {
     switch (type) {
       case 'success':
-        return Icons.check_circle;
+        return Icons.check_circle_outline_rounded;
       case 'warning':
-        return Icons.warning;
+        return Icons.warning_amber_rounded;
       case 'error':
-        return Icons.error;
+        return Icons.error_outline_rounded;
       default:
-        return Icons.info;
+        return Icons.info_outline_rounded;
     }
   }
 

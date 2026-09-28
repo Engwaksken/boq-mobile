@@ -75,19 +75,25 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
     }
   }
 
-  Color _statusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'active':
-        return const Color(0xFF047857);
-      case 'pending':
-        return const Color(0xFFB45309);
-      case 'cancelled':
-        return const Color(0xFFBE123C);
-      case 'expired':
-        return Colors.grey;
-      default:
-        return Colors.grey;
-    }
+  Future<void> _onPullToRefresh() async {
+    _refresh();
+    await _subscriptions.catchError((_) => <ProxySubscription>[]);
+  }
+
+  /// Centres a compact state inside a scrollable so pull-to-refresh works.
+  Widget _fillScrollable(Widget child) {
+    return LayoutBuilder(
+      builder: (context, constraints) => ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: AppSpacing.page,
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight * 0.7),
+            child: Center(child: child),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -97,30 +103,10 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
     if (!_isAdmin) {
       return Scaffold(
         appBar: AppBar(title: Text(l10n.proxySubscriptions)),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.lock_outline, size: 48, color: Colors.grey),
-                const SizedBox(height: 16),
-                Text(
-                  l10n.adminAccessRequired,
-                  style: Theme.of(context).textTheme.titleMedium,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  l10n.adminAccessDescription,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
+        body: EmptyState(
+          icon: Icons.lock_outline_rounded,
+          title: l10n.adminAccessRequired,
+          message: l10n.adminAccessDescription,
         ),
       );
     }
@@ -144,72 +130,48 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
               future: _subscriptions,
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.error_outline,
-                            size: 48,
-                            color: Colors.red,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(friendlyError(snapshot.error)),
-                          const SizedBox(height: 16),
-                          FilledButton(
-                            onPressed: _refresh,
-                            child: Text(l10n.retry),
-                          ),
-                        ],
+                  return RefreshIndicator(
+                    onRefresh: _onPullToRefresh,
+                    child: _fillScrollable(
+                      ErrorState(
+                        error: snapshot.error,
+                        onRetry: _refresh,
+                        compact: true,
                       ),
                     ),
                   );
                 }
                 if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const SkeletonList();
                 }
                 final filtered = _filterSubscriptions(snapshot.data!);
                 if (filtered.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.assignment_outlined,
-                          size: 48,
-                          color: Colors.grey[400],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(l10n.noProxySubscriptions),
-                        const SizedBox(height: 8),
-                        Text(
-                          l10n.noProxySubscriptionsDescription,
-                          style: TextStyle(color: Colors.grey[600]),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
+                  return RefreshIndicator(
+                    onRefresh: _onPullToRefresh,
+                    child: _fillScrollable(
+                      EmptyState(
+                        icon: Icons.assignment_outlined,
+                        title: l10n.noProxySubscriptions,
+                        message: l10n.noProxySubscriptionsDescription,
+                        compact: true,
+                      ),
                     ),
                   );
                 }
                 return RefreshIndicator(
-                  onRefresh: () async {
-                    _refresh();
-                    await _subscriptions.catchError(
-                      (_) => <ProxySubscription>[],
-                    );
-                  },
+                  onRefresh: _onPullToRefresh,
                   child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: AppSpacing.page,
                     itemCount: filtered.length,
                     itemBuilder: (context, index) {
                       final sub = filtered[index];
-                      return _ProxySubscriptionCard(
-                        subscription: sub,
-                        onTap: () => _showDetails(sub),
-                        statusColor: _statusColor(sub.status),
-                        formatDate: _formatDate,
+                      return ContentWidth(
+                        child: _ProxySubscriptionCard(
+                          subscription: sub,
+                          onTap: () => _showDetails(sub),
+                          formatDate: _formatDate,
+                        ),
                       );
                     },
                   ),
@@ -223,65 +185,73 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
   }
 
   Widget _buildFilters(AppLocalizations l10n) {
+    final scheme = Theme.of(context).colorScheme;
+    final statuses = <(String, String)>[
+      ('all', l10n.allStatuses),
+      ('active', l10n.statusActive),
+      ('pending', l10n.statusPending),
+      ('cancelled', l10n.statusCancelled),
+      ('expired', l10n.statusExpired),
+    ];
+
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+        color: scheme.surface,
+        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
       ),
-      child: Column(
-        children: [
-          TextField(
-            controller: _searchController,
-            decoration: InputDecoration(
-              labelText: l10n.search,
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: _searchController.text.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _searchController.clear();
-                        setState(() {});
-                      },
-                    )
-                  : null,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.md,
+        AppSpacing.lg,
+        AppSpacing.md,
+      ),
+      child: ContentWidth(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _searchController,
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                labelText: l10n.search,
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        tooltip: 'Clear search',
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {});
+                        },
+                      )
+                    : null,
+                isDense: true,
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Semantics(
+              label: l10n.status,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final (value, label) in statuses)
+                      Padding(
+                        padding: const EdgeInsets.only(right: AppSpacing.sm),
+                        child: ChoiceChip(
+                          label: Text(label),
+                          selected: _statusFilter == value,
+                          onSelected: (_) =>
+                              setState(() => _statusFilter = value),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            key: ValueKey('status-$_statusFilter'),
-            initialValue: _statusFilter,
-            decoration: InputDecoration(
-              labelText: l10n.status,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              isDense: true,
-            ),
-            items: [
-              DropdownMenuItem(value: 'all', child: Text(l10n.allStatuses)),
-              DropdownMenuItem(value: 'active', child: Text(l10n.statusActive)),
-              DropdownMenuItem(
-                value: 'pending',
-                child: Text(l10n.statusPending),
-              ),
-              DropdownMenuItem(
-                value: 'cancelled',
-                child: Text(l10n.statusCancelled),
-              ),
-              DropdownMenuItem(
-                value: 'expired',
-                child: Text(l10n.statusExpired),
-              ),
-            ],
-            onChanged: (value) =>
-                setState(() => _statusFilter = value ?? 'all'),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -291,48 +261,93 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       builder: (context) => DraggableScrollableSheet(
         initialChildSize: 0.6,
         minChildSize: 0.4,
         maxChildSize: 0.9,
         expand: false,
-        builder: (context, scrollController) => Container(
-          padding: const EdgeInsets.all(20),
-          child: ListView(
+        builder: (context, scrollController) {
+          final theme = Theme.of(context);
+          return ListView(
             controller: scrollController,
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.xl,
+              0,
+              AppSpacing.xl,
+              AppSpacing.xxl,
+            ),
             children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
               Text(
                 l10n.proxySubscriptionDetails,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: theme.textTheme.headlineSmall,
               ),
-              const SizedBox(height: 20),
-              _detailRow(l10n.beneficiary, sub.beneficiaryName),
-              _detailRow(l10n.beneficiaryEmail, sub.beneficiaryEmail),
-              _detailRow(l10n.plan, sub.planName),
-              _detailRow(l10n.payer, sub.payerName),
-              _detailRow(l10n.status, sub.status.capitalize()),
-              _detailRow(l10n.paymentStatus, sub.paymentStatus.capitalize()),
-              _detailRow(l10n.startDate, _formatDate(sub.startDate)),
-              _detailRow(l10n.endDate, _formatDate(sub.endDate)),
-              _detailRow(l10n.createdAt, _formatDate(sub.createdAt)),
-              if (sub.transactionId.isNotEmpty)
-                _detailRow(l10n.transactionId, sub.transactionId),
+              const SizedBox(height: AppSpacing.lg),
+              Row(
+                children: [
+                  const IconTile(icon: Icons.card_membership_outlined),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          sub.beneficiaryName,
+                          style: theme.textTheme.titleMedium,
+                        ),
+                        if (sub.beneficiaryEmail.isNotEmpty)
+                          Text(
+                            sub.beneficiaryEmail,
+                            style: theme.textTheme.bodySmall,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
+                children: [
+                  StatusBadge(
+                    label: sub.status.capitalize(),
+                    tone: StatusTone.forStatus(sub.status),
+                  ),
+                  StatusBadge(
+                    label: sub.paymentStatus.capitalize(),
+                    tone: StatusTone.forStatus(sub.paymentStatus),
+                    icon: Icons.payments_outlined,
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              SectionCard(
+                children: [
+                  _detailRow(l10n.beneficiary, sub.beneficiaryName),
+                  _detailRow(l10n.beneficiaryEmail, sub.beneficiaryEmail),
+                  _detailRow(l10n.plan, sub.planName),
+                  _detailRow(l10n.payer, sub.payerName),
+                  _detailRow(l10n.status, sub.status.capitalize()),
+                  _detailRow(
+                    l10n.paymentStatus,
+                    sub.paymentStatus.capitalize(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              SectionCard(
+                children: [
+                  _detailRow(l10n.startDate, _formatDate(sub.startDate)),
+                  _detailRow(l10n.endDate, _formatDate(sub.endDate)),
+                  _detailRow(l10n.createdAt, _formatDate(sub.createdAt)),
+                  if (sub.transactionId.isNotEmpty)
+                    _detailRow(l10n.transactionId, sub.transactionId),
+                ],
+              ),
             ],
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -342,104 +357,83 @@ class _ProxySubscriptionCard extends StatelessWidget {
   const _ProxySubscriptionCard({
     required this.subscription,
     required this.onTap,
-    required this.statusColor,
     required this.formatDate,
   });
 
   final ProxySubscription subscription;
   final VoidCallback onTap;
-  final Color statusColor;
   final String Function(String) formatDate;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+
+    Widget meta(IconData icon, String text) => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: muted),
+        const SizedBox(width: AppSpacing.xs),
+        Flexible(
+          child: Text(
+            text,
+            style: theme.textTheme.bodySmall,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+
+    return ListItemCard(
+      title: subscription.beneficiaryName,
+      subtitle: subscription.beneficiaryEmail,
+      leading: const IconTile(icon: Icons.card_membership_outlined),
+      trailing: StatusBadge(
+        label: subscription.status.capitalize(),
+        tone: StatusTone.forStatus(subscription.status),
+      ),
+      showChevron: false,
+      onTap: onTap,
+      footer: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: AppSpacing.lg,
+            runSpacing: AppSpacing.sm,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      subscription.beneficiaryName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      subscription.status.capitalize(),
-                      style: TextStyle(
-                        color: statusColor,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subscription.beneficiaryEmail,
-                style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  Chip(
-                    label: Text(subscription.planName),
-                    backgroundColor: Colors.blue[50],
-                  ),
-                  Chip(
-                    label: Text(subscription.payerName),
-                    backgroundColor: Colors.green[50],
-                  ),
-                  Chip(
-                    label: Text(subscription.paymentStatus.capitalize()),
-                    backgroundColor: subscription.paymentStatus == 'paid'
-                        ? Colors.green[50]
-                        : Colors.orange[50],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Icon(Icons.calendar_today, size: 14, color: Colors.grey[500]),
-                  const SizedBox(width: 4),
-                  Text(
-                    formatDate(subscription.createdAt),
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
-                  const Spacer(),
-                  if (subscription.transactionId.isNotEmpty)
-                    Text(
-                      subscription.transactionId,
-                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-                    ),
-                ],
+              meta(Icons.workspace_premium_outlined, subscription.planName),
+              meta(Icons.person_outline, subscription.payerName),
+              StatusBadge(
+                label: subscription.paymentStatus.capitalize(),
+                tone: StatusTone.forStatus(subscription.paymentStatus),
+                icon: Icons.payments_outlined,
               ),
             ],
           ),
-        ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              Expanded(
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: meta(
+                    Icons.calendar_today_outlined,
+                    formatDate(subscription.createdAt),
+                  ),
+                ),
+              ),
+              if (subscription.transactionId.isNotEmpty)
+                Flexible(
+                  child: Text(
+                    subscription.transactionId,
+                    style: theme.textTheme.labelSmall?.copyWith(color: muted),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }
