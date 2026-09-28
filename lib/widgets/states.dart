@@ -47,7 +47,9 @@ class EmptyState extends StatelessWidget {
         Text(
           title,
           textAlign: TextAlign.center,
-          style: compact ? theme.textTheme.titleSmall : theme.textTheme.titleMedium,
+          style: compact
+              ? theme.textTheme.titleSmall
+              : theme.textTheme.titleMedium,
         ),
         if (message != null && message!.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.xs + 2),
@@ -211,8 +213,9 @@ class SkeletonBox extends StatelessWidget {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest
-            .withValues(alpha: 0.7),
+        color: Theme.of(
+          context,
+        ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(radius),
       ),
     );
@@ -257,7 +260,8 @@ class _SkeletonListState extends State<SkeletonList>
           physics: const NeverScrollableScrollPhysics(),
           padding: widget.padding,
           itemCount: widget.itemCount,
-          separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.itemGap),
+          separatorBuilder: (_, _) =>
+              const SizedBox(height: AppSpacing.itemGap),
           itemBuilder: (context, _) => const Card(
             child: Padding(
               padding: AppSpacing.card,
