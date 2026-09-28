@@ -125,86 +125,115 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
   Timer? _debounce;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Text(widget.l10n.hardwarePrices),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.refresh),
-          onPressed: () => _fetch(),
-          tooltip: 'Refresh',
-        ),
-        PopupMenuButton<String>(
-          onSelected: (value) {
-            if (value == 'fetch') _fetchNow();
-          },
-          itemBuilder: (_) => [
-            const PopupMenuItem(
-              value: 'fetch',
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    // The home shell's AppBar already shows the page title, so this page only
+    // carries a compact tab strip with its actions.
+    return Scaffold(
+      body: Column(
+        children: [
+          Material(
+            color: scheme.surface,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: scheme.outlineVariant),
+                ),
+              ),
               child: Row(
                 children: [
-                  Icon(Icons.cloud_download),
-                  SizedBox(width: 8),
-                  Text('Fetch Latest Prices'),
+                  Expanded(
+                    child: TabBar(
+                      controller: _tabController,
+                      dividerColor: Colors.transparent,
+                      tabs: const [
+                        Tab(text: 'All Prices'),
+                        Tab(text: 'Categories'),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    onPressed: () => _fetch(),
+                    tooltip: 'Refresh',
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: 'More actions',
+                    onSelected: (value) {
+                      if (value == 'fetch') _fetchNow();
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(
+                        value: 'fetch',
+                        child: Row(
+                          children: [
+                            Icon(Icons.cloud_download_outlined),
+                            SizedBox(width: AppSpacing.md),
+                            Text('Fetch Latest Prices'),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
                 ],
               ),
             ),
-          ],
-        ),
-      ],
-    ),
-    body: Column(
-      children: [
-        Material(
-          color: Colors.white,
-          child: TabBar(
-            controller: _tabController,
-            tabs: const [
-              Tab(text: 'All Prices'),
-              Tab(text: 'Categories'),
-            ],
           ),
-        ),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: [_buildAllTab(), _buildCategoriesTab()],
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [_buildAllTab(), _buildCategoriesTab()],
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 
   Widget _buildAllTab() => Column(
     children: [
       _buildFilters(),
+      if (_loading && _result != null)
+        const LinearProgressIndicator(minHeight: 2),
       Expanded(child: _buildList()),
       if (_result != null && _result!.data.isNotEmpty) _buildPaginationFooter(),
     ],
   );
 
   Widget _buildPaginationFooter() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final last = _result?.lastPage ?? 1;
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+    return DecoratedBox(
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey[200]!)),
+        color: scheme.surface,
+        border: Border(top: BorderSide(color: scheme.outlineVariant)),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            'Page $_page of $last',
-            style: const TextStyle(fontWeight: FontWeight.w600),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.only(
+            left: AppSpacing.lg,
+            right: AppSpacing.xs,
           ),
-          Row(
+          child: Row(
             children: [
+              Expanded(
+                child: Text(
+                  'Page $_page of $last',
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
               if (_loadingMore)
-                const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                const Padding(
+                  padding: EdgeInsets.only(right: AppSpacing.sm),
+                  child: SizedBox.square(
+                    dimension: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
                 ),
               IconButton(
                 icon: const Icon(Icons.chevron_left),
@@ -218,262 +247,261 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
 
   void _goToPage(int page) => _fetch(page: page);
 
+  /// Wraps a non-list state (empty/error) so it can still be pulled to refresh.
+  Widget _pullable(Future<void> Function() onRefresh, Widget child) =>
+      RefreshIndicator(
+        onRefresh: onRefresh,
+        child: LayoutBuilder(
+          builder: (context, constraints) => ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            children: [SizedBox(height: constraints.maxHeight, child: child)],
+          ),
+        ),
+      );
+
   Widget _buildCategoriesTab() {
     if (_categoryStats.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('No categories loaded'),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: _fetchFilters,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Load categories'),
-            ),
-          ],
+      return _pullable(
+        _fetchFilters,
+        EmptyState(
+          icon: Icons.category_outlined,
+          title: 'No categories loaded',
+          actionLabel: 'Load categories',
+          actionIcon: Icons.refresh,
+          onAction: _fetchFilters,
         ),
       );
     }
+    final scheme = Theme.of(context).colorScheme;
     final total = _categoryStats.fold<int>(0, (sum, c) => sum + c.count);
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: _categoryStats.length + 1,
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return Card(
-            margin: const EdgeInsets.only(bottom: 8),
-            child: ListTile(
-              leading: const CircleAvatar(child: Icon(Icons.apps)),
-              title: const Text('All categories'),
-              subtitle: Text('$total items'),
-              trailing: const Icon(Icons.chevron_right),
+    Widget? selectedMark(bool selected) => selected
+        ? Icon(Icons.check_circle, size: 20, color: scheme.primary)
+        : null;
+    return RefreshIndicator(
+      onRefresh: _fetchFilters,
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: AppSpacing.page,
+        itemCount: _categoryStats.length + 1,
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return ListItemCard(
+              leading: const IconTile(icon: Icons.apps),
+              title: 'All categories',
+              subtitle: '$total items',
+              trailing: selectedMark(_selectedCategory == null),
               onTap: () {
                 setState(() => _selectedCategory = null);
                 _tabController.animateTo(0);
                 _fetch();
               },
+            );
+          }
+          final cat = _categoryStats[index - 1];
+          return ListItemCard(
+            leading: const IconTile(
+              icon: Icons.category_outlined,
+              tone: StatusTone.neutral,
             ),
-          );
-        }
-        final cat = _categoryStats[index - 1];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            leading: const CircleAvatar(child: Icon(Icons.category_outlined)),
-            title: Text(cat.name),
-            subtitle: Text('${cat.count} items'),
-            trailing: const Icon(Icons.chevron_right),
+            title: cat.name,
+            subtitle: '${cat.count} items',
+            trailing: selectedMark(_selectedCategory == cat.name),
             onTap: () {
               setState(() => _selectedCategory = cat.name);
               _tabController.animateTo(0);
               _fetch();
             },
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
-  Widget _buildFilters() => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
-    ),
-    child: Column(
-      children: [
-        TextField(
-          controller: _searchController,
-          decoration: InputDecoration(
-            labelText: 'Search',
-            prefixIcon: const Icon(Icons.search),
-            suffixIcon: _searchController.text.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.clear),
-                    onPressed: () {
-                      _searchController.clear();
-                      _fetch();
-                    },
-                  )
-                : null,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-          onChanged: _onSearchChanged,
+  Widget _buildFilters() {
+    final scheme = Theme.of(context).colorScheme;
+    const priceTypes = <(String?, String, IconData)>[
+      (null, 'All', Icons.list),
+      ('hardware', 'Supplier', Icons.storefront_outlined),
+      ('factory', 'Factory', Icons.factory_outlined),
+    ];
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg,
+          AppSpacing.md,
+          AppSpacing.lg,
+          AppSpacing.sm + 2,
         ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: SegmentedButton<String?>(
-            segments: const [
-              ButtonSegment(
-                value: null,
-                label: Text('All'),
-                icon: Icon(Icons.list),
-              ),
-              ButtonSegment(
-                value: 'hardware',
-                label: Text('Supplier'),
-                icon: Icon(Icons.storefront_outlined),
-              ),
-              ButtonSegment(
-                value: 'factory',
-                label: Text('Factory'),
-                icon: Icon(Icons.factory_outlined),
-              ),
-            ],
-            selected: {_selectedPriceType},
-            onSelectionChanged: (selection) => setState(() {
-              _selectedPriceType = selection.first;
-              _fetch();
-            }),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildFilterDropdown(
-              'Category',
-              _selectedCategory,
-              _categories,
-              (v) => setState(() {
-                _selectedCategory = v;
-                _fetch();
-              }),
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _searchController,
+              builder: (context, value, _) => TextField(
+                controller: _searchController,
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  hintText: widget.l10n.search,
+                  isDense: true,
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: value.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.close),
+                          tooltip: 'Clear search',
+                          onPressed: () {
+                            _searchController.clear();
+                            _fetch();
+                          },
+                        )
+                      : null,
+                ),
+                onChanged: _onSearchChanged,
+              ),
             ),
-            _buildFilterDropdown(
-              'Supplier',
-              _selectedSupplier,
-              _suppliers,
-              (v) => setState(() {
-                _selectedSupplier = v;
-                _fetch();
-              }),
-            ),
-            _buildFilterDropdown(
-              'Location',
-              _selectedLocation,
-              _locations,
-              (v) => setState(() {
-                _selectedLocation = v;
-                _fetch();
-              }),
+            const SizedBox(height: AppSpacing.sm + 2),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final (value, label, icon) in priceTypes) ...[
+                    ChoiceChip(
+                      avatar: Icon(icon, size: 18),
+                      label: Text(label),
+                      showCheckmark: false,
+                      selected: _selectedPriceType == value,
+                      onSelected: (_) {
+                        if (_selectedPriceType == value) return;
+                        setState(() {
+                          _selectedPriceType = value;
+                          _fetch();
+                        });
+                      },
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                  ],
+                  const SizedBox(
+                    height: 24,
+                    child: VerticalDivider(width: AppSpacing.sm),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  _FilterMenuChip(
+                    label: 'Category',
+                    icon: Icons.category_outlined,
+                    value: _selectedCategory,
+                    options: _categories,
+                    onChanged: (v) => setState(() {
+                      _selectedCategory = v;
+                      _fetch();
+                    }),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  _FilterMenuChip(
+                    label: 'Supplier',
+                    icon: Icons.storefront_outlined,
+                    value: _selectedSupplier,
+                    options: _suppliers,
+                    onChanged: (v) => setState(() {
+                      _selectedSupplier = v;
+                      _fetch();
+                    }),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  _FilterMenuChip(
+                    label: 'Location',
+                    icon: Icons.place_outlined,
+                    value: _selectedLocation,
+                    options: _locations,
+                    onChanged: (v) => setState(() {
+                      _selectedLocation = v;
+                      _fetch();
+                    }),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
-      ],
-    ),
-  );
-
-  Widget _buildFilterDropdown(
-    String label,
-    String? value,
-    List<String> options,
-    void Function(String?) onChanged,
-  ) => SizedBox(
-    width: 160,
-    child: DropdownButtonFormField<String>(
-      key: ValueKey('$label-$value'),
-      initialValue: value,
-      decoration: InputDecoration(
-        labelText: label,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        isDense: true,
       ),
-      items:
-          <DropdownMenuItem<String>>[
-            const DropdownMenuItem<String>(value: null, child: Text('All')),
-          ] +
-          options
-              .map((o) => DropdownMenuItem<String>(value: o, child: Text(o)))
-              .toList(),
-      onChanged: onChanged,
-    ),
-  );
+    );
+  }
 
   Widget _buildList() {
     if (_error != null && _result == null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 48, color: Colors.red[300]),
-            const SizedBox(height: 16),
-            Text(_error!),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: _fetch, child: const Text('Retry')),
-          ],
-        ),
+      return _pullable(
+        () => _fetch(),
+        ErrorState(error: _error, onRetry: _fetch),
       );
     }
     if (_result == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const SkeletonList();
     }
     final items = _result!.data;
     if (items.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.inventory_2_outlined, size: 48, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            const Text('No hardware prices found'),
-            const SizedBox(height: 8),
-            Text(
-              'Try adjusting your filters',
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-          ],
+      return _pullable(
+        () => _fetch(),
+        const EmptyState(
+          icon: Icons.inventory_2_outlined,
+          title: 'No hardware prices found',
+          message: 'Try adjusting your filters',
         ),
       );
     }
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        if (notification.metrics.pixels >=
-                notification.metrics.maxScrollExtent - 200 &&
-            !_loadingMore &&
-            _page < _result!.lastPage) {
-          _fetch(loadMore: true);
-        }
-        return false;
-      },
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: items.length + (_loadingMore ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index >= items.length) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: CircularProgressIndicator(),
-              ),
-            );
+    return RefreshIndicator(
+      onRefresh: () => _fetch(),
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          if (notification.metrics.pixels >=
+                  notification.metrics.maxScrollExtent - 200 &&
+              !_loadingMore &&
+              _page < _result!.lastPage) {
+            _fetch(loadMore: true);
           }
-          final item = items[index];
-          return _HardwarePriceCard(
-            item: item,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => HardwarePriceDetailPage(
-                  api: widget.api,
-                  hardwarePrice: item,
-                  l10n: widget.l10n,
+          return false;
+        },
+        child: ListView.builder(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: AppSpacing.page,
+          itemCount: items.length + (_loadingMore ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (index >= items.length) {
+              return const Padding(
+                padding: EdgeInsets.all(AppSpacing.lg),
+                child: Center(
+                  child: SizedBox.square(
+                    dimension: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  ),
+                ),
+              );
+            }
+            final item = items[index];
+            return _HardwarePriceCard(
+              item: item,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => HardwarePriceDetailPage(
+                    api: widget.api,
+                    hardwarePrice: item,
+                    l10n: widget.l10n,
+                  ),
                 ),
               ),
-            ),
-            onCompare: () => _addToCompare(item),
-          );
-        },
+              onCompare: () => _addToCompare(item),
+            );
+          },
+        ),
       ),
     );
   }
@@ -521,6 +549,73 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
   }
 }
 
+/// Compact chip that opens a menu of filter options ("All" clears it).
+class _FilterMenuChip extends StatelessWidget {
+  const _FilterMenuChip({
+    required this.label,
+    required this.icon,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+
+  final String label;
+  final IconData icon;
+  final String? value;
+  final List<String> options;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final selected = value != null;
+    Widget mark(bool on) => on
+        ? Icon(Icons.check, size: 18, color: scheme.primary)
+        : const SizedBox(width: 18);
+    return MenuAnchor(
+      menuChildren: [
+        MenuItemButton(
+          leadingIcon: mark(value == null),
+          onPressed: () => onChanged(null),
+          child: const Text('All'),
+        ),
+        for (final option in options)
+          MenuItemButton(
+            leadingIcon: mark(value == option),
+            onPressed: () => onChanged(option),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 260),
+              child: Text(option, overflow: TextOverflow.ellipsis),
+            ),
+          ),
+      ],
+      builder: (context, controller, _) => FilterChip(
+        avatar: Icon(icon, size: 18),
+        tooltip: '$label filter',
+        showCheckmark: false,
+        selected: selected,
+        label: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 150),
+              child: Text(
+                selected ? value! : label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.xxs),
+            const Icon(Icons.arrow_drop_down, size: 18),
+          ],
+        ),
+        onSelected: (_) =>
+            controller.isOpen ? controller.close() : controller.open(),
+      ),
+    );
+  }
+}
+
 class _HardwarePriceCard extends StatelessWidget {
   const _HardwarePriceCard({
     required this.item,
@@ -532,157 +627,203 @@ class _HardwarePriceCard extends StatelessWidget {
   final VoidCallback onCompare;
 
   @override
-  Widget build(BuildContext context) => Card(
-    margin: const EdgeInsets.only(bottom: 12),
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    item.itemName,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-                PopupMenuButton<String>(
-                  onSelected: (v) {
-                    if (v == 'compare') onCompare();
-                  },
-                  itemBuilder: (_) => [
-                    const PopupMenuItem(
-                      value: 'compare',
-                      child: Row(
-                        children: [
-                          Icon(Icons.compare_arrows),
-                          SizedBox(width: 8),
-                          Text('Compare'),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final place = [
+      item.supplier,
+      item.location,
+    ].where((s) => s.isNotEmpty).join(' · ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.itemGap),
+      child: Card(
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.xs,
+              AppSpacing.md,
             ),
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Chip(
-                  avatar: Icon(
-                    item.isFactory
-                        ? Icons.factory_outlined
-                        : Icons.storefront_outlined,
-                    size: 16,
-                  ),
-                  label: Text(item.isFactory ? 'Factory' : 'Supplier'),
-                  backgroundColor: item.isFactory
-                      ? Colors.purple[50]
-                      : Colors.teal[50],
-                ),
-                if (item.brand.isNotEmpty)
-                  Chip(
-                    label: Text(item.brand),
-                    backgroundColor: Colors.blue[50],
-                  ),
-                Chip(
-                  label: Text(item.category),
-                  backgroundColor: Colors.green[50],
-                ),
-                Chip(
-                  label: Text(item.unit),
-                  backgroundColor: Colors.orange[50],
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Text(
-                  '${NumberFormat('#,##0').format(item.price)} ${item.currency}',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF047857),
-                  ),
-                ),
-                const Spacer(),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      item.supplier,
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                    if (item.location.isNotEmpty)
-                      Text(
-                        item.location,
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.xs),
+                      child: IconTile(
+                        icon: item.isFactory
+                            ? Icons.factory_outlined
+                            : Icons.storefront_outlined,
+                        tone: item.isFactory
+                            ? StatusTone.info
+                            : StatusTone.brand,
                       ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
-                const SizedBox(width: 4),
-                Text(
-                  '${item.lastVerifiedAt.isNotEmpty ? 'Verified' : 'Updated'}: ${_formatDate(item.updatedAt)}',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                ),
-                const Spacer(),
-                if (item.sourceUrl.isNotEmpty)
-                  InkWell(
-                    onTap: () => launchUrl(
-                      Uri.parse(item.sourceUrl),
-                      mode: LaunchMode.externalApplication,
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          Uri.tryParse(item.sourceUrl)?.host ?? 'Source',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Color(0xFF05645B),
-                            fontWeight: FontWeight.w600,
-                          ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: AppSpacing.xs),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.itemName,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontSize: 15,
+                              ),
+                            ),
+                            if (place.isNotEmpty) ...[
+                              const SizedBox(height: 3),
+                              Text(
+                                place,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall,
+                              ),
+                            ],
+                          ],
                         ),
-                        const SizedBox(width: 2),
-                        const Icon(
-                          Icons.open_in_new,
-                          size: 12,
-                          color: Color(0xFF05645B),
+                      ),
+                    ),
+                    PopupMenuButton<String>(
+                      tooltip: 'More options',
+                      onSelected: (v) {
+                        if (v == 'compare') onCompare();
+                      },
+                      itemBuilder: (_) => [
+                        const PopupMenuItem(
+                          value: 'compare',
+                          child: Row(
+                            children: [
+                              Icon(Icons.compare_arrows),
+                              SizedBox(width: AppSpacing.md),
+                              Text('Compare'),
+                            ],
+                          ),
                         ),
                       ],
                     ),
-                  )
-                else if (item.sourceReference.isNotEmpty)
-                  Flexible(
-                    child: Text(
-                      item.sourceReference,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-                    ),
+                  ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(right: AppSpacing.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: AppSpacing.sm),
+                      Wrap(
+                        spacing: AppSpacing.xs + 2,
+                        runSpacing: AppSpacing.xs + 2,
+                        children: [
+                          StatusBadge(
+                            label: item.isFactory ? 'Factory' : 'Supplier',
+                            tone: item.isFactory
+                                ? StatusTone.info
+                                : StatusTone.brand,
+                          ),
+                          if (item.brand.isNotEmpty)
+                            StatusBadge(
+                              label: item.brand,
+                              icon: Icons.sell_outlined,
+                            ),
+                          if (item.category.isNotEmpty)
+                            StatusBadge(label: item.category),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Flexible(
+                            child: AmountText(
+                              item.price,
+                              currency: item.currency,
+                              style: theme.textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                color: scheme.primary,
+                              ),
+                            ),
+                          ),
+                          if (item.unit.isNotEmpty) ...[
+                            const SizedBox(width: AppSpacing.xs),
+                            Text(
+                              '/ ${item.unit}',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Divider(height: 1, color: scheme.outlineVariant),
+                      const SizedBox(height: AppSpacing.xs),
+                      Row(
+                        children: [
+                          Icon(
+                            item.lastVerifiedAt.isNotEmpty
+                                ? Icons.verified_outlined
+                                : Icons.access_time,
+                            size: 14,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: AppSpacing.xs),
+                          Expanded(
+                            child: Text(
+                              '${item.lastVerifiedAt.isNotEmpty ? 'Verified' : 'Updated'}: ${_formatDate(item.updatedAt)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ),
+                          if (item.sourceUrl.isNotEmpty)
+                            TextButton.icon(
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                textStyle: theme.textTheme.labelSmall,
+                              ),
+                              onPressed: () => launchUrl(
+                                Uri.parse(item.sourceUrl),
+                                mode: LaunchMode.externalApplication,
+                              ),
+                              iconAlignment: IconAlignment.end,
+                              icon: const Icon(Icons.open_in_new, size: 14),
+                              label: Text(
+                                Uri.tryParse(item.sourceUrl)?.host ?? 'Source',
+                              ),
+                            )
+                          else if (item.sourceReference.isNotEmpty)
+                            Flexible(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: AppSpacing.sm,
+                                ),
+                                child: Text(
+                                  item.sourceReference,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: scheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
                   ),
+                ),
               ],
             ),
-          ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
   String _formatDate(String dateStr) {
     try {
@@ -691,6 +832,134 @@ class _HardwarePriceCard extends StatelessWidget {
     } catch (_) {
       return dateStr;
     }
+  }
+}
+
+/// Tone for a price trend string ("up" is bad for buyers, "down" is good).
+StatusTone _hwTrendTone(String trend) => switch (trend.toLowerCase()) {
+  'up' || 'rising' || 'increasing' => StatusTone.danger,
+  'down' || 'falling' || 'decreasing' => StatusTone.success,
+  _ => StatusTone.neutral,
+};
+
+IconData _hwTrendIcon(String trend) => switch (trend.toLowerCase()) {
+  'up' || 'rising' || 'increasing' => Icons.trending_up,
+  'down' || 'falling' || 'decreasing' => Icons.trending_down,
+  _ => Icons.trending_flat,
+};
+
+/// One point on a price-history timeline.
+class _HwPriceHistoryEntry extends StatelessWidget {
+  const _HwPriceHistoryEntry({
+    required this.entry,
+    required this.date,
+    this.isFirst = false,
+    this.isLast = false,
+    this.boxed = false,
+  });
+
+  final PriceHistory entry;
+  final String date;
+  final bool isFirst;
+  final bool isLast;
+
+  /// When true each entry sits in its own card (full-page list).
+  final bool boxed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final lineColor = scheme.outlineVariant;
+    final topGap = boxed ? 20.0 : 14.0;
+    final content = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AmountText(
+                entry.price,
+                currency: entry.currency,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(entry.supplier, style: theme.textTheme.bodyMedium),
+              if (entry.location.isNotEmpty)
+                Text(entry.location, style: theme.textTheme.bodySmall),
+            ],
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Text(
+          date,
+          textAlign: TextAlign.right,
+          style: theme.textTheme.bodySmall,
+        ),
+      ],
+    );
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 20,
+            child: Column(
+              children: [
+                Container(
+                  width: 2,
+                  height: topGap,
+                  color: isFirst ? Colors.transparent : lineColor,
+                ),
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isFirst ? scheme.primary : scheme.surface,
+                    border: Border.all(
+                      color: isFirst ? scheme.primary : scheme.outline,
+                      width: 2,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Container(
+                    width: 2,
+                    color: isLast ? Colors.transparent : lineColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: boxed
+                ? Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.sm + 2),
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.lg,
+                          vertical: AppSpacing.md,
+                        ),
+                        child: content,
+                      ),
+                    ),
+                  )
+                : Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.sm,
+                    ),
+                    child: content,
+                  ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -705,6 +974,14 @@ class HardwarePriceDetailPage extends StatelessWidget {
   final HardwarePrice hardwarePrice;
   final AppLocalizations l10n;
 
+  void _openHistory(BuildContext context) => Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) =>
+          PriceHistoryPage(api: api, hardwarePrice: hardwarePrice, l10n: l10n),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
@@ -712,16 +989,8 @@ class HardwarePriceDetailPage extends StatelessWidget {
       actions: [
         IconButton(
           icon: const Icon(Icons.history),
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => PriceHistoryPage(
-                api: api,
-                hardwarePrice: hardwarePrice,
-                l10n: l10n,
-              ),
-            ),
-          ),
+          tooltip: 'Price History',
+          onPressed: () => _openHistory(context),
         ),
       ],
     ),
@@ -729,18 +998,33 @@ class HardwarePriceDetailPage extends StatelessWidget {
       future: api.hardwarePriceHistory(hardwarePrice.id),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(child: Text(friendlyError(snapshot.error)));
+          return ErrorState(error: snapshot.error);
         }
         if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const LoadingState();
         }
         final data = snapshot.data!;
         return ListView(
-          padding: const EdgeInsets.all(16),
+          padding: AppSpacing.page,
           children: [
-            _buildSummaryCard(data.item, data.summary),
-            const SizedBox(height: 16),
-            _buildHistoryList(data.history),
+            ContentWidth(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildSummaryCard(context, data.item, data.summary),
+                  const SizedBox(height: AppSpacing.lg),
+                  _buildDetailsCard(data.item),
+                  const SizedBox(height: AppSpacing.lg),
+                  _buildHistoryList(data.history),
+                  const SizedBox(height: AppSpacing.lg),
+                  OutlinedButton.icon(
+                    onPressed: () => _openHistory(context),
+                    icon: const Icon(Icons.history),
+                    label: const Text('Price History'),
+                  ),
+                ],
+              ),
+            ),
           ],
         );
       },
@@ -748,111 +1032,187 @@ class HardwarePriceDetailPage extends StatelessWidget {
   );
 
   Widget _buildSummaryCard(
+    BuildContext context,
     HardwarePrice item,
     PriceHistorySummary summary,
-  ) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            item.itemName,
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-          ),
-          if (item.brand.isNotEmpty) Text('Brand: ${item.brand}'),
-          Text('Category: ${item.category}'),
-          if (item.specification.isNotEmpty)
-            Text('Spec: ${item.specification}'),
-          Text('Unit: ${item.unit}'),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Text(
-                'Current: ${NumberFormat('#,##0').format(item.price)} ${item.currency}',
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF047857),
+  ) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final place = [
+      item.supplier,
+      item.location,
+    ].where((s) => s.isNotEmpty).join(' · ');
+    final changeUp = summary.changePercent >= 0;
+    return Card(
+      child: Padding(
+        padding: AppSpacing.card,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                IconTile(
+                  icon: item.isFactory
+                      ? Icons.factory_outlined
+                      : Icons.storefront_outlined,
+                  tone: item.isFactory ? StatusTone.info : StatusTone.brand,
                 ),
-              ),
-              const Spacer(),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'Supplier: ${item.supplier}',
-                    style: const TextStyle(fontWeight: FontWeight.w500),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(item.itemName, style: theme.textTheme.titleLarge),
+                      if (place.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(place, style: theme.textTheme.bodySmall),
+                      ],
+                    ],
                   ),
-                  if (item.location.isNotEmpty)
-                    Text('Location: ${item.location}'),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Wrap(
+              spacing: AppSpacing.xs + 2,
+              runSpacing: AppSpacing.xs + 2,
+              children: [
+                StatusBadge(
+                  label: item.isFactory ? 'Factory' : 'Supplier',
+                  tone: item.isFactory ? StatusTone.info : StatusTone.brand,
+                ),
+                if (item.category.isNotEmpty) StatusBadge(label: item.category),
+                StatusBadge(
+                  label: summary.trend.capitalize(),
+                  tone: _hwTrendTone(summary.trend),
+                  icon: _hwTrendIcon(summary.trend),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Text(
+              'Current',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Flexible(
+                  child: AmountText(
+                    item.price,
+                    currency: item.currency,
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: scheme.primary,
+                    ),
+                  ),
+                ),
+                if (item.unit.isNotEmpty) ...[
+                  const SizedBox(width: AppSpacing.xs),
+                  Text('/ ${item.unit}', style: theme.textTheme.bodySmall),
                 ],
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Divider(height: 1, color: scheme.outlineVariant),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                _stat(
+                  context,
+                  'Lowest',
+                  NumberFormat('#,##0').format(summary.lowest),
+                  summary.lowest <= item.price
+                      ? AppColors.success
+                      : AppColors.danger,
+                ),
+                _stat(
+                  context,
+                  'Highest',
+                  NumberFormat('#,##0').format(summary.highest),
+                  summary.highest >= item.price
+                      ? AppColors.danger
+                      : AppColors.success,
+                ),
+                _stat(
+                  context,
+                  'Average',
+                  NumberFormat('#,##0').format(summary.average),
+                  AppColors.info,
+                ),
+                _stat(
+                  context,
+                  'Change',
+                  '${changeUp ? '+' : ''}${summary.changePercent.toStringAsFixed(1)}%',
+                  changeUp ? AppColors.danger : AppColors.success,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _stat(BuildContext context, String label, String value, Color color) {
+    final theme = Theme.of(context);
+    return Expanded(
+      child: Column(
+        children: [
+          Text(label, style: theme.textTheme.bodySmall),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: color,
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Divider(),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _stat(
-                'Lowest',
-                NumberFormat('#,##0').format(summary.lowest),
-                summary.lowest <= item.price ? Colors.green : Colors.red,
-              ),
-              _stat(
-                'Highest',
-                NumberFormat('#,##0').format(summary.highest),
-                summary.highest >= item.price ? Colors.red : Colors.green,
-              ),
-              _stat(
-                'Average',
-                NumberFormat('#,##0').format(summary.average),
-                Colors.blue,
-              ),
-              _stat(
-                'Change',
-                '${summary.changePercent >= 0 ? '+' : ''}${summary.changePercent.toStringAsFixed(1)}%',
-                summary.changePercent >= 0 ? Colors.red : Colors.green,
-              ),
-            ],
+            ),
           ),
         ],
       ),
-    ),
-  );
+    );
+  }
 
-  Widget _stat(String label, String value, Color color) => Column(
+  Widget _buildDetailsCard(HardwarePrice item) => SectionCard(
+    title: 'Details',
+    icon: Icons.info_outline,
     children: [
-      Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-      Text(
-        value,
-        style: TextStyle(fontWeight: FontWeight.w700, color: color),
-      ),
+      if (item.brand.isNotEmpty) KeyValueRow(label: 'Brand', value: item.brand),
+      KeyValueRow(label: 'Category', value: item.category),
+      if (item.specification.isNotEmpty)
+        KeyValueRow(label: 'Spec', value: item.specification),
+      KeyValueRow(label: 'Unit', value: item.unit),
+      KeyValueRow(label: 'Supplier', value: item.supplier),
+      if (item.location.isNotEmpty)
+        KeyValueRow(label: 'Location', value: item.location),
     ],
   );
 
-  Widget _buildHistoryList(List<PriceHistory> history) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildHistoryList(List<PriceHistory> history) => SectionCard(
+    title: 'Price History (${history.length} records)',
+    icon: Icons.timeline,
     children: [
-      Text(
-        'Price History (${history.length} records)',
-        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-      ),
-      const SizedBox(height: 8),
-      if (history.isEmpty) const Center(child: Text('No history available')),
-      for (final h in history)
-        Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            leading: Text(
-              '${NumberFormat('#,##0').format(h.price)} ${h.currency}',
-              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-            ),
-            title: Text(h.supplier),
-            subtitle: h.location.isNotEmpty ? Text(h.location) : null,
-            trailing: Text(_formatDate(h.recordedAt)),
-          ),
+      if (history.isEmpty)
+        const EmptyState(
+          icon: Icons.history,
+          title: 'No history available',
+          compact: true,
+        ),
+      for (var i = 0; i < history.length; i++)
+        _HwPriceHistoryEntry(
+          entry: history[i],
+          date: _formatDate(history[i].recordedAt),
+          isFirst: i == 0,
+          isLast: i == history.length - 1,
         ),
     ],
   );
@@ -885,30 +1245,30 @@ class PriceHistoryPage extends StatelessWidget {
       future: api.hardwarePriceHistory(hardwarePrice.id),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(child: Text(friendlyError(snapshot.error)));
+          return ErrorState(error: snapshot.error);
         }
         if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const SkeletonList();
         }
         final history = snapshot.data!.history;
+        if (history.isEmpty) {
+          return const EmptyState(
+            icon: Icons.history,
+            title: 'No history available',
+          );
+        }
         return ListView.builder(
-          padding: const EdgeInsets.all(16),
+          padding: AppSpacing.page,
           itemCount: history.length,
           itemBuilder: (context, index) {
             final h = history[index];
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ListTile(
-                leading: Text(
-                  '${NumberFormat('#,##0').format(h.price)} ${h.currency}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
-                ),
-                title: Text(h.supplier),
-                subtitle: h.location.isNotEmpty ? Text(h.location) : null,
-                trailing: Text(_formatDate(h.recordedAt)),
+            return ContentWidth(
+              child: _HwPriceHistoryEntry(
+                entry: h,
+                date: _formatDate(h.recordedAt),
+                isFirst: index == 0,
+                isLast: index == history.length - 1,
+                boxed: true,
               ),
             );
           },
@@ -978,154 +1338,244 @@ class _PriceComparisonPageState extends State<PriceComparisonPage> {
     }
   }
 
+  Widget _pullable(Widget child) => RefreshIndicator(
+    onRefresh: _compare,
+    child: LayoutBuilder(
+      builder: (context, constraints) => ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [SizedBox(height: constraints.maxHeight, child: child)],
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
       title: Text(widget.l10n.priceComparison),
       actions: [
-        IconButton(icon: const Icon(Icons.refresh), onPressed: _compare),
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          tooltip: 'Refresh',
+          onPressed: _compare,
+        ),
       ],
     ),
     body: _loading
-        ? const Center(child: CircularProgressIndicator())
+        ? const SkeletonList(itemCount: 3)
         : _error != null
-        ? Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(_error!),
-                const SizedBox(height: 16),
-                FilledButton(onPressed: _compare, child: const Text('Retry')),
-              ],
+        ? _pullable(ErrorState(error: _error, onRetry: _compare))
+        : _result == null || _result!.items.isEmpty
+        ? _pullable(
+            const EmptyState(
+              icon: Icons.compare_arrows,
+              title: 'No comparison data',
             ),
           )
-        : _result == null
-        ? const Center(child: Text('No comparison data'))
-        : SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              columns: [
-                const DataColumn(label: Text('Attribute')),
-                ..._result!.items.map(
-                  (item) => DataColumn(
-                    label: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          item.itemName,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        if (item.brand.isNotEmpty)
-                          Text(
-                            item.brand,
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: item.badges
-                              .map(
-                                (b) => Container(
-                                  margin: const EdgeInsets.only(top: 2),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 1,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue[100],
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    b,
-                                    style: TextStyle(
-                                      fontSize: 9,
-                                      color: Colors.blue[900],
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                        ),
-                      ],
+        : _buildComparison(),
+  );
+
+  Widget _buildComparison() {
+    final items = _result!.items;
+    final cheapest = items.map((i) => i.price).reduce((a, b) => a < b ? a : b);
+    return RefreshIndicator(
+      onRefresh: _compare,
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: AppSpacing.page,
+        itemCount: items.length,
+        itemBuilder: (context, index) {
+          final item = items[index];
+          return ContentWidth(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+              child: _buildItemCard(
+                context,
+                item,
+                isCheapest: items.length > 1 && item.price == cheapest,
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildItemCard(
+    BuildContext context,
+    PriceComparisonItem item, {
+    required bool isCheapest,
+  }) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final variance = item.variancePercent;
+    final trend = item.priceHistory.trend;
+    Widget group(List<Widget> rows) => Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: AppSpacing.sm),
+        Divider(height: 1, color: scheme.outlineVariant),
+        const SizedBox(height: AppSpacing.sm),
+        ...rows,
+      ],
+    );
+    return Card(
+      shape: isCheapest
+          ? const RoundedRectangleBorder(
+              borderRadius: AppRadii.card,
+              side: BorderSide(color: AppColors.success, width: 1.5),
+            )
+          : null,
+      child: Padding(
+        padding: AppSpacing.card,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(item.itemName, style: theme.textTheme.titleMedium),
+                      if (item.brand.isNotEmpty)
+                        Text(item.brand, style: theme.textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+                if (isCheapest) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  const StatusBadge(
+                    label: 'Lowest',
+                    tone: StatusTone.success,
+                    icon: Icons.savings_outlined,
+                  ),
+                ],
+              ],
+            ),
+            if (item.badges.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Wrap(
+                spacing: AppSpacing.xs + 2,
+                runSpacing: AppSpacing.xs + 2,
+                children: [
+                  for (final b in item.badges)
+                    StatusBadge(label: b, tone: StatusTone.info),
+                ],
+              ),
+            ],
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Flexible(
+                  child: AmountText(
+                    item.price,
+                    currency: item.currency,
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: isCheapest ? AppColors.success : scheme.primary,
                     ),
                   ),
                 ),
-              ],
-              rows: [
-                _dataRow('Category', (item) => item.category),
-                _dataRow(
-                  'Specification',
-                  (item) =>
-                      item.specification.isEmpty ? '—' : item.specification,
-                ),
-                _dataRow('Unit', (item) => item.unit),
-                _dataRow(
-                  'Price',
-                  (item) =>
-                      '${NumberFormat('#,##0').format(item.price)} ${item.currency}',
-                ),
-                _dataRow('Supplier', (item) => item.supplier),
-                _dataRow(
-                  'Location',
-                  (item) => item.location.isEmpty ? '—' : item.location,
-                ),
-                _dataRow(
-                  'Source',
-                  (item) =>
-                      item.sourceReference.isEmpty ? '—' : item.sourceReference,
-                ),
-                _dataRow('Updated', (item) => _formatDate(item.fetchedAt)),
-                _dataRow('Match %', (item) => '${item.similarityScore}%'),
-                _dataRow(
-                  'Variance',
-                  (item) => item.variancePercent == null
-                      ? '—'
-                      : '${item.variancePercent! >= 0 ? '+' : ''}${item.variancePercent!.toStringAsFixed(1)}%',
-                ),
-                _dataRow(
-                  'Trend',
-                  (item) => item.priceHistory.trend.capitalize(),
-                ),
-                _dataRow('Records', (item) => '${item.priceHistory.records}'),
-                _dataRow(
-                  'Lowest',
-                  (item) =>
-                      NumberFormat('#,##0').format(item.priceHistory.lowest),
-                ),
-                _dataRow(
-                  'Highest',
-                  (item) =>
-                      NumberFormat('#,##0').format(item.priceHistory.highest),
-                ),
-                _dataRow(
-                  'Average',
-                  (item) =>
-                      NumberFormat('#,##0').format(item.priceHistory.average),
-                ),
-                _dataRow('Rating', (item) => '${item.rating.overall}/100'),
-                _dataRow('Value Score', (item) => '${item.rating.valueScore}'),
-                _dataRow(
-                  'Stability',
-                  (item) => '${item.rating.stabilityScore}',
-                ),
-                _dataRow(
-                  'Freshness',
-                  (item) => '${item.rating.freshnessScore}',
-                ),
+                if (item.unit.isNotEmpty) ...[
+                  const SizedBox(width: AppSpacing.xs),
+                  Text('/ ${item.unit}', style: theme.textTheme.bodySmall),
+                ],
               ],
             ),
-          ),
-  );
-
-  DataRow _dataRow(String label, String Function(PriceComparisonItem) getter) =>
-      DataRow(
-        cells: [
-          DataCell(
-            Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
-          ),
-          ..._result!.items.map((item) => DataCell(Text(getter(item)))),
-        ],
-      );
+            group([
+              KeyValueRow(label: 'Category', value: item.category),
+              KeyValueRow(
+                label: 'Specification',
+                value: item.specification.isEmpty ? '—' : item.specification,
+              ),
+              KeyValueRow(label: 'Unit', value: item.unit),
+              KeyValueRow(
+                label: 'Price',
+                value:
+                    '${NumberFormat('#,##0').format(item.price)} ${item.currency}',
+              ),
+              KeyValueRow(label: 'Supplier', value: item.supplier),
+              KeyValueRow(
+                label: 'Location',
+                value: item.location.isEmpty ? '—' : item.location,
+              ),
+              KeyValueRow(
+                label: 'Source',
+                value: item.sourceReference.isEmpty
+                    ? '—'
+                    : item.sourceReference,
+              ),
+              KeyValueRow(label: 'Updated', value: _formatDate(item.fetchedAt)),
+              KeyValueRow(label: 'Match %', value: '${item.similarityScore}%'),
+              KeyValueRow(
+                label: 'Variance',
+                value: variance == null
+                    ? '—'
+                    : '${variance >= 0 ? '+' : ''}${variance.toStringAsFixed(1)}%',
+                valueStyle: variance == null
+                    ? null
+                    : theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: variance > 0
+                            ? AppColors.danger
+                            : AppColors.success,
+                      ),
+              ),
+            ]),
+            group([
+              KeyValueRow(
+                label: 'Trend',
+                value: trend.capitalize(),
+                icon: _hwTrendIcon(trend),
+                valueStyle: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: _hwTrendTone(trend).foreground(scheme),
+                ),
+              ),
+              KeyValueRow(
+                label: 'Records',
+                value: '${item.priceHistory.records}',
+              ),
+              KeyValueRow(
+                label: 'Lowest',
+                value: NumberFormat('#,##0').format(item.priceHistory.lowest),
+              ),
+              KeyValueRow(
+                label: 'Highest',
+                value: NumberFormat('#,##0').format(item.priceHistory.highest),
+              ),
+              KeyValueRow(
+                label: 'Average',
+                value: NumberFormat('#,##0').format(item.priceHistory.average),
+              ),
+            ]),
+            group([
+              KeyValueRow(
+                label: 'Rating',
+                value: '${item.rating.overall}/100',
+                emphasize: true,
+              ),
+              KeyValueRow(
+                label: 'Value Score',
+                value: '${item.rating.valueScore}',
+              ),
+              KeyValueRow(
+                label: 'Stability',
+                value: '${item.rating.stabilityScore}',
+              ),
+              KeyValueRow(
+                label: 'Freshness',
+                value: '${item.rating.freshnessScore}',
+              ),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
 
   String _formatDate(String dateStr) {
     try {
@@ -1191,228 +1641,325 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     }
   }
 
+  void _selectCategory(String? v) => setState(() {
+    _selectedCategory = v;
+    _fetch();
+  });
+
+  Widget _pullable(Widget child) => RefreshIndicator(
+    onRefresh: _fetch,
+    child: LayoutBuilder(
+      builder: (context, constraints) => ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [SizedBox(height: constraints.maxHeight, child: child)],
+      ),
+    ),
+  );
+
+  Widget _buildCategoryBar() {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.sm + 2,
+        ),
+        child: Row(
+          children: [
+            ChoiceChip(
+              avatar: const Icon(Icons.category_outlined, size: 18),
+              label: const Text('All'),
+              showCheckmark: false,
+              selected: _selectedCategory == null,
+              onSelected: (_) => _selectCategory(null),
+            ),
+            for (final c in _categories) ...[
+              const SizedBox(width: AppSpacing.sm),
+              ChoiceChip(
+                label: Text(c),
+                showCheckmark: false,
+                selected: _selectedCategory == c,
+                onSelected: (_) => _selectCategory(c),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody() {
+    if (_loading) return const SkeletonList();
+    if (_error != null) {
+      return _pullable(ErrorState(error: _error, onRetry: _fetch));
+    }
+    if (_items.isEmpty) {
+      return _pullable(
+        const EmptyState(
+          icon: Icons.recommend_outlined,
+          title: 'No recommendations available',
+        ),
+      );
+    }
+    final bestRating = _items
+        .map((i) => i.rating.overall)
+        .reduce((a, b) => a > b ? a : b);
+    return RefreshIndicator(
+      onRefresh: _fetch,
+      child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: AppSpacing.page,
+        itemCount: _items.length,
+        itemBuilder: (context, index) {
+          final item = _items[index];
+          return ContentWidth(
+            child: _RecommendationCard(
+              item: item,
+              isBest: item.rating.overall == bestRating,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => HardwarePriceDetailPage(
+                    api: widget.api,
+                    hardwarePrice: HardwarePrice.fromJson({
+                      'id': item.id,
+                      'item_name': item.itemName,
+                      'brand': item.brand,
+                      'category': item.category,
+                      'specification': item.specification,
+                      'unit': item.unit,
+                      'price': item.price,
+                      'currency': item.currency,
+                      'supplier': item.supplier,
+                      'location': item.location,
+                      'source_reference': item.sourceReference,
+                      'fetched_at': item.fetchedAt,
+                      'is_active': true,
+                    }),
+                    l10n: widget.l10n,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
       title: Text(widget.l10n.bestRecommendations),
       actions: [
-        DropdownButton<String>(
-          value: _selectedCategory,
-          hint: const Text('Category'),
-          items:
-              <DropdownMenuItem<String>>[
-                const DropdownMenuItem<String>(value: null, child: Text('All')),
-              ] +
-              _categories
-                  .map(
-                    (c) => DropdownMenuItem<String>(value: c, child: Text(c)),
-                  )
-                  .toList(),
-          onChanged: (v) => setState(() {
-            _selectedCategory = v;
-            _fetch();
-          }),
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          tooltip: 'Refresh',
+          onPressed: _fetch,
         ),
-        IconButton(icon: const Icon(Icons.refresh), onPressed: _fetch),
       ],
     ),
-    body: _loading
-        ? const Center(child: CircularProgressIndicator())
-        : _error != null
-        ? Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(_error!),
-                const SizedBox(height: 16),
-                FilledButton(onPressed: _fetch, child: const Text('Retry')),
-              ],
-            ),
-          )
-        : _items.isEmpty
-        ? const Center(child: Text('No recommendations available'))
-        : ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: _items.length,
-            itemBuilder: (context, index) {
-              final item = _items[index];
-              return _RecommendationCard(
-                item: item,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => HardwarePriceDetailPage(
-                      api: widget.api,
-                      hardwarePrice: HardwarePrice.fromJson({
-                        'id': item.id,
-                        'item_name': item.itemName,
-                        'brand': item.brand,
-                        'category': item.category,
-                        'specification': item.specification,
-                        'unit': item.unit,
-                        'price': item.price,
-                        'currency': item.currency,
-                        'supplier': item.supplier,
-                        'location': item.location,
-                        'source_reference': item.sourceReference,
-                        'fetched_at': item.fetchedAt,
-                        'is_active': true,
-                      }),
-                      l10n: widget.l10n,
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
+    body: Column(
+      children: [
+        _buildCategoryBar(),
+        Expanded(child: _buildBody()),
+      ],
+    ),
   );
 }
 
 class _RecommendationCard extends StatelessWidget {
-  const _RecommendationCard({required this.item, required this.onTap});
+  const _RecommendationCard({
+    required this.item,
+    required this.onTap,
+    this.isBest = false,
+  });
   final PriceComparisonItem item;
   final VoidCallback onTap;
 
+  /// Highest-rated recommendation in the current list.
+  final bool isBest;
+
   @override
-  Widget build(BuildContext context) => Card(
-    margin: const EdgeInsets.only(bottom: 12),
-    child: InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final ratingTone = _ratingTone(item.rating.overall);
+    final place = [
+      item.supplier,
+      item.location,
+    ].where((s) => s.isNotEmpty).join(' · ');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.itemGap),
+      child: Card(
+        shape: isBest
+            ? const RoundedRectangleBorder(
+                borderRadius: AppRadii.card,
+                side: BorderSide(color: AppColors.success, width: 1.5),
+              )
+            : null,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: AppSpacing.card,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Text(
-                    item.itemName,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-                if (item.brand.isNotEmpty)
-                  Chip(
-                    label: Text(item.brand),
-                    backgroundColor: Colors.blue[50],
-                  ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _ratingColor(item.rating.overall),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    '${item.rating.overall}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                Chip(
-                  label: Text(item.category),
-                  backgroundColor: Colors.green[50],
-                ),
-                Chip(
-                  label: Text(item.unit),
-                  backgroundColor: Colors.orange[50],
-                ),
-                if (item.badges.isNotEmpty)
-                  ...item.badges.map(
-                    (b) => Chip(
-                      label: Text(b),
-                      backgroundColor: Colors.amber[100],
-                      labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Text(
-                  '${NumberFormat('#,##0').format(item.price)} ${item.currency}',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF047857),
-                  ),
-                ),
-                const Spacer(),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      item.supplier,
-                      style: const TextStyle(fontWeight: FontWeight.w500),
-                    ),
-                    if (item.location.isNotEmpty)
-                      Text(
-                        item.location,
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.itemName,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontSize: 15,
+                            ),
+                          ),
+                          if (item.brand.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(item.brand, style: theme.textTheme.bodySmall),
+                          ],
+                        ],
                       ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Semantics(
+                      label: 'Rating ${item.rating.overall}',
+                      excludeSemantics: true,
+                      child: StatusBadge(
+                        label: '${item.rating.overall}',
+                        tone: ratingTone,
+                        icon: isBest
+                            ? Icons.workspace_premium_outlined
+                            : Icons.star_rounded,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.sm + 2),
+                Wrap(
+                  spacing: AppSpacing.xs + 2,
+                  runSpacing: AppSpacing.xs + 2,
+                  children: [
+                    if (item.category.isNotEmpty)
+                      StatusBadge(label: item.category),
+                    if (item.unit.isNotEmpty) StatusBadge(label: item.unit),
+                    for (final b in item.badges)
+                      StatusBadge(label: b, tone: StatusTone.warning),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.md),
+                AmountText(
+                  item.price,
+                  currency: item.currency,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: isBest ? AppColors.success : scheme.primary,
+                  ),
+                ),
+                if (place.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.storefront_outlined,
+                        size: 14,
+                        color: scheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      Expanded(
+                        child: Text(
+                          place,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: AppSpacing.md),
+                Divider(height: 1, color: scheme.outlineVariant),
+                const SizedBox(height: AppSpacing.md),
+                Row(
+                  children: [
+                    _miniStat(
+                      context,
+                      'Value',
+                      item.rating.valueScore,
+                      AppColors.success,
+                    ),
+                    const SizedBox(width: AppSpacing.lg),
+                    _miniStat(
+                      context,
+                      'Stability',
+                      item.rating.stabilityScore,
+                      AppColors.info,
+                    ),
+                    const SizedBox(width: AppSpacing.lg),
+                    _miniStat(
+                      context,
+                      'Freshness',
+                      item.rating.freshnessScore,
+                      AppColors.warning,
+                    ),
+                    const Spacer(),
+                    OutlinedButton(
+                      onPressed: onTap,
+                      child: const Text('Details'),
+                    ),
                   ],
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                _miniStat('Value', item.rating.valueScore, Colors.green),
-                const SizedBox(width: 16),
-                _miniStat('Stability', item.rating.stabilityScore, Colors.blue),
-                const SizedBox(width: 16),
-                _miniStat(
-                  'Freshness',
-                  item.rating.freshnessScore,
-                  Colors.orange,
-                ),
-                const Spacer(),
-                OutlinedButton(onPressed: onTap, child: const Text('Details')),
-              ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _miniStat(BuildContext context, String label, int score, Color color) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Row(
+          children: [
+            Icon(Icons.star_rounded, size: 14, color: color),
+            const SizedBox(width: 2),
+            Text(
+              '$score',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
             ),
           ],
         ),
-      ),
-    ),
-  );
+      ],
+    );
+  }
 
-  Widget _miniStat(String label, int score, Color color) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-      Row(
-        children: [
-          Icon(Icons.star, size: 14, color: color),
-          const SizedBox(width: 2),
-          Text(
-            '$score',
-            style: TextStyle(fontWeight: FontWeight.w700, color: color),
-          ),
-        ],
-      ),
-    ],
-  );
-
-  Color _ratingColor(int rating) {
-    if (rating >= 80) return Colors.green;
-    if (rating >= 60) return Colors.orange;
-    return Colors.red;
+  StatusTone _ratingTone(int rating) {
+    if (rating >= 80) return StatusTone.success;
+    if (rating >= 60) return StatusTone.warning;
+    return StatusTone.danger;
   }
 }
