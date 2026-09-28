@@ -10,7 +10,6 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:boq_mobile/l10n/app_localizations.dart';
 
@@ -263,7 +262,9 @@ class _SessionGateState extends State<SessionGate> {
   void _onSessionExpired(String message) {
     if (!mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
     _refresh();
   }
 
@@ -2024,7 +2025,7 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _status,
+              initialValue: _status,
               decoration: const InputDecoration(labelText: 'Status'),
               items: const [
                 DropdownMenuItem(value: 'draft', child: Text('Draft')),
@@ -2108,17 +2109,19 @@ class _ImportPageState extends State<ImportPage> {
       );
       await _reviewUploadedBoq(boq);
     } on ApiException catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Upload failed: check the file and try again'),
           ),
         );
+      }
     } finally {
       if (mounted) setState(() => _uploading = false);
       if (mounted) setState(() => _pickedImage = null);
@@ -2156,17 +2159,19 @@ class _ImportPageState extends State<ImportPage> {
       );
       await _reviewUploadedBoq(boq);
     } on ApiException catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Upload failed: check the file and try again'),
           ),
         );
+      }
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -2508,10 +2513,11 @@ class _AccountPageState extends State<AccountPage> {
                 title: Text(widget.l10n.notifications),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
-                  if (context.mounted)
+                  if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('No new notifications')),
                     );
+                  }
                 },
               ),
               const Divider(height: 1),
@@ -3232,40 +3238,52 @@ class _PaymentPageState extends State<PaymentPage> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                ...gateways.map((gateway) {
-                  final code = '${gateway['code'] ?? ''}';
-                  final methods =
-                      (gateway['supported_methods'] as List<dynamic>? ??
-                              const [])
-                          .map((e) => '$e')
-                          .where((e) => e.trim().isNotEmpty)
-                          .toList();
-                  final selected = _selectedGatewayCode == code;
-                  return Card(
-                    child: RadioListTile<String>(
-                      value: code,
-                      groupValue: _selectedGatewayCode,
-                      onChanged: _paymentData != null
-                          ? null
-                          : (value) => setState(() {
-                              _selectedGatewayCode = value;
-                              _selectedMethod = methods.isNotEmpty
-                                  ? methods.first
-                                  : null;
-                              _idempotencyKey = null;
-                            }),
-                      title: Text('${gateway['name'] ?? code}'),
-                      subtitle: Text(
-                        '${gateway['description'] ?? gateway['driver'] ?? ''}'
-                        '${gateway['is_aggregator'] == true ? ' • Aggregator' : ''}'
-                        '${gateway['is_test_mode'] == true ? ' • Test mode' : ''}',
-                      ),
-                      secondary: selected
-                          ? const Icon(Icons.check_circle)
-                          : const Icon(Icons.payments_outlined),
-                    ),
-                  );
-                }),
+                RadioGroup<String>(
+                  groupValue: _selectedGatewayCode,
+                  onChanged: (value) {
+                    if (_paymentData != null || value == null) return;
+                    final gateway = gateways.firstWhere(
+                      (g) => '${g['code'] ?? ''}' == value,
+                      orElse: () => const <String, dynamic>{},
+                    );
+                    final methods =
+                        (gateway['supported_methods'] as List<dynamic>? ??
+                                const [])
+                            .map((e) => '$e')
+                            .where((e) => e.trim().isNotEmpty)
+                            .toList();
+                    setState(() {
+                      _selectedGatewayCode = value;
+                      _selectedMethod = methods.isNotEmpty
+                          ? methods.first
+                          : null;
+                      _idempotencyKey = null;
+                    });
+                  },
+                  child: Column(
+                    children: [
+                      ...gateways.map((gateway) {
+                        final code = '${gateway['code'] ?? ''}';
+                        final selected = _selectedGatewayCode == code;
+                        return Card(
+                          child: RadioListTile<String>(
+                            value: code,
+                            enabled: _paymentData == null,
+                            title: Text('${gateway['name'] ?? code}'),
+                            subtitle: Text(
+                              '${gateway['description'] ?? gateway['driver'] ?? ''}'
+                              '${gateway['is_aggregator'] == true ? ' • Aggregator' : ''}'
+                              '${gateway['is_test_mode'] == true ? ' • Test mode' : ''}',
+                            ),
+                            secondary: selected
+                                ? const Icon(Icons.check_circle)
+                                : const Icon(Icons.payments_outlined),
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
                 if (_selectedGatewayCode != null && _paymentData == null) ...[
                   const SizedBox(height: 10),
                   Builder(
@@ -3291,7 +3309,7 @@ class _PaymentPageState extends State<PaymentPage> {
                             'card',
                             'visa',
                             'mastercard',
-                          ].contains('${effectiveMethod ?? ''}'.toLowerCase());
+                          ].contains((effectiveMethod ?? '').toLowerCase());
                       final needsPhone =
                           driver == 'mtn_momo' ||
                           driver == 'airtel_money' ||
@@ -3318,7 +3336,10 @@ class _PaymentPageState extends State<PaymentPage> {
                           ],
                           if (methods.length > 1)
                             DropdownButtonFormField<String>(
-                              value: methods.contains(_selectedMethod)
+                              key: ValueKey(
+                                'method-$_selectedGatewayCode-$effectiveMethod',
+                              ),
+                              initialValue: methods.contains(_selectedMethod)
                                   ? _selectedMethod
                                   : methods.first,
                               decoration: const InputDecoration(
@@ -4113,10 +4134,11 @@ class ProjectDetailPage extends StatelessWidget {
                                 ),
                               );
                             } on ApiException catch (error) {
-                              if (context.mounted)
+                              if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(content: Text(error.message)),
                                 );
+                              }
                             }
                           },
                           child: const Text('Generate BOQ'),
@@ -4283,10 +4305,11 @@ class _EditProjectPageState extends State<EditProjectPage> {
         });
       }
     } on ApiException catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
     }
   }
 
@@ -4349,10 +4372,11 @@ class _EditProjectPageState extends State<EditProjectPage> {
         ).showSnackBar(const SnackBar(content: Text('Project updated')));
       }
     } on ApiException catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -4496,7 +4520,7 @@ class _EditProjectPageState extends State<EditProjectPage> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: _status,
+                  initialValue: _status,
                   decoration: const InputDecoration(labelText: 'Status'),
                   items: const [
                     DropdownMenuItem(value: 'draft', child: Text('Draft')),
@@ -4563,8 +4587,9 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
   }
 
   Future<void> _refreshItems() async {
-    if (mounted)
+    if (mounted) {
       setState(() => _boqDetail = widget.api.boqDetail(widget.boqId));
+    }
   }
 
   List<BoqItemSummary> _flattenBoqItems(BoqDetail boq) {
@@ -4722,10 +4747,12 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
       key: _refreshKey,
       future: _boqDetail,
       builder: (context, snapshot) {
-        if (snapshot.hasError)
+        if (snapshot.hasError) {
           return Center(child: Text(friendlyError(snapshot.error)));
-        if (!snapshot.hasData)
+        }
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
         final boq = snapshot.data!;
         final items = _flattenBoqItems(boq);
         final total = items.fold<double>(
@@ -4891,7 +4918,8 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
       },
     ),
     floatingActionButton: FloatingActionButton.extended(
-      onPressed: () => showBoqShareSheet(context, widget.api, widget.boqId, widget.title),
+      onPressed: () =>
+          showBoqShareSheet(context, widget.api, widget.boqId, widget.title),
       icon: const Icon(Icons.share_outlined),
       label: const Text('PDF & Share'),
     ),
@@ -5027,8 +5055,8 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
   /// null = all, 'hardware' = supplier prices, 'factory' = factory prices.
   String? _selectedPriceType;
   List<String> _categories = [];
-  List<String> _suppliers = [];
-  List<String> _locations = [];
+  final List<String> _suppliers = [];
+  final List<String> _locations = [];
   List<HardwarePriceCategory> _categoryStats = [];
 
   @override
@@ -5315,9 +5343,21 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
           width: double.infinity,
           child: SegmentedButton<String?>(
             segments: const [
-              ButtonSegment(value: null, label: Text('All'), icon: Icon(Icons.list)),
-              ButtonSegment(value: 'hardware', label: Text('Supplier'), icon: Icon(Icons.storefront_outlined)),
-              ButtonSegment(value: 'factory', label: Text('Factory'), icon: Icon(Icons.factory_outlined)),
+              ButtonSegment(
+                value: null,
+                label: Text('All'),
+                icon: Icon(Icons.list),
+              ),
+              ButtonSegment(
+                value: 'hardware',
+                label: Text('Supplier'),
+                icon: Icon(Icons.storefront_outlined),
+              ),
+              ButtonSegment(
+                value: 'factory',
+                label: Text('Factory'),
+                icon: Icon(Icons.factory_outlined),
+              ),
             ],
             selected: {_selectedPriceType},
             onSelectionChanged: (selection) => setState(() {
@@ -5372,7 +5412,8 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
   ) => SizedBox(
     width: 160,
     child: DropdownButtonFormField<String>(
-      value: value,
+      key: ValueKey('$label-$value'),
+      initialValue: value,
       decoration: InputDecoration(
         labelText: label,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -5495,15 +5536,17 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
         _fetch();
       }
     } on ApiException catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
     }
   }
 }
@@ -5565,9 +5608,16 @@ class _HardwarePriceCard extends StatelessWidget {
               runSpacing: 4,
               children: [
                 Chip(
-                  avatar: Icon(item.isFactory ? Icons.factory_outlined : Icons.storefront_outlined, size: 16),
+                  avatar: Icon(
+                    item.isFactory
+                        ? Icons.factory_outlined
+                        : Icons.storefront_outlined,
+                    size: 16,
+                  ),
                   label: Text(item.isFactory ? 'Factory' : 'Supplier'),
-                  backgroundColor: item.isFactory ? Colors.purple[50] : Colors.teal[50],
+                  backgroundColor: item.isFactory
+                      ? Colors.purple[50]
+                      : Colors.teal[50],
                 ),
                 if (item.brand.isNotEmpty)
                   Chip(
@@ -5624,16 +5674,27 @@ class _HardwarePriceCard extends StatelessWidget {
                 const Spacer(),
                 if (item.sourceUrl.isNotEmpty)
                   InkWell(
-                    onTap: () => launchUrl(Uri.parse(item.sourceUrl), mode: LaunchMode.externalApplication),
+                    onTap: () => launchUrl(
+                      Uri.parse(item.sourceUrl),
+                      mode: LaunchMode.externalApplication,
+                    ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
                           Uri.tryParse(item.sourceUrl)?.host ?? 'Source',
-                          style: const TextStyle(fontSize: 11, color: Color(0xFF05645B), fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF05645B),
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         const SizedBox(width: 2),
-                        const Icon(Icons.open_in_new, size: 12, color: Color(0xFF05645B)),
+                        const Icon(
+                          Icons.open_in_new,
+                          size: 12,
+                          color: Color(0xFF05645B),
+                        ),
                       ],
                     ),
                   )
@@ -5697,10 +5758,12 @@ class HardwarePriceDetailPage extends StatelessWidget {
     body: FutureBuilder<HardwarePriceHistory>(
       future: api.hardwarePriceHistory(hardwarePrice.id),
       builder: (context, snapshot) {
-        if (snapshot.hasError)
+        if (snapshot.hasError) {
           return Center(child: Text(friendlyError(snapshot.error)));
-        if (!snapshot.hasData)
+        }
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
         final data = snapshot.data!;
         return ListView(
           padding: const EdgeInsets.all(16),
@@ -5764,17 +5827,17 @@ class HardwarePriceDetailPage extends StatelessWidget {
             children: [
               _stat(
                 'Lowest',
-                '${NumberFormat('#,##0').format(summary.lowest)}',
+                NumberFormat('#,##0').format(summary.lowest),
                 summary.lowest <= item.price ? Colors.green : Colors.red,
               ),
               _stat(
                 'Highest',
-                '${NumberFormat('#,##0').format(summary.highest)}',
+                NumberFormat('#,##0').format(summary.highest),
                 summary.highest >= item.price ? Colors.red : Colors.green,
               ),
               _stat(
                 'Average',
-                '${NumberFormat('#,##0').format(summary.average)}',
+                NumberFormat('#,##0').format(summary.average),
                 Colors.blue,
               ),
               _stat(
@@ -5851,10 +5914,12 @@ class PriceHistoryPage extends StatelessWidget {
     body: FutureBuilder<HardwarePriceHistory>(
       future: api.hardwarePriceHistory(hardwarePrice.id),
       builder: (context, snapshot) {
-        if (snapshot.hasError)
+        if (snapshot.hasError) {
           return Center(child: Text(friendlyError(snapshot.error)));
-        if (!snapshot.hasData)
+        }
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
         final history = snapshot.data!.history;
         return ListView.builder(
           padding: const EdgeInsets.all(16),
@@ -5927,17 +5992,19 @@ class _PriceComparisonPageState extends State<PriceComparisonPage> {
       final result = await widget.api.hardwarePriceCompare(
         widget.items.map((e) => e.id).toList(),
       );
-      if (mounted)
+      if (mounted) {
         setState(() {
           _result = result;
           _loading = false;
         });
+      }
     } on ApiException catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _error = e.message;
           _loading = false;
         });
+      }
     }
   }
 
@@ -6053,17 +6120,17 @@ class _PriceComparisonPageState extends State<PriceComparisonPage> {
                 _dataRow(
                   'Lowest',
                   (item) =>
-                      '${NumberFormat('#,##0').format(item.priceHistory.lowest)}',
+                      NumberFormat('#,##0').format(item.priceHistory.lowest),
                 ),
                 _dataRow(
                   'Highest',
                   (item) =>
-                      '${NumberFormat('#,##0').format(item.priceHistory.highest)}',
+                      NumberFormat('#,##0').format(item.priceHistory.highest),
                 ),
                 _dataRow(
                   'Average',
                   (item) =>
-                      '${NumberFormat('#,##0').format(item.priceHistory.average)}',
+                      NumberFormat('#,##0').format(item.priceHistory.average),
                 ),
                 _dataRow('Rating', (item) => '${item.rating.overall}/100'),
                 _dataRow('Value Score', (item) => '${item.rating.valueScore}'),
@@ -6138,17 +6205,19 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       final items = await widget.api.hardwarePriceRecommendations(
         category: _selectedCategory,
       );
-      if (mounted)
+      if (mounted) {
         setState(() {
           _items = items;
           _loading = false;
         });
+      }
     } on ApiException catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _error = e.message;
           _loading = false;
         });
+      }
     }
   }
 
@@ -6426,10 +6495,12 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
       body: FutureBuilder<BoqDetail>(
         future: _boqDetail,
         builder: (context, snapshot) {
-          if (snapshot.hasError)
+          if (snapshot.hasError) {
             return Center(child: Text(friendlyError(snapshot.error)));
-          if (!snapshot.hasData)
+          }
+          if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
+          }
           final boq = snapshot.data!;
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -6591,11 +6662,11 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _miniSummary('Subtotal', '${money.format(summary.subtotal)}'),
-                _miniSummary('VAT', '${money.format(summary.vat)}'),
+                _miniSummary('Subtotal', money.format(summary.subtotal)),
+                _miniSummary('VAT', money.format(summary.vat)),
                 _miniSummary(
                   'Total',
-                  '${money.format(summary.grandTotal)}',
+                  money.format(summary.grandTotal),
                   isTotal: true,
                 ),
               ],
@@ -6676,9 +6747,9 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
                 ),
               )
             else
-              ...boq.facilities
-                  .map((facility) => _buildFacilityTile(facility, 0))
-                  .toList(),
+              ...boq.facilities.map(
+                (facility) => _buildFacilityTile(facility, 0),
+              ),
           ],
         ),
       ),
@@ -6704,9 +6775,7 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
             )
           : null,
       children: [
-        ...facility.bills
-            .map((bill) => _buildBillTile(bill, depth + 1))
-            .toList(),
+        ...facility.bills.map((bill) => _buildBillTile(bill, depth + 1)),
         if (facility.summaries.isNotEmpty) ...[
           const Divider(),
           ...facility.summaries.map((s) => _buildSummaryTile(s)),
@@ -6738,9 +6807,9 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
             )
           : null,
       children: [
-        ...bill.elements
-            .map((element) => _buildElementTile(element, depth + 1))
-            .toList(),
+        ...bill.elements.map(
+          (element) => _buildElementTile(element, depth + 1),
+        ),
         if (bill.summaries.isNotEmpty) ...[
           const Divider(),
           ...bill.summaries.map((s) => _buildSummaryTile(s)),
@@ -6769,11 +6838,11 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
           : null,
       children: [
         if (element.items.isNotEmpty)
-          ...element.items.map((item) => _buildItemTile(item)).toList(),
+          ...element.items.map((item) => _buildItemTile(item)),
         if (element.subElements.isNotEmpty)
-          ...element.subElements
-              .map((sub) => _buildSubElementTile(sub, depth + 1))
-              .toList(),
+          ...element.subElements.map(
+            (sub) => _buildSubElementTile(sub, depth + 1),
+          ),
       ],
     );
   }
@@ -6854,7 +6923,7 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
         style: const TextStyle(fontWeight: FontWeight.w600),
       ),
       trailing: Text(
-        '${money.format(summary.grandTotal)}',
+        money.format(summary.grandTotal),
         style: const TextStyle(
           fontWeight: FontWeight.w700,
           color: Color(0xFF047857),
@@ -7002,10 +7071,12 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
       body: FutureBuilder<BoqItemDetail>(
         future: _itemDetail,
         builder: (context, snapshot) {
-          if (snapshot.hasError)
+          if (snapshot.hasError) {
             return Center(child: Text(friendlyError(snapshot.error)));
-          if (!snapshot.hasData)
+          }
+          if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
+          }
           final item = snapshot.data!;
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -7077,9 +7148,7 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 12),
-                        ...item.translations
-                            .map((t) => _translationTile(t))
-                            .toList(),
+                        ...item.translations.map((t) => _translationTile(t)),
                       ],
                     ),
                   ),
@@ -7337,7 +7406,9 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
                 return RefreshIndicator(
                   onRefresh: () async {
                     _refresh();
-                    await _subscriptions.catchError((_) => <ProxySubscription>[]);
+                    await _subscriptions.catchError(
+                      (_) => <ProxySubscription>[],
+                    );
                   },
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
@@ -7392,7 +7463,8 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
-            value: _statusFilter,
+            key: ValueKey('status-$_statusFilter'),
+            initialValue: _statusFilter,
             decoration: InputDecoration(
               labelText: l10n.status,
               border: OutlineInputBorder(
@@ -7551,7 +7623,7 @@ class _ProxySubscriptionCard extends StatelessWidget {
                     backgroundColor: Colors.green[50],
                   ),
                   Chip(
-                    label: Text('${subscription.paymentStatus.capitalize()}'),
+                    label: Text(subscription.paymentStatus.capitalize()),
                     backgroundColor: subscription.paymentStatus == 'paid'
                         ? Colors.green[50]
                         : Colors.orange[50],
@@ -7564,7 +7636,7 @@ class _ProxySubscriptionCard extends StatelessWidget {
                   Icon(Icons.calendar_today, size: 14, color: Colors.grey[500]),
                   const SizedBox(width: 4),
                   Text(
-                    '${formatDate(subscription.createdAt)}',
+                    formatDate(subscription.createdAt),
                     style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                   ),
                   const Spacer(),
