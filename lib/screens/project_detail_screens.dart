@@ -9,12 +9,102 @@ class ProjectDetailPage extends StatelessWidget {
   final ApiClient api;
   final int projectId;
 
+  Future<void> _generateBoq(
+    BuildContext context,
+    ProjectDetail project,
+    BoqSummary boq,
+  ) async {
+    final place = [
+      project.country,
+      project.district,
+      project.location,
+    ].where((e) => e.isNotEmpty).toList().join(', ');
+    try {
+      final created = await api.processBoq(boq.id);
+      if (!context.mounted) return;
+      final items = await api.allBoqItems(boq.id);
+      if (!context.mounted) return;
+      if (items.isEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$created BOQ items created')));
+        return;
+      }
+      if (place.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Set a location on the project to fetch prices.'),
+          ),
+        );
+        return;
+      }
+      final progress = ValueNotifier<String>('Preparing to fetch prices...');
+      final reportFuture = _priceBoqItems(
+        api,
+        items,
+        place,
+        onProgress: (done, total, description) {
+          progress.value = 'Fetching $done/$total: $description';
+        },
+      );
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          reportFuture.then((_) {
+            if (dialogContext.mounted) {
+              Navigator.of(dialogContext).pop();
+            }
+          });
+          return AlertDialog(
+            title: const Text('Generating BOQ prices'),
+            content: ValueListenableBuilder<String>(
+              valueListenable: progress,
+              builder: (context, value, _) => Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(width: AppSpacing.lg),
+                  Expanded(child: Text(value)),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+      final report = await reportFuture;
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            report.failedMessages.isEmpty
+                ? 'Generated prices for ${report.priced} items'
+                : 'Generated ${report.priced} of ${items.length} (${report.failedMessages.length} failed)',
+          ),
+        ),
+      );
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) =>
+              BoqItemsPage(api: api, boqId: boq.id, title: boq.name),
+        ),
+      );
+    } on ApiException catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
       title: const Text('Project Details'),
       actions: [
         PopupMenuButton<String>(
+          tooltip: 'Project actions',
           onSelected: (value) async {
             if (value == 'edit') {
               await Navigator.of(context).push<bool>(
@@ -27,6 +117,10 @@ class ProjectDetailPage extends StatelessWidget {
               final confirm = await showDialog<bool>(
                 context: context,
                 builder: (_) => AlertDialog(
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    color: AppColors.danger,
+                  ),
                   title: const Text('Delete Project'),
                   content: const Text(
                     'Are you sure you want to delete this project? This action cannot be undone.',
@@ -37,6 +131,10 @@ class ProjectDetailPage extends StatelessWidget {
                       child: const Text('Cancel'),
                     ),
                     FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.danger,
+                        foregroundColor: Theme.of(context).colorScheme.onError,
+                      ),
                       onPressed: () => Navigator.pop(context, true),
                       child: const Text('Delete'),
                     ),
@@ -68,7 +166,7 @@ class ProjectDetailPage extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(Icons.edit_outlined),
-                  SizedBox(width: 8),
+                  SizedBox(width: AppSpacing.sm),
                   Text('Edit'),
                 ],
               ),
@@ -77,9 +175,9 @@ class ProjectDetailPage extends StatelessWidget {
               value: 'delete',
               child: Row(
                 children: [
-                  Icon(Icons.delete_outline, color: Colors.red),
-                  SizedBox(width: 8),
-                  Text('Delete', style: TextStyle(color: Colors.red)),
+                  Icon(Icons.delete_outline, color: AppColors.danger),
+                  SizedBox(width: AppSpacing.sm),
+                  Text('Delete', style: TextStyle(color: AppColors.danger)),
                 ],
               ),
             ),
@@ -91,246 +189,266 @@ class ProjectDetailPage extends StatelessWidget {
       future: api.project(projectId),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(child: Text(friendlyError(snapshot.error)));
+          return ErrorState(error: snapshot.error);
         }
         if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const LoadingState();
         }
         final project = snapshot.data!;
         final dateFormat = DateFormat('MMM dd, yyyy');
+        final theme = Theme.of(context);
+        final scheme = theme.colorScheme;
         return ListView(
-          padding: const EdgeInsets.all(20),
+          padding: AppSpacing.page,
           children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      project.name,
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Code: ${project.code}',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-                    ),
-                    const SizedBox(height: 16),
-                    _detailRow(
-                      'Owner',
-                      project.ownerName.isNotEmpty ? project.ownerName : '—',
-                    ),
-                    _detailRow('Status', project.status.capitalize()),
-                    _detailRow(
-                      'Client',
-                      project.client.isNotEmpty ? project.client : '—',
-                    ),
-                    _detailRow(
-                      'Contractor',
-                      project.contractor.isNotEmpty ? project.contractor : '—',
-                    ),
-                    _detailRow(
-                      'Consultant',
-                      project.consultant.isNotEmpty ? project.consultant : '—',
-                    ),
-                    _detailRow(
-                      'Quantity Surveyor',
-                      project.quantitySurveyor.isNotEmpty
-                          ? project.quantitySurveyor
-                          : '—',
-                    ),
-                    _detailRow(
-                      'Project Manager',
-                      project.projectManager.isNotEmpty
-                          ? project.projectManager
-                          : '—',
-                    ),
-                    _detailRow(
-                      'Site Engineer',
-                      project.siteEngineer.isNotEmpty
-                          ? project.siteEngineer
-                          : '—',
-                    ),
-                    _detailRow(
-                      'Funding Organisation',
-                      project.fundingOrganisation.isNotEmpty
-                          ? project.fundingOrganisation
-                          : '—',
-                    ),
-                    _detailRow(
-                      'Location',
-                      _formatLocation(
-                        project.country,
-                        project.district,
-                        project.location,
-                      ),
-                    ),
-                    _detailRow(
-                      'Project Type',
-                      project.projectType.isNotEmpty
-                          ? project.projectType
-                          : '—',
-                    ),
-                    _detailRow(
-                      'Start Date',
-                      project.startDate.isNotEmpty
-                          ? dateFormat.format(DateTime.parse(project.startDate))
-                          : '—',
-                    ),
-                    _detailRow(
-                      'Expected Completion',
-                      project.expectedCompletionDate.isNotEmpty
-                          ? dateFormat.format(
-                              DateTime.parse(project.expectedCompletionDate),
-                            )
-                          : '—',
-                    ),
-                    _detailRow(
-                      'Contract Value',
-                      '${NumberFormat('#,##0.00').format(project.contractValue)} ${project.currency}',
-                    ),
-                    if (project.description.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        'Description',
-                        style: Theme.of(context).textTheme.labelLarge,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(project.description),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'BOQs',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 12),
-            if (project.boqs.isEmpty) const Center(child: Text('No BOQs yet')),
-            for (final boq in project.boqs)
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.description_outlined),
-                  title: Text(boq.name),
-                  subtitle: Text(boq.status),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => BoqDetailPage(
-                        api: api,
-                        boqId: boq.id,
-                        title: boq.name,
+            ContentWidth(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Card(
+                    child: Padding(
+                      padding: AppSpacing.card,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const IconTile(
+                                icon: Icons.foundation_outlined,
+                                size: 48,
+                              ),
+                              const SizedBox(width: AppSpacing.md),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      project.name,
+                                      style: theme.textTheme.titleLarge
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                    ),
+                                    const SizedBox(height: AppSpacing.xs),
+                                    Text(
+                                      'Code: ${project.code}',
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: scheme.onSurfaceVariant,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 120,
+                                ),
+                                child: StatusBadge(
+                                  label: project.status.capitalize(),
+                                  tone: StatusTone.forStatus(project.status),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: AppSpacing.lg),
+                          const Divider(height: 1),
+                          const SizedBox(height: AppSpacing.md),
+                          Text(
+                            'Contract Value',
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          AmountText(
+                            project.contractValue,
+                            currency: project.currency,
+                            decimals: 2,
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: scheme.primary,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                  trailing: boq.status == 'uploaded'
-                      ? FilledButton(
-                          onPressed: () async {
-                            final place = [
-                              project.country,
-                              project.district,
-                              project.location,
-                            ].where((e) => e.isNotEmpty).toList().join(', ');
-                            try {
-                              final created = await api.processBoq(boq.id);
-                              if (!context.mounted) return;
-                              final items = await api.allBoqItems(boq.id);
-                              if (!context.mounted) return;
-                              if (items.isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('$created BOQ items created'),
-                                  ),
-                                );
-                                return;
-                              }
-                              if (place.isEmpty) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Set a location on the project to fetch prices.',
-                                    ),
-                                  ),
-                                );
-                                return;
-                              }
-                              final progress = ValueNotifier<String>(
-                                'Preparing to fetch prices...',
-                              );
-                              final reportFuture = _priceBoqItems(
-                                api,
-                                items,
-                                place,
-                                onProgress: (done, total, description) {
-                                  progress.value =
-                                      'Fetching $done/$total: $description';
-                                },
-                              );
-                              await showDialog<void>(
-                                context: context,
-                                barrierDismissible: false,
-                                builder: (dialogContext) {
-                                  reportFuture.then((_) {
-                                    if (dialogContext.mounted) {
-                                      Navigator.of(dialogContext).pop();
-                                    }
-                                  });
-                                  return AlertDialog(
-                                    title: const Text('Generating BOQ prices'),
-                                    content: ValueListenableBuilder<String>(
-                                      valueListenable: progress,
-                                      builder: (context, value, _) => Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const CircularProgressIndicator(),
-                                          const SizedBox(width: 16),
-                                          Expanded(child: Text(value)),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              );
-                              final report = await reportFuture;
-                              if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    report.failedMessages.isEmpty
-                                        ? 'Generated prices for ${report.priced} items'
-                                        : 'Generated ${report.priced} of ${items.length} (${report.failedMessages.length} failed)',
-                                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  SectionCard(
+                    title: 'Overview',
+                    icon: Icons.info_outline,
+                    children: [
+                      _detailRow(
+                        'Owner',
+                        project.ownerName.isNotEmpty ? project.ownerName : '—',
+                      ),
+                      _detailRow('Status', project.status.capitalize()),
+                      _detailRow(
+                        'Project Type',
+                        project.projectType.isNotEmpty
+                            ? project.projectType
+                            : '—',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  SectionCard(
+                    title: 'Parties',
+                    icon: Icons.groups_outlined,
+                    children: [
+                      _detailRow(
+                        'Client',
+                        project.client.isNotEmpty ? project.client : '—',
+                      ),
+                      _detailRow(
+                        'Contractor',
+                        project.contractor.isNotEmpty
+                            ? project.contractor
+                            : '—',
+                      ),
+                      _detailRow(
+                        'Consultant',
+                        project.consultant.isNotEmpty
+                            ? project.consultant
+                            : '—',
+                      ),
+                      _detailRow(
+                        'Quantity Surveyor',
+                        project.quantitySurveyor.isNotEmpty
+                            ? project.quantitySurveyor
+                            : '—',
+                      ),
+                      _detailRow(
+                        'Project Manager',
+                        project.projectManager.isNotEmpty
+                            ? project.projectManager
+                            : '—',
+                      ),
+                      _detailRow(
+                        'Site Engineer',
+                        project.siteEngineer.isNotEmpty
+                            ? project.siteEngineer
+                            : '—',
+                      ),
+                      _detailRow(
+                        'Funding Organisation',
+                        project.fundingOrganisation.isNotEmpty
+                            ? project.fundingOrganisation
+                            : '—',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  SectionCard(
+                    title: 'Location',
+                    icon: Icons.location_on_outlined,
+                    children: [
+                      _detailRow(
+                        'Location',
+                        _formatLocation(
+                          project.country,
+                          project.district,
+                          project.location,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  SectionCard(
+                    title: 'Dates',
+                    icon: Icons.event_note_outlined,
+                    children: [
+                      _detailRow(
+                        'Start Date',
+                        project.startDate.isNotEmpty
+                            ? dateFormat.format(
+                                DateTime.parse(project.startDate),
+                              )
+                            : '—',
+                      ),
+                      _detailRow(
+                        'Expected Completion',
+                        project.expectedCompletionDate.isNotEmpty
+                            ? dateFormat.format(
+                                DateTime.parse(project.expectedCompletionDate),
+                              )
+                            : '—',
+                      ),
+                    ],
+                  ),
+                  if (project.description.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.lg),
+                    SectionCard(
+                      title: 'Description',
+                      icon: Icons.notes_outlined,
+                      children: [
+                        Text(
+                          project.description,
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: AppSpacing.sectionGap),
+                  SectionHeader(
+                    title: 'BOQs',
+                    trailing: project.boqs.isEmpty
+                        ? null
+                        : StatusBadge(
+                            label: '${project.boqs.length}',
+                            tone: StatusTone.brand,
+                          ),
+                  ),
+                  if (project.boqs.isEmpty)
+                    const Card(
+                      child: EmptyState(
+                        compact: true,
+                        icon: Icons.description_outlined,
+                        title: 'No BOQs yet',
+                      ),
+                    ),
+                  for (final boq in project.boqs)
+                    ListItemCard(
+                      leading: const IconTile(icon: Icons.description_outlined),
+                      title: boq.name,
+                      trailing: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 110),
+                        child: StatusBadge(
+                          label: boq.status.capitalize(),
+                          tone: boq.status == 'uploaded'
+                              ? StatusTone.info
+                              : StatusTone.forStatus(boq.status),
+                        ),
+                      ),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => BoqDetailPage(
+                            api: api,
+                            boqId: boq.id,
+                            title: boq.name,
+                          ),
+                        ),
+                      ),
+                      footer: boq.status == 'uploaded'
+                          ? FilledButton.icon(
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size.fromHeight(
+                                  AppSizes.minTap,
                                 ),
-                              );
-                              await Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => BoqItemsPage(
-                                    api: api,
-                                    boqId: boq.id,
-                                    title: boq.name,
-                                  ),
-                                ),
-                              );
-                            } on ApiException catch (error) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text(error.message)),
-                                );
-                              }
-                            }
-                          },
-                          child: const Text('Generate BOQ'),
-                        )
-                      : null,
-                ),
+                              ),
+                              onPressed: () =>
+                                  _generateBoq(context, project, boq),
+                              icon: const Icon(Icons.auto_awesome),
+                              label: const Text('Generate BOQ'),
+                            )
+                          : null,
+                    ),
+                ],
               ),
+            ),
           ],
         );
       },
@@ -551,170 +669,202 @@ class _EditProjectPageState extends State<EditProjectPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Edit Project')),
-    body: _project == null
-        ? const Center(child: CircularProgressIndicator())
-        : Form(
-            key: _formKey,
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                TextFormField(
-                  controller: _name,
-                  decoration: const InputDecoration(
-                    labelText: 'Project Name *',
-                  ),
-                  validator: (v) => v!.isEmpty ? 'Required' : null,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _code,
-                  decoration: const InputDecoration(labelText: 'Project Code'),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _client,
-                  decoration: const InputDecoration(labelText: 'Client'),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _contractor,
-                  decoration: const InputDecoration(labelText: 'Contractor'),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _consultant,
-                  decoration: const InputDecoration(labelText: 'Consultant'),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _quantitySurveyor,
-                  decoration: const InputDecoration(
-                    labelText: 'Quantity Surveyor',
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _projectManager,
-                  decoration: const InputDecoration(
-                    labelText: 'Project Manager',
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _siteEngineer,
-                  decoration: const InputDecoration(labelText: 'Site Engineer'),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _fundingOrganisation,
-                  decoration: const InputDecoration(
-                    labelText: 'Funding Organisation',
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _country,
-                  decoration: const InputDecoration(labelText: 'Country'),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _district,
-                  decoration: const InputDecoration(labelText: 'District'),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _location,
-                  decoration: const InputDecoration(labelText: 'Location'),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _projectType,
-                  decoration: const InputDecoration(labelText: 'Project Type'),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _startDate,
-                  decoration: const InputDecoration(
-                    labelText: 'Start Date',
-                    suffixIcon: Icon(Icons.calendar_today),
-                  ),
-                  readOnly: true,
-                  onTap: () => _pickDate(_startDate),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _expectedCompletionDate,
-                  decoration: const InputDecoration(
-                    labelText: 'Expected Completion Date',
-                    suffixIcon: Icon(Icons.calendar_today),
-                  ),
-                  readOnly: true,
-                  onTap: () => _pickDate(_expectedCompletionDate),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _contractValue,
-                  decoration: const InputDecoration(
-                    labelText: 'Contract Value',
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _currency,
-                  decoration: const InputDecoration(labelText: 'Currency'),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _description,
-                  decoration: const InputDecoration(labelText: 'Description'),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _originalLanguage,
-                  decoration: const InputDecoration(
-                    labelText: 'Original Language',
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _reportLanguage,
-                  decoration: const InputDecoration(
-                    labelText: 'Report Language',
-                  ),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: _status,
-                  decoration: const InputDecoration(labelText: 'Status'),
-                  items: const [
-                    DropdownMenuItem(value: 'draft', child: Text('Draft')),
-                    DropdownMenuItem(value: 'active', child: Text('Active')),
-                    DropdownMenuItem(
-                      value: 'completed',
-                      child: Text('Completed'),
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Edit Project')),
+      body: _project == null
+          ? const LoadingState()
+          : Form(
+              key: _formKey,
+              child: ListView(
+                padding: AppSpacing.page,
+                children: [
+                  ContentWidth(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SectionCard(
+                          title: 'Basic details',
+                          icon: Icons.info_outline,
+                          spacing: AppSpacing.md,
+                          children: [
+                            _projectTextField(
+                              controller: _name,
+                              label: 'Project Name *',
+                              icon: Icons.foundation_outlined,
+                              validator: (v) => v!.isEmpty ? 'Required' : null,
+                            ),
+                            _projectTextField(
+                              controller: _code,
+                              label: 'Project Code',
+                              icon: Icons.tag,
+                            ),
+                            _projectTextField(
+                              controller: _projectType,
+                              label: 'Project Type',
+                              icon: Icons.category_outlined,
+                            ),
+                            DropdownButtonFormField<String>(
+                              initialValue: _status,
+                              decoration: const InputDecoration(
+                                labelText: 'Status',
+                                prefixIcon: Icon(Icons.flag_outlined),
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'draft',
+                                  child: Text('Draft'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'active',
+                                  child: Text('Active'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'completed',
+                                  child: Text('Completed'),
+                                ),
+                                DropdownMenuItem(
+                                  value: 'archived',
+                                  child: Text('Archived'),
+                                ),
+                              ],
+                              onChanged: (v) => setState(() => _status = v!),
+                            ),
+                            _projectTextField(
+                              controller: _description,
+                              label: 'Description',
+                              maxLines: 3,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        SectionCard(
+                          title: 'Parties',
+                          icon: Icons.groups_outlined,
+                          spacing: AppSpacing.md,
+                          children: [
+                            _projectTextField(
+                              controller: _client,
+                              label: 'Client',
+                              icon: Icons.business_outlined,
+                            ),
+                            _projectTextField(
+                              controller: _contractor,
+                              label: 'Contractor',
+                              icon: Icons.engineering_outlined,
+                            ),
+                            _projectTextField(
+                              controller: _consultant,
+                              label: 'Consultant',
+                              icon: Icons.support_agent_outlined,
+                            ),
+                            _projectTextField(
+                              controller: _quantitySurveyor,
+                              label: 'Quantity Surveyor',
+                              icon: Icons.straighten_outlined,
+                            ),
+                            _projectTextField(
+                              controller: _projectManager,
+                              label: 'Project Manager',
+                              icon: Icons.manage_accounts_outlined,
+                            ),
+                            _projectTextField(
+                              controller: _siteEngineer,
+                              label: 'Site Engineer',
+                              icon: Icons.construction_outlined,
+                            ),
+                            _projectTextField(
+                              controller: _fundingOrganisation,
+                              label: 'Funding Organisation',
+                              icon: Icons.account_balance_outlined,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        SectionCard(
+                          title: 'Location',
+                          icon: Icons.location_on_outlined,
+                          spacing: AppSpacing.md,
+                          children: [
+                            _projectTextField(
+                              controller: _country,
+                              label: 'Country',
+                              icon: Icons.public,
+                            ),
+                            _projectTextField(
+                              controller: _district,
+                              label: 'District',
+                              icon: Icons.map_outlined,
+                            ),
+                            _projectTextField(
+                              controller: _location,
+                              label: 'Location',
+                              icon: Icons.place_outlined,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        SectionCard(
+                          title: 'Dates & value',
+                          icon: Icons.event_note_outlined,
+                          spacing: AppSpacing.md,
+                          children: [
+                            _projectDateField(
+                              controller: _startDate,
+                              label: 'Start Date',
+                              onTap: () => _pickDate(_startDate),
+                            ),
+                            _projectDateField(
+                              controller: _expectedCompletionDate,
+                              label: 'Expected Completion Date',
+                              onTap: () => _pickDate(_expectedCompletionDate),
+                            ),
+                            _projectTextField(
+                              controller: _contractValue,
+                              label: 'Contract Value',
+                              icon: Icons.payments_outlined,
+                              keyboardType: TextInputType.number,
+                            ),
+                            _projectTextField(
+                              controller: _currency,
+                              label: 'Currency',
+                              icon: Icons.currency_exchange,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        SectionCard(
+                          title: 'Languages',
+                          icon: Icons.translate,
+                          spacing: AppSpacing.md,
+                          children: [
+                            _projectTextField(
+                              controller: _originalLanguage,
+                              label: 'Original Language',
+                              icon: Icons.language,
+                            ),
+                            _projectTextField(
+                              controller: _reportLanguage,
+                              label: 'Report Language',
+                              icon: Icons.description_outlined,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.xxl),
+                        LoadingButton(
+                          label: 'Save Changes',
+                          icon: Icons.save_outlined,
+                          loading: _loading,
+                          onPressed: _save,
+                        ),
+                      ],
                     ),
-                    DropdownMenuItem(
-                      value: 'archived',
-                      child: Text('Archived'),
-                    ),
-                  ],
-                  onChanged: (v) => setState(() => _status = v!),
-                ),
-                const SizedBox(height: 20),
-                FilledButton(
-                  onPressed: _loading ? null : _save,
-                  child: _loading
-                      ? const CircularProgressIndicator()
-                      : const Text('Save Changes'),
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
-          ),
-  );
+    );
+  }
 }
 
 class BoqItemsPage extends StatefulWidget {
@@ -897,7 +1047,7 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
       title: Text(widget.title),
       actions: [
         IconButton(
-          icon: const Icon(Icons.account_tree),
+          icon: const Icon(Icons.account_tree_outlined),
           onPressed: () => Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => BoqDetailPage(
@@ -916,11 +1066,28 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
       future: _boqDetail,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(child: Text(friendlyError(snapshot.error)));
+          return RefreshIndicator(
+            onRefresh: _refreshItems,
+            child: LayoutBuilder(
+              builder: (context, constraints) => ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  SizedBox(
+                    height: constraints.maxHeight,
+                    child: ErrorState(
+                      error: snapshot.error,
+                      onRetry: _refreshItems,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
         }
         if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const LoadingState();
         }
+        final theme = Theme.of(context);
         final boq = snapshot.data!;
         final items = _flattenBoqItems(boq);
         final total = items.fold<double>(
@@ -929,99 +1096,63 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
               sum + (double.tryParse(item.amount.replaceAll(',', '')) ?? 0),
         );
         final money = NumberFormat('#,##0.00');
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: const Color(0xFF102A43),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Overall BOQ Cost',
-                    style: TextStyle(color: Color(0xFFBFD7EA)),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${boq.currency} ${money.format(total)}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _location,
-              decoration: const InputDecoration(
-                labelText: 'Select location',
-                prefixIcon: Icon(Icons.location_on_outlined),
-              ),
-            ),
-            const SizedBox(height: 10),
-            FilledButton.icon(
-              onPressed: _pricing ? null : _price,
-              icon: const Icon(Icons.auto_awesome),
-              label: const Text('Get Prices'),
-            ),
-            if (_progress != null)
-              Container(
-                padding: const EdgeInsets.all(14),
-                margin: const EdgeInsets.only(top: 8),
-                color: const Color(0xFFE8F5E9),
-                child: Row(
+        return RefreshIndicator(
+          onRefresh: _refreshItems,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            // Extra bottom space so the share FAB never covers content.
+            padding: AppSpacing.page.copyWith(bottom: 96),
+            children: [
+              ContentWidth(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Icon(Icons.schedule),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Text(
-                          'Progress: $_progress',
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                      ),
+                    HighlightCard(
+                      label: 'Overall BOQ Cost',
+                      value: '${boq.currency} ${money.format(total)}',
+                      icon: Icons.account_balance_wallet_outlined,
                     ),
-                  ],
-                ),
-              ),
-            if (_pricing)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: LinearProgressIndicator(),
-              ),
-            if (_failedReport.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.all(14),
-                margin: const EdgeInsets.only(top: 8),
-                color: const Color(0xFFFFEBEE),
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${_failedReport.length} item(s) could not be priced:',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFFB71C1C),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      for (final failure in _failedReport)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2),
-                          child: Text(
-                            '- $failure',
-                            style: const TextStyle(fontSize: 13),
+                    const SizedBox(height: AppSpacing.lg),
+                    SectionCard(
+                      title: 'Get Prices',
+                      icon: Icons.sell_outlined,
+                      spacing: AppSpacing.md,
+                      children: [
+                        TextField(
+                          controller: _location,
+                          decoration: const InputDecoration(
+                            labelText: 'Select location',
+                            prefixIcon: Icon(Icons.location_on_outlined),
                           ),
                         ),
+                        LoadingButton(
+                          label: 'Get Prices',
+                          icon: Icons.auto_awesome,
+                          loading: _pricing,
+                          onPressed: _price,
+                        ),
+                        if (_progress != null)
+                          InfoBanner(
+                            message: 'Progress: $_progress',
+                            tone: BannerTone.info,
+                            icon: Icons.schedule,
+                          ),
+                        if (_pricing)
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(AppRadii.pill),
+                            child: const LinearProgressIndicator(),
+                          ),
+                      ],
+                    ),
+                    if (_failedReport.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      InfoBanner(
+                        title:
+                            '${_failedReport.length} item(s) could not be priced:',
+                        message: [
+                          for (final failure in _failedReport) '- $failure',
+                        ].join('\n'),
+                      ),
                       if (_retryItems.isNotEmpty)
                         Align(
                           alignment: Alignment.centerRight,
@@ -1032,56 +1163,51 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
                           ),
                         ),
                     ],
-                  ),
-                ),
-              ),
-            const SizedBox(height: 16),
-            if (_historyVisible) ...[
-              OutlinedButton.icon(
-                onPressed: _compareLocations,
-                icon: const Icon(Icons.compare_arrows),
-                label: const Text('Compare saved locations'),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Pricing History',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
-              ),
-              const SizedBox(height: 8),
-              if (_history.isEmpty) ...[
-                const SizedBox(height: 8),
-                FilledButton.icon(
-                  onPressed: _loadHistory,
-                  icon: const Icon(Icons.history),
-                  label: Text('Load History'),
-                ),
-              ] else ...[
-                for (final h in _history) ...[
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Row(
-                        children: [
-                          Text(
-                            '${h['suggested_rate'] ?? 'N/A'}',
-                            style: const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          const Spacer(),
-                          Text('${h['boqItem']?['description'] ?? ''}'),
-                          const SizedBox(width: 8),
-                          Text(
-                            '${h['boqItem']?['quantity']} ${h['boqItem']?['unit'] ?? ''}',
-                          ),
-                        ],
+                    if (_historyVisible) ...[
+                      const SizedBox(height: AppSpacing.lg),
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(AppSizes.minTap),
+                        ),
+                        onPressed: _compareLocations,
+                        icon: const Icon(Icons.compare_arrows),
+                        label: const Text('Compare saved locations'),
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ],
-              const SizedBox(height: 16),
+                      const SizedBox(height: AppSpacing.sectionGap),
+                      const SectionHeader(title: 'Pricing History'),
+                      if (_history.isEmpty)
+                        FilledButton.tonalIcon(
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size.fromHeight(AppSizes.minTap),
+                          ),
+                          onPressed: _loadHistory,
+                          icon: const Icon(Icons.history),
+                          label: const Text('Load History'),
+                        )
+                      else
+                        for (final h in _history)
+                          ListItemCard(
+                            leading: const IconTile(
+                              icon: Icons.history,
+                              tone: StatusTone.info,
+                            ),
+                            title: '${h['boqItem']?['description'] ?? ''}',
+                            subtitle:
+                                '${h['boqItem']?['quantity']} ${h['boqItem']?['unit'] ?? ''}',
+                            trailing: Text(
+                              '${h['suggested_rate'] ?? 'N/A'}',
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                    ],
+                  ],
+                ),
+              ),
             ],
-          ],
+          ),
         );
       },
     ),
@@ -1106,41 +1232,76 @@ class LocationComparisonPage extends StatelessWidget {
       final location = '${entry['location'] ?? 'Unknown location'}';
       grouped.putIfAbsent(location, () => []).add(entry);
     }
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Location Price Comparison')),
       body: history.isEmpty
-          ? const Center(child: Text('No saved location prices yet'))
+          ? const EmptyState(
+              icon: Icons.compare_arrows,
+              title: 'No saved location prices yet',
+            )
           : ListView(
-              padding: const EdgeInsets.all(16),
+              padding: AppSpacing.page,
               children: [
-                const Text(
-                  'Saved prices by hardware and location',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
-                ),
-                const SizedBox(height: 12),
-                for (final location in grouped.keys) ...[
-                  Text(
-                    location,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 6),
-                  for (final entry in grouped[location]!)
-                    Card(
-                      child: ListTile(
-                        title: Text(
-                          '${entry['boqItem']?['description'] ?? 'Hardware item'}',
-                        ),
-                        subtitle: Text(
-                          '${entry['boqItem']?['unit'] ?? ''}  |  ${entry['currency'] ?? ''}',
-                        ),
-                        trailing: Text(
-                          '${entry['suggested_rate'] ?? 'N/A'}',
-                          style: const TextStyle(fontWeight: FontWeight.w700),
-                        ),
+                ContentWidth(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SectionHeader(
+                        title: 'Saved prices by hardware and location',
                       ),
-                    ),
-                  const SizedBox(height: 12),
-                ],
+                      for (final location in grouped.keys) ...[
+                        SectionCard(
+                          title: location,
+                          icon: Icons.location_on_outlined,
+                          children: [
+                            for (
+                              var i = 0;
+                              i < grouped[location]!.length;
+                              i++
+                            ) ...[
+                              if (i > 0) const Divider(height: AppSpacing.lg),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '${grouped[location]![i]['boqItem']?['description'] ?? 'Hardware item'}',
+                                          style: theme.textTheme.titleSmall,
+                                        ),
+                                        const SizedBox(height: AppSpacing.xxs),
+                                        Text(
+                                          '${grouped[location]![i]['boqItem']?['unit'] ?? ''}  |  ${grouped[location]![i]['currency'] ?? ''}',
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: scheme.onSurfaceVariant,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: AppSpacing.md),
+                                  Text(
+                                    '${grouped[location]![i]['suggested_rate'] ?? 'N/A'}',
+                                    style: theme.textTheme.titleSmall?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      color: scheme.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                      ],
+                    ],
+                  ),
+                ),
               ],
             ),
     );

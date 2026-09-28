@@ -27,9 +27,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
   }
 
   Color _statusColor(String status) {
-    return status == 'active'
-        ? const Color(0xFF047857)
-        : const Color(0xFFB45309);
+    return status == 'active' ? AppColors.success : AppColors.warning;
   }
 
   Future<void> _createProject() async {
@@ -41,72 +39,138 @@ class _ProjectsPageState extends State<ProjectsPage> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final l10n = widget.l10n;
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            l10n.projects,
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: FutureBuilder<List<ProjectSummary>>(
-              future: _projects,
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(child: Text(friendlyError(snapshot.error)));
-                }
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.data!.isEmpty) {
-                  return Center(child: Text(l10n.noProjects));
-                }
-                return RefreshIndicator(
-                  onRefresh: _reload,
-                  child: ListView(
-                    children: [
-                      for (final project in snapshot.data!)
-                        _ProjectTile(
-                          name: project.name,
-                          code: project.code,
-                          status: _statusLabel(project.status),
-                          color: _statusColor(project.status),
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => ProjectDetailPage(
-                                api: widget.api,
-                                projectId: project.id,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _createProject,
-              icon: const Icon(Icons.add),
-              label: Text(l10n.createProject),
-            ),
-          ),
-        ],
+  /// Wraps a non-list body so pull-to-refresh still works when it is shown.
+  Widget _scrollableFill(Widget child) {
+    return LayoutBuilder(
+      builder: (context, constraints) => ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [SizedBox(height: constraints.maxHeight, child: child)],
       ),
     );
   }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = widget.l10n;
+    return FutureBuilder<List<ProjectSummary>>(
+      future: _projects,
+      builder: (context, snapshot) {
+        final isEmpty = snapshot.hasData && snapshot.data!.isEmpty;
+        final Widget body;
+        if (snapshot.hasError) {
+          body = _scrollableFill(
+            ErrorState(error: snapshot.error, onRetry: _reload),
+          );
+        } else if (!snapshot.hasData) {
+          body = const SkeletonList();
+        } else if (isEmpty) {
+          body = _scrollableFill(
+            EmptyState(
+              icon: Icons.folder_open_outlined,
+              title: l10n.noProjects,
+              actionLabel: l10n.createProject,
+              onAction: _createProject,
+            ),
+          );
+        } else {
+          body = ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: AppSpacing.page,
+            children: [
+              for (final project in snapshot.data!)
+                ContentWidth(
+                  child: _ProjectTile(
+                    name: project.name,
+                    code: project.code,
+                    status: _statusLabel(project.status),
+                    color: _statusColor(project.status),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ProjectDetailPage(
+                          api: widget.api,
+                          projectId: project.id,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: RefreshIndicator(onRefresh: _reload, child: body),
+            ),
+            if (!isEmpty)
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.sm,
+                    AppSpacing.lg,
+                    AppSpacing.lg,
+                  ),
+                  child: ContentWidth(
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(
+                          AppSizes.buttonHeight,
+                        ),
+                      ),
+                      onPressed: _createProject,
+                      icon: const Icon(Icons.add),
+                      label: Text(l10n.createProject),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Text field used by the create / edit project forms.
+Widget _projectTextField({
+  required TextEditingController controller,
+  required String label,
+  IconData? icon,
+  TextInputType? keyboardType,
+  int maxLines = 1,
+  String? Function(String?)? validator,
+}) {
+  return TextFormField(
+    controller: controller,
+    decoration: InputDecoration(
+      labelText: label,
+      prefixIcon: icon == null ? null : Icon(icon),
+      alignLabelWithHint: maxLines > 1,
+    ),
+    keyboardType: keyboardType,
+    maxLines: maxLines,
+    validator: validator,
+  );
+}
+
+/// Read-only date field that opens a picker when tapped.
+Widget _projectDateField({
+  required TextEditingController controller,
+  required String label,
+  required VoidCallback onTap,
+}) {
+  return TextFormField(
+    controller: controller,
+    decoration: InputDecoration(
+      labelText: label,
+      prefixIcon: const Icon(Icons.calendar_today_outlined),
+    ),
+    readOnly: true,
+    onTap: onTap,
+  );
 }
 
 class CreateProjectPage extends StatefulWidget {
@@ -253,154 +317,197 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: AppSpacing.page,
           children: [
-            TextFormField(
-              controller: _name,
-              decoration: const InputDecoration(labelText: 'Project Name *'),
-              validator: (value) =>
-                  value == null || value.trim().isEmpty ? 'Required' : null,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _code,
-              decoration: InputDecoration(labelText: l10n.projectCode),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _client,
-              decoration: const InputDecoration(labelText: 'Client'),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _contractor,
-              decoration: const InputDecoration(labelText: 'Contractor'),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _consultant,
-              decoration: const InputDecoration(labelText: 'Consultant'),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _quantitySurveyor,
-              decoration: const InputDecoration(labelText: 'Quantity Surveyor'),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _projectManager,
-              decoration: const InputDecoration(labelText: 'Project Manager'),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _siteEngineer,
-              decoration: const InputDecoration(labelText: 'Site Engineer'),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _fundingOrganisation,
-              decoration: const InputDecoration(
-                labelText: 'Funding Organisation',
+            ContentWidth(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SectionCard(
+                    title: 'Basic details',
+                    icon: Icons.info_outline,
+                    spacing: AppSpacing.md,
+                    children: [
+                      _projectTextField(
+                        controller: _name,
+                        label: 'Project Name *',
+                        icon: Icons.foundation_outlined,
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                            ? 'Required'
+                            : null,
+                      ),
+                      _projectTextField(
+                        controller: _code,
+                        label: l10n.projectCode,
+                        icon: Icons.tag,
+                      ),
+                      _projectTextField(
+                        controller: _projectType,
+                        label: 'Project Type',
+                        icon: Icons.category_outlined,
+                      ),
+                      DropdownButtonFormField<String>(
+                        initialValue: _status,
+                        decoration: const InputDecoration(
+                          labelText: 'Status',
+                          prefixIcon: Icon(Icons.flag_outlined),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'draft',
+                            child: Text('Draft'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'active',
+                            child: Text('Active'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'completed',
+                            child: Text('Completed'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'archived',
+                            child: Text('Archived'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) setState(() => _status = value);
+                        },
+                      ),
+                      _projectTextField(
+                        controller: _description,
+                        label: 'Description',
+                        maxLines: 3,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  SectionCard(
+                    title: 'Parties',
+                    icon: Icons.groups_outlined,
+                    spacing: AppSpacing.md,
+                    children: [
+                      _projectTextField(
+                        controller: _client,
+                        label: 'Client',
+                        icon: Icons.business_outlined,
+                      ),
+                      _projectTextField(
+                        controller: _contractor,
+                        label: 'Contractor',
+                        icon: Icons.engineering_outlined,
+                      ),
+                      _projectTextField(
+                        controller: _consultant,
+                        label: 'Consultant',
+                        icon: Icons.support_agent_outlined,
+                      ),
+                      _projectTextField(
+                        controller: _quantitySurveyor,
+                        label: 'Quantity Surveyor',
+                        icon: Icons.straighten_outlined,
+                      ),
+                      _projectTextField(
+                        controller: _projectManager,
+                        label: 'Project Manager',
+                        icon: Icons.manage_accounts_outlined,
+                      ),
+                      _projectTextField(
+                        controller: _siteEngineer,
+                        label: 'Site Engineer',
+                        icon: Icons.construction_outlined,
+                      ),
+                      _projectTextField(
+                        controller: _fundingOrganisation,
+                        label: 'Funding Organisation',
+                        icon: Icons.account_balance_outlined,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  SectionCard(
+                    title: 'Location',
+                    icon: Icons.location_on_outlined,
+                    spacing: AppSpacing.md,
+                    children: [
+                      _projectTextField(
+                        controller: _country,
+                        label: 'Country',
+                        icon: Icons.public,
+                      ),
+                      _projectTextField(
+                        controller: _district,
+                        label: 'District',
+                        icon: Icons.map_outlined,
+                      ),
+                      _projectTextField(
+                        controller: _location,
+                        label: 'Location',
+                        icon: Icons.place_outlined,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  SectionCard(
+                    title: 'Dates & value',
+                    icon: Icons.event_note_outlined,
+                    spacing: AppSpacing.md,
+                    children: [
+                      _projectDateField(
+                        controller: _startDate,
+                        label: 'Start Date',
+                        onTap: () => _pickDate(_startDate),
+                      ),
+                      _projectDateField(
+                        controller: _expectedCompletionDate,
+                        label: 'Expected Completion Date',
+                        onTap: () => _pickDate(_expectedCompletionDate),
+                      ),
+                      _projectTextField(
+                        controller: _contractValue,
+                        label: 'Contract Value',
+                        icon: Icons.payments_outlined,
+                        keyboardType: TextInputType.number,
+                      ),
+                      _projectTextField(
+                        controller: _currency,
+                        label: l10n.currency,
+                        icon: Icons.currency_exchange,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  SectionCard(
+                    title: 'Languages',
+                    icon: Icons.translate,
+                    spacing: AppSpacing.md,
+                    children: [
+                      _projectTextField(
+                        controller: _originalLanguage,
+                        label: 'Original Language',
+                        icon: Icons.language,
+                      ),
+                      _projectTextField(
+                        controller: _reportLanguage,
+                        label: 'Report Language',
+                        icon: Icons.description_outlined,
+                      ),
+                    ],
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: AppSpacing.lg),
+                    InfoBanner(message: _error!),
+                  ],
+                  const SizedBox(height: AppSpacing.xxl),
+                  LoadingButton(
+                    label: l10n.createProject,
+                    icon: Icons.check,
+                    loading: _saving,
+                    onPressed: () => _save(l10n),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _country,
-              decoration: const InputDecoration(labelText: 'Country'),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _district,
-              decoration: const InputDecoration(labelText: 'District'),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _location,
-              decoration: const InputDecoration(labelText: 'Location'),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _projectType,
-              decoration: const InputDecoration(labelText: 'Project Type'),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _startDate,
-              decoration: const InputDecoration(
-                labelText: 'Start Date',
-                suffixIcon: Icon(Icons.calendar_today),
-              ),
-              readOnly: true,
-              onTap: () => _pickDate(_startDate),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _expectedCompletionDate,
-              decoration: const InputDecoration(
-                labelText: 'Expected Completion Date',
-                suffixIcon: Icon(Icons.calendar_today),
-              ),
-              readOnly: true,
-              onTap: () => _pickDate(_expectedCompletionDate),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _contractValue,
-              decoration: const InputDecoration(labelText: 'Contract Value'),
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _currency,
-              decoration: InputDecoration(labelText: l10n.currency),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _description,
-              decoration: const InputDecoration(labelText: 'Description'),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _originalLanguage,
-              decoration: const InputDecoration(labelText: 'Original Language'),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _reportLanguage,
-              decoration: const InputDecoration(labelText: 'Report Language'),
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              initialValue: _status,
-              decoration: const InputDecoration(labelText: 'Status'),
-              items: const [
-                DropdownMenuItem(value: 'draft', child: Text('Draft')),
-                DropdownMenuItem(value: 'active', child: Text('Active')),
-                DropdownMenuItem(value: 'completed', child: Text('Completed')),
-                DropdownMenuItem(value: 'archived', child: Text('Archived')),
-              ],
-              onChanged: (value) {
-                if (value != null) setState(() => _status = value);
-              },
-            ),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(
-                  _error!,
-                  style: const TextStyle(color: Color(0xFFBE123C)),
-                ),
-              ),
-            const SizedBox(height: 28),
-            FilledButton(
-              onPressed: _saving ? null : () => _save(l10n),
-              child: _saving
-                  ? const SizedBox.square(
-                      dimension: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(l10n.createProject),
             ),
           ],
         ),
