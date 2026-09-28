@@ -18,6 +18,7 @@ import 'app_errors.dart';
 import 'company_profile_page.dart';
 import 'connectivity_gate.dart';
 import 'boq_share_actions.dart';
+import 'theme/app_theme.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -130,8 +131,6 @@ class _BoqAppState extends State<BoqApp> {
 
   @override
   Widget build(BuildContext context) {
-    const navy = Color(0xFF102A43);
-
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       // Offline screen above every page, recovering automatically when back online.
@@ -148,42 +147,9 @@ class _BoqAppState extends State<BoqApp> {
         BoqMaterialLocalizationsDelegate(),
         BoqCupertinoLocalizationsDelegate(),
       ],
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: navy,
-          brightness: Brightness.light,
-        ),
-        scaffoldBackgroundColor: const Color(0xFFF5F7FA),
-        useMaterial3: true,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFFF5F7FA),
-          elevation: 0,
-        ),
-        cardTheme: CardThemeData(
-          color: Colors.white,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-            side: const BorderSide(color: Color(0xFFE2E8F0)),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: Color(0xFF102A43), width: 1.5),
-          ),
-        ),
-      ),
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.light,
       home: SessionGate(
         api: _api,
         locale: _locale,
