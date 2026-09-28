@@ -185,261 +185,311 @@ class ProjectDetailPage extends StatelessWidget {
         ),
       ],
     ),
-    body: FutureBuilder<ProjectDetail>(
-      future: api.project(projectId),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return ErrorState(error: snapshot.error);
-        }
-        if (!snapshot.hasData) {
-          return const LoadingState();
-        }
-        final project = snapshot.data!;
-        final theme = Theme.of(context);
-        final scheme = theme.colorScheme;
-        return ListView(
-          padding: AppSpacing.page,
-          children: [
-            ContentWidth(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Card(
-                    child: Padding(
-                      padding: AppSpacing.card,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const IconTile(
-                                icon: Icons.foundation_outlined,
-                                size: 48,
-                              ),
-                              const SizedBox(width: AppSpacing.md),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      project.name,
-                                      style: theme.textTheme.titleLarge
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                    ),
-                                    const SizedBox(height: AppSpacing.xs),
-                                    Text(
-                                      'Code: ${project.code}',
-                                      style: theme.textTheme.bodySmall
-                                          ?.copyWith(
-                                            color: scheme.onSurfaceVariant,
-                                          ),
-                                    ),
-                                  ],
+    body: StatefulBuilder(
+      builder: (context, rebuild) => FutureBuilder<ProjectDetail>(
+        future: api.project(projectId),
+        builder: (context, snapshot) {
+          void reload() => rebuild(() {});
+          if (snapshot.hasError) {
+            return ErrorState(error: snapshot.error);
+          }
+          if (!snapshot.hasData) {
+            return const LoadingState();
+          }
+          final project = snapshot.data!;
+          final theme = Theme.of(context);
+          final scheme = theme.colorScheme;
+          return ListView(
+            padding: AppSpacing.page,
+            children: [
+              ContentWidth(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Card(
+                      child: Padding(
+                        padding: AppSpacing.card,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const IconTile(
+                                  icon: Icons.foundation_outlined,
+                                  size: 48,
                                 ),
-                              ),
-                              const SizedBox(width: AppSpacing.sm),
-                              ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 120,
+                                const SizedBox(width: AppSpacing.md),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        project.name,
+                                        style: theme.textTheme.titleLarge
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                      ),
+                                      const SizedBox(height: AppSpacing.xs),
+                                      Text(
+                                        'Code: ${project.code}',
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              color: scheme.onSurfaceVariant,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                child: StatusBadge(
-                                  label: project.status.capitalize(),
-                                  tone: StatusTone.forStatus(project.status),
+                                const SizedBox(width: AppSpacing.sm),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 120,
+                                  ),
+                                  child: StatusBadge(
+                                    label: project.status.capitalize(),
+                                    tone: StatusTone.forStatus(project.status),
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: AppSpacing.lg),
-                          const Divider(height: 1),
-                          const SizedBox(height: AppSpacing.md),
-                          Text(
-                            'Contract Value',
-                            style: theme.textTheme.labelLarge?.copyWith(
-                              color: scheme.onSurfaceVariant,
+                              ],
                             ),
-                          ),
-                          const SizedBox(height: AppSpacing.xs),
-                          AmountText(
-                            project.contractValue,
-                            currency: project.currency,
-                            decimals: 2,
-                            style: theme.textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: scheme.primary,
+                            const SizedBox(height: AppSpacing.lg),
+                            const Divider(height: 1),
+                            const SizedBox(height: AppSpacing.md),
+                            Text(
+                              'Contract Value',
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  SectionCard(
-                    title: 'Overview',
-                    icon: Icons.info_outline,
-                    children: [
-                      _detailRow(
-                        'Owner',
-                        project.ownerName.isNotEmpty ? project.ownerName : '—',
-                      ),
-                      _detailRow('Status', project.status.capitalize()),
-                      _detailRow(
-                        'Project Type',
-                        project.projectType.isNotEmpty
-                            ? project.projectType
-                            : '—',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  SectionCard(
-                    title: 'Parties',
-                    icon: Icons.groups_outlined,
-                    children: [
-                      _detailRow(
-                        'Client',
-                        project.client.isNotEmpty ? project.client : '—',
-                      ),
-                      _detailRow(
-                        'Contractor',
-                        project.contractor.isNotEmpty
-                            ? project.contractor
-                            : '—',
-                      ),
-                      _detailRow(
-                        'Consultant',
-                        project.consultant.isNotEmpty
-                            ? project.consultant
-                            : '—',
-                      ),
-                      _detailRow(
-                        'Quantity Surveyor',
-                        project.quantitySurveyor.isNotEmpty
-                            ? project.quantitySurveyor
-                            : '—',
-                      ),
-                      _detailRow(
-                        'Project Manager',
-                        project.projectManager.isNotEmpty
-                            ? project.projectManager
-                            : '—',
-                      ),
-                      _detailRow(
-                        'Site Engineer',
-                        project.siteEngineer.isNotEmpty
-                            ? project.siteEngineer
-                            : '—',
-                      ),
-                      _detailRow(
-                        'Funding Organisation',
-                        project.fundingOrganisation.isNotEmpty
-                            ? project.fundingOrganisation
-                            : '—',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  SectionCard(
-                    title: 'Location',
-                    icon: Icons.location_on_outlined,
-                    children: [
-                      _detailRow(
-                        'Location',
-                        _formatLocation(
-                          project.country,
-                          project.district,
-                          project.location,
+                            const SizedBox(height: AppSpacing.xs),
+                            AmountText(
+                              project.contractValue,
+                              currency: project.currency,
+                              decimals: 2,
+                              style: theme.textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: scheme.primary,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  SectionCard(
-                    title: 'Dates',
-                    icon: Icons.event_note_outlined,
-                    children: [
-                      _detailRow('Start Date', displayDate(project.startDate)),
-                      _detailRow(
-                        'Expected Completion',
-                        displayDate(project.expectedCompletionDate),
-                      ),
-                    ],
-                  ),
-                  if (project.description.isNotEmpty) ...[
+                    ),
                     const SizedBox(height: AppSpacing.lg),
                     SectionCard(
-                      title: 'Description',
-                      icon: Icons.notes_outlined,
+                      title: 'Overview',
+                      icon: Icons.info_outline,
                       children: [
-                        Text(
-                          project.description,
-                          style: theme.textTheme.bodyMedium,
+                        _detailRow(
+                          'Owner',
+                          project.ownerName.isNotEmpty
+                              ? project.ownerName
+                              : '—',
+                        ),
+                        _detailRow('Status', project.status.capitalize()),
+                        _detailRow(
+                          'Project Type',
+                          project.projectType.isNotEmpty
+                              ? project.projectType
+                              : '—',
                         ),
                       ],
                     ),
-                  ],
-                  const SizedBox(height: AppSpacing.sectionGap),
-                  SectionHeader(
-                    title: 'BOQs',
-                    trailing: project.boqs.isEmpty
-                        ? null
-                        : StatusBadge(
-                            label: '${project.boqs.length}',
-                            tone: StatusTone.brand,
-                          ),
-                  ),
-                  if (project.boqs.isEmpty)
-                    const Card(
-                      child: EmptyState(
-                        compact: true,
-                        icon: Icons.description_outlined,
-                        title: 'No BOQs yet',
-                      ),
+                    const SizedBox(height: AppSpacing.lg),
+                    SectionCard(
+                      title: 'Parties',
+                      icon: Icons.groups_outlined,
+                      children: [
+                        _detailRow(
+                          'Client',
+                          project.client.isNotEmpty ? project.client : '—',
+                        ),
+                        _detailRow(
+                          'Contractor',
+                          project.contractor.isNotEmpty
+                              ? project.contractor
+                              : '—',
+                        ),
+                        _detailRow(
+                          'Consultant',
+                          project.consultant.isNotEmpty
+                              ? project.consultant
+                              : '—',
+                        ),
+                        _detailRow(
+                          'Quantity Surveyor',
+                          project.quantitySurveyor.isNotEmpty
+                              ? project.quantitySurveyor
+                              : '—',
+                        ),
+                        _detailRow(
+                          'Project Manager',
+                          project.projectManager.isNotEmpty
+                              ? project.projectManager
+                              : '—',
+                        ),
+                        _detailRow(
+                          'Site Engineer',
+                          project.siteEngineer.isNotEmpty
+                              ? project.siteEngineer
+                              : '—',
+                        ),
+                        _detailRow(
+                          'Funding Organisation',
+                          project.fundingOrganisation.isNotEmpty
+                              ? project.fundingOrganisation
+                              : '—',
+                        ),
+                      ],
                     ),
-                  for (final boq in project.boqs)
-                    ListItemCard(
-                      leading: const IconTile(icon: Icons.description_outlined),
-                      title: boq.name,
-                      trailing: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 110),
-                        child: StatusBadge(
-                          label: boq.status.capitalize(),
-                          tone: boq.status == 'uploaded'
-                              ? StatusTone.info
-                              : StatusTone.forStatus(boq.status),
-                        ),
-                      ),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => BoqDetailPage(
-                            api: api,
-                            boqId: boq.id,
-                            title: boq.name,
+                    const SizedBox(height: AppSpacing.lg),
+                    SectionCard(
+                      title: 'Location',
+                      icon: Icons.location_on_outlined,
+                      children: [
+                        _detailRow(
+                          'Location',
+                          _formatLocation(
+                            project.country,
+                            project.district,
+                            project.location,
                           ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    SectionCard(
+                      title: 'Dates',
+                      icon: Icons.event_note_outlined,
+                      children: [
+                        _detailRow(
+                          'Start Date',
+                          displayDate(project.startDate),
+                        ),
+                        _detailRow(
+                          'Expected Completion',
+                          displayDate(project.expectedCompletionDate),
+                        ),
+                      ],
+                    ),
+                    if (project.description.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.lg),
+                      SectionCard(
+                        title: 'Description',
+                        icon: Icons.notes_outlined,
+                        children: [
+                          Text(
+                            project.description,
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                        ],
                       ),
-                      footer: boq.status == 'uploaded'
-                          ? FilledButton.icon(
-                              style: FilledButton.styleFrom(
-                                minimumSize: const Size.fromHeight(
-                                  AppSizes.minTap,
-                                ),
+                    ],
+                    const SizedBox(height: AppSpacing.sectionGap),
+                    SectionHeader(
+                      title: 'BOQs',
+                      trailing: project.boqs.isEmpty
+                          ? null
+                          : StatusBadge(
+                              label: '${project.boqs.length}',
+                              tone: StatusTone.brand,
+                            ),
+                    ),
+                    if (project.boqs.isEmpty)
+                      const Card(
+                        child: EmptyState(
+                          compact: true,
+                          icon: Icons.description_outlined,
+                          title: 'No BOQs yet',
+                        ),
+                      ),
+                    for (final boq in project.boqs)
+                      ListItemCard(
+                        leading: const IconTile(
+                          icon: Icons.description_outlined,
+                        ),
+                        title: boq.name,
+                        showChevron: false,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 110),
+                              child: StatusBadge(
+                                label: boq.status.capitalize(),
+                                tone: boq.status == 'uploaded'
+                                    ? StatusTone.info
+                                    : StatusTone.forStatus(boq.status),
                               ),
-                              onPressed: () =>
-                                  _generateBoq(context, project, boq),
-                              icon: const Icon(Icons.auto_awesome),
-                              label: const Text('Generate BOQ'),
-                            )
-                          : null,
-                    ),
-                ],
+                            ),
+                            BoqActionsMenu(
+                              onEdit: () async {
+                                final saved = await showEditBoqSheet(
+                                  context,
+                                  api,
+                                  BoqListItem(
+                                    id: boq.id,
+                                    name: boq.name,
+                                    status: boq.status,
+                                    description: '',
+                                    projectId: project.id,
+                                    projectName: project.name,
+                                    itemsCount: 0,
+                                    createdAt: '',
+                                  ),
+                                );
+                                if (saved) reload();
+                              },
+                              onDelete: () async {
+                                if (await confirmDeleteBoq(
+                                  context,
+                                  api,
+                                  boq.id,
+                                  boq.name,
+                                )) {
+                                  reload();
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                        onTap: () async {
+                          final changed = await Navigator.of(context)
+                              .push<bool>(
+                                MaterialPageRoute(
+                                  builder: (_) => BoqDetailPage(
+                                    api: api,
+                                    boqId: boq.id,
+                                    title: boq.name,
+                                  ),
+                                ),
+                              );
+                          if (changed == true) reload();
+                        },
+                        footer: boq.status == 'uploaded'
+                            ? FilledButton.icon(
+                                style: FilledButton.styleFrom(
+                                  minimumSize: const Size.fromHeight(
+                                    AppSizes.minTap,
+                                  ),
+                                ),
+                                onPressed: () =>
+                                    _generateBoq(context, project, boq),
+                                icon: const Icon(Icons.auto_awesome),
+                                label: const Text('Generate BOQ'),
+                              )
+                            : null,
+                      ),
+                  ],
+                ),
               ),
-            ),
-          ],
-        );
-      },
+            ],
+          );
+        },
+      ),
     ),
   );
 }

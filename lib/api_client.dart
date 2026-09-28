@@ -684,8 +684,8 @@ class ApiClient {
   Future<PriceComparisonResult> hardwarePriceCompare(List<int> ids) async {
     final response = await _httpClient.post(
       Uri.parse('$baseUrl/hardware-prices/compare'),
-      headers: await _headers(),
-      body: {'ids': ids},
+      headers: {...await _headers(), 'Content-Type': 'application/json'},
+      body: jsonEncode({'ids': ids}),
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw ApiException(_message(body));
@@ -1144,6 +1144,59 @@ class ApiClient {
     if (response.statusCode != 200) throw ApiException(_message(body));
   }
 
+  /// BOQs the user can see, newest first.
+  Future<({List<BoqListItem> items, int lastPage})> boqs({
+    String? search,
+    int? projectId,
+    int page = 1,
+    int perPage = 25,
+  }) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/boqs').replace(
+        queryParameters: {
+          'page': '$page',
+          'per_page': '$perPage',
+          if (search != null && search.trim().isNotEmpty)
+            'search': search.trim(),
+          if (projectId != null) 'project_id': '$projectId',
+        },
+      ),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    final pageData = body['data'] as Map<String, dynamic>? ?? const {};
+    final rows = pageData['data'] as List<dynamic>? ?? const [];
+    return (
+      items: rows
+          .whereType<Map<String, dynamic>>()
+          .map(BoqListItem.fromJson)
+          .toList(),
+      lastPage: _asInt(pageData['last_page'] ?? 1),
+    );
+  }
+
+  /// Renames a BOQ, changes its description or moves it to another project.
+  Future<BoqListItem> updateBoq(
+    int id, {
+    required String name,
+    String? description,
+    int? projectId,
+  }) async {
+    final response = await _httpClient.patch(
+      Uri.parse('$baseUrl/boqs/$id'),
+      headers: {...await _headers(), 'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'name': name,
+        'description': description,
+        'project_id': ?projectId,
+      }),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return BoqListItem.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
   Future<void> deleteBoq(int id) async {
     final response = await _httpClient.delete(
       Uri.parse('$baseUrl/boqs/$id'),
@@ -1595,8 +1648,21 @@ class ApiClient {
     return body;
   }
 
-  String _message(Map<String, dynamic> body) =>
-      body['message'] as String? ?? 'Unable to complete the request.';
+  /// The first validation error when there is one (it says what to fix),
+  /// otherwise the server message.
+  String _message(Map<String, dynamic> body) {
+    final errors = body['errors'];
+    if (errors is Map) {
+      for (final value in errors.values) {
+        final first = value is List ? value.firstOrNull : value;
+        if (first is String && first.trim().isNotEmpty) return first;
+      }
+    }
+    final message = body['message'];
+    return message is String && message.trim().isNotEmpty
+        ? message
+        : 'Unable to complete the request.';
+  }
 }
 
 class DashboardSummary {
@@ -1818,6 +1884,43 @@ class BoqSummary {
   final int id;
   final String name;
   final String status;
+}
+
+/// A BOQ row in the BOQs list.
+class BoqListItem {
+  const BoqListItem({
+    required this.id,
+    required this.name,
+    required this.status,
+    required this.description,
+    required this.projectId,
+    required this.projectName,
+    required this.itemsCount,
+    required this.createdAt,
+  });
+
+  factory BoqListItem.fromJson(Map<String, dynamic> json) {
+    final project = json['project'];
+    return BoqListItem(
+      id: _asInt(json['id']),
+      name: json['name'] as String? ?? '',
+      status: json['status'] as String? ?? 'draft',
+      description: json['description'] as String? ?? '',
+      projectId: _asInt(json['project_id']),
+      projectName: project is Map ? '${project['name'] ?? ''}' : '',
+      itemsCount: _asInt(json['items_count']),
+      createdAt: _dateOnly(json['created_at']),
+    );
+  }
+
+  final int id;
+  final String name;
+  final String status;
+  final String description;
+  final int projectId;
+  final String projectName;
+  final int itemsCount;
+  final String createdAt;
 }
 
 class BoqItemSummary {
@@ -2083,25 +2186,36 @@ class PriceComparisonItem {
   });
   factory PriceComparisonItem.fromJson(Map<String, dynamic> json) =>
       PriceComparisonItem(
-        id: json['id'] as int,
+        id: _asInt(json['id']),
         itemName: json['item_name'] as String? ?? '',
         brand: json['brand'] as String? ?? '',
         category: json['category'] as String? ?? '',
         specification: json['specification'] as String? ?? '',
         unit: json['unit'] as String? ?? '',
-        price: (json['price'] as num?)?.toDouble() ?? 0.0,
+        price: _asDouble(json['price']),
         currency: json['currency'] as String? ?? 'UGX',
         supplier: json['supplier'] as String? ?? '',
         location: json['location'] as String? ?? '',
         sourceReference: json['source_reference'] as String? ?? '',
-        fetchedAt: json['fetched_at'] as String? ?? '',
-        similarityScore: json['similarity_score'] as int? ?? 0,
+        fetchedAt: '${json['fetched_at'] ?? ''}',
+        similarityScore: _asInt(json['similarity_score']),
         matchReasons: (json['match_reasons'] as List<dynamic>? ?? [])
-            .cast<String>(),
-        variancePercent: (json['variance_percent'] as num?)?.toDouble(),
-        priceHistory: PriceHistorySummary.fromJson(json['price_history'] ?? {}),
-        rating: PriceRating.fromJson(json['rating'] ?? {}),
-        badges: (json['badges'] as List<dynamic>? ?? []).cast<String>(),
+            .map((e) => '$e')
+            .toList(),
+        variancePercent: _asDoubleOrNull(json['variance_percent']),
+        priceHistory: PriceHistorySummary.fromJson(
+          json['price_history'] is Map<String, dynamic>
+              ? json['price_history'] as Map<String, dynamic>
+              : const {},
+        ),
+        rating: PriceRating.fromJson(
+          json['rating'] is Map<String, dynamic>
+              ? json['rating'] as Map<String, dynamic>
+              : const {},
+        ),
+        badges: (json['badges'] as List<dynamic>? ?? [])
+            .map((e) => '$e')
+            .toList(),
       );
   final int id;
   final String itemName;
@@ -2135,12 +2249,12 @@ class PriceHistorySummary {
   });
   factory PriceHistorySummary.fromJson(Map<String, dynamic> json) =>
       PriceHistorySummary(
-        records: json['records'] as int? ?? 0,
-        lowest: (json['lowest'] as num?)?.toDouble() ?? 0.0,
-        highest: (json['highest'] as num?)?.toDouble() ?? 0.0,
-        average: (json['average'] as num?)?.toDouble() ?? 0.0,
-        change: (json['change'] as num?)?.toDouble() ?? 0.0,
-        changePercent: (json['change_percent'] as num?)?.toDouble() ?? 0.0,
+        records: _asInt(json['records']),
+        lowest: _asDouble(json['lowest']),
+        highest: _asDouble(json['highest']),
+        average: _asDouble(json['average']),
+        change: _asDouble(json['change']),
+        changePercent: _asDouble(json['change_percent']),
         trend: json['trend'] as String? ?? 'stable',
       );
   final int records;
@@ -2163,14 +2277,14 @@ class PriceRating {
     required this.factors,
   });
   factory PriceRating.fromJson(Map<String, dynamic> json) => PriceRating(
-    overall: json['overall'] as int? ?? 0,
-    valueScore: json['value_score'] as int? ?? 0,
-    stabilityScore: json['stability_score'] as int? ?? 0,
-    freshnessScore: json['freshness_score'] as int? ?? 0,
-    supplierScore: json['supplier_score'] as int? ?? 0,
-    availabilityScore: json['availability_score'] as int? ?? 0,
-    factors: (json['factors'] as Map<String, dynamic>? ?? {}).map(
-      (k, v) => MapEntry(k, v as String),
+    overall: _asInt(json['overall']),
+    valueScore: _asInt(json['value_score']),
+    stabilityScore: _asInt(json['stability_score']),
+    freshnessScore: _asInt(json['freshness_score']),
+    supplierScore: _asInt(json['supplier_score']),
+    availabilityScore: _asInt(json['availability_score']),
+    factors: (json['factors'] is Map ? json['factors'] as Map : const {}).map(
+      (k, v) => MapEntry('$k', '$v'),
     ),
   );
   final int overall;
@@ -2210,9 +2324,9 @@ class BoqItemMatchInfo {
         description: json['description'] as String? ?? '',
         quantity: json['quantity'] as String? ?? '',
         unit: json['unit'] as String? ?? '',
-        currentRate: (json['current_rate'] as num?)?.toDouble() ?? 0.0,
+        currentRate: _asDouble(json['current_rate']),
         currency: json['currency'] as String? ?? 'UGX',
-        currentAmount: (json['current_amount'] as num?)?.toDouble() ?? 0.0,
+        currentAmount: _asDouble(json['current_amount']),
       );
   final String description;
   final String quantity;
@@ -2239,7 +2353,7 @@ class HardwarePricePaginated {
         currentPage: json['current_page'] as int? ?? 1,
         lastPage: json['last_page'] as int? ?? 1,
         perPage: json['per_page'] as int? ?? 20,
-        total: json['total'] as int? ?? 0,
+        total: _asInt(json['total']),
       );
   final List<HardwarePrice> data;
   final int currentPage;
@@ -2280,7 +2394,7 @@ class HardwarePriceCategory {
   factory HardwarePriceCategory.fromJson(Map<String, dynamic> json) =>
       HardwarePriceCategory(
         name: json['name'] as String? ?? '',
-        count: json['count'] as int? ?? 0,
+        count: _asInt(json['count']),
       );
   final String name;
   final int count;
@@ -2312,9 +2426,11 @@ class BoqDetail {
     required this.metadata,
     required this.facilities,
     required this.summaries,
+    this.projectId = 0,
   });
   factory BoqDetail.fromJson(Map<String, dynamic> json) => BoqDetail(
     id: _asInt(json['id']),
+    projectId: _asInt(json['project_id']),
     name: json['name'] as String? ?? '',
     code: json['code'] as String? ?? '',
     description: json['description'] as String? ?? '',
@@ -2331,6 +2447,7 @@ class BoqDetail {
         .map(BoqCostSummary.fromJson)
         .toList(),
   );
+  final int projectId;
   final int id;
   final String name;
   final String code;

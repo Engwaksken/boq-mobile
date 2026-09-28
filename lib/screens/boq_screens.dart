@@ -45,6 +45,44 @@ class BoqDetailPage extends StatefulWidget {
 class _BoqDetailPageState extends State<BoqDetailPage> {
   Future<BoqDetail>? _boqDetail;
   Locale? _locale;
+  late String _title = widget.title;
+  bool _changed = false;
+
+  Future<void> _edit() async {
+    BoqDetail? boq;
+    try {
+      boq = await _boqDetail;
+    } on Object {
+      boq = null;
+    }
+    if (!mounted) return;
+    final saved = await showEditBoqSheet(
+      context,
+      widget.api,
+      BoqListItem(
+        id: widget.boqId,
+        name: boq?.name ?? _title,
+        status: boq?.status ?? '',
+        description: boq?.description ?? '',
+        projectId: boq?.projectId ?? 0,
+        projectName: '',
+        itemsCount: 0,
+        createdAt: '',
+      ),
+    );
+    if (!saved || !mounted) return;
+    _changed = true;
+    await _reload();
+    final fresh = await _boqDetail;
+    if (mounted && fresh != null) setState(() => _title = fresh.name);
+  }
+
+  Future<void> _delete() async {
+    if (await confirmDeleteBoq(context, widget.api, widget.boqId, _title) &&
+        mounted) {
+      Navigator.of(context).pop(true);
+    }
+  }
 
   @override
   void initState() {
@@ -71,61 +109,64 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-        actions: [
-          BoqShareMenu(
-            api: widget.api,
-            boqId: widget.boqId,
-            title: widget.title,
-          ),
-          const SizedBox(width: AppSpacing.xs),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'boq-share-${widget.boqId}',
-        onPressed: () =>
-            showBoqShareSheet(context, widget.api, widget.boqId, widget.title),
-        icon: const Icon(Icons.share_outlined),
-        label: const Text('Share BOQ'),
-      ),
-      body: FutureBuilder<BoqDetail>(
-        future: _boqDetail,
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return ErrorState(error: snapshot.error, onRetry: _reload);
-          }
-          if (!snapshot.hasData) {
-            return const LoadingState();
-          }
-          final boq = snapshot.data!;
-          return RefreshIndicator(
-            onRefresh: _reload,
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: AppSpacing.page.copyWith(bottom: 96),
-              children: [
-                ContentWidth(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildBoqHeader(boq, l10n),
-                      const SizedBox(height: AppSpacing.lg),
-                      _buildSummaries(boq),
-                      const SizedBox(height: AppSpacing.lg),
-                      if (boq.metadata.isNotEmpty) ...[
-                        _buildMetadataSection(boq),
+    return PopScope<bool>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) Navigator.of(context).pop(result ?? _changed);
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(_title),
+          actions: [
+            BoqShareMenu(api: widget.api, boqId: widget.boqId, title: _title),
+            BoqActionsMenu(onEdit: _edit, onDelete: _delete),
+            const SizedBox(width: AppSpacing.xs),
+          ],
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          heroTag: 'boq-share-${widget.boqId}',
+          onPressed: () =>
+              showBoqShareSheet(context, widget.api, widget.boqId, _title),
+          icon: const Icon(Icons.share_outlined),
+          label: const Text('Share BOQ'),
+        ),
+        body: FutureBuilder<BoqDetail>(
+          future: _boqDetail,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return ErrorState(error: snapshot.error, onRetry: _reload);
+            }
+            if (!snapshot.hasData) {
+              return const LoadingState();
+            }
+            final boq = snapshot.data!;
+            return RefreshIndicator(
+              onRefresh: _reload,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: AppSpacing.page.copyWith(bottom: 96),
+                children: [
+                  ContentWidth(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildBoqHeader(boq, l10n),
                         const SizedBox(height: AppSpacing.lg),
+                        _buildSummaries(boq),
+                        const SizedBox(height: AppSpacing.lg),
+                        if (boq.metadata.isNotEmpty) ...[
+                          _buildMetadataSection(boq),
+                          const SizedBox(height: AppSpacing.lg),
+                        ],
+                        _buildHierarchy(boq),
                       ],
-                      _buildHierarchy(boq),
-                    ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-          );
-        },
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }

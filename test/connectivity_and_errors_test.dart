@@ -55,7 +55,9 @@ class _MemoryStorage extends FlutterSecureStorage {
 }
 
 void main() {
-  testWidgets('shows the offline screen and recovers when back online', (tester) async {
+  testWidgets('shows the offline screen and recovers when back online', (
+    tester,
+  ) async {
     final connectivity = _FakeConnectivity();
     var internet = false;
 
@@ -71,7 +73,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No Internet Connection'), findsOneWidget);
-    expect(find.text('Please connect to Wi-Fi or mobile data to continue.'), findsOneWidget);
+    expect(
+      find.text('Please connect to Wi-Fi or mobile data to continue.'),
+      findsOneWidget,
+    );
     expect(find.text('Retry'), findsOneWidget);
     expect(find.text('Open Wi-Fi Settings'), findsOneWidget);
 
@@ -84,66 +89,115 @@ void main() {
     expect(find.text('App content'), findsOneWidget);
   });
 
-  testWidgets('Wi-Fi without internet still counts as offline until Retry succeeds', (tester) async {
-    final connectivity = _FakeConnectivity()..current = [ConnectivityResult.wifi];
-    var internet = false;
+  testWidgets(
+    'Wi-Fi without internet still counts as offline until Retry succeeds',
+    (tester) async {
+      final connectivity = _FakeConnectivity()
+        ..current = [ConnectivityResult.wifi];
+      var internet = false;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: ConnectivityGate(
-          connectivity: connectivity,
-          hostLookup: () async => internet,
-          child: const Text('App content'),
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ConnectivityGate(
+            connectivity: connectivity,
+            hostLookup: () async => internet,
+            child: const Text('App content'),
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('No Internet Connection'), findsOneWidget);
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('No Internet Connection'), findsOneWidget);
 
-    internet = true;
-    await tester.tap(find.text('Retry'));
-    await tester.pumpAndSettle();
+      internet = true;
+      await tester.tap(find.text('Retry'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('No Internet Connection'), findsNothing);
-  });
+      expect(find.text('No Internet Connection'), findsNothing);
+    },
+  );
 
   test('friendly messages never expose raw errors', () {
-    expect(friendlyError(const SocketException('Failed host lookup: boq.kemmytech.com')), AppErrorMessages.noInternet);
+    expect(
+      friendlyError(
+        const SocketException('Failed host lookup: boq.kemmytech.com'),
+      ),
+      AppErrorMessages.noInternet,
+    );
     expect(friendlyError(TimeoutException('x')), AppErrorMessages.timeout);
-    expect(friendlyError(StateError('Bad state: null check operator')), AppErrorMessages.generic);
-    expect(friendlyError(const ApiException('Please add a project location.')), 'Please add a project location.');
+    expect(
+      friendlyError(StateError('Bad state: null check operator')),
+      AppErrorMessages.generic,
+    );
+    expect(
+      friendlyError(const ApiException('Please add a project location.')),
+      'Please add a project location.',
+    );
     expect(friendlyStatusMessage(403), AppErrorMessages.forbidden);
     expect(friendlyStatusMessage(500), AppErrorMessages.server);
   });
 
   test('server errors and HTML error pages become friendly messages', () async {
-    Future<ApiClient> clientReturning(int status, String body, {String type = 'application/json'}) async => ApiClient(
-      httpClient: MockClient((_) async => http.Response(body, status, headers: {'content-type': type})),
+    Future<ApiClient> clientReturning(
+      int status,
+      String body, {
+      String type = 'application/json',
+    }) async => ApiClient(
+      httpClient: MockClient(
+        (_) async =>
+            http.Response(body, status, headers: {'content-type': type}),
+      ),
       storage: _MemoryStorage(),
     );
 
-    final sqlLeak = await clientReturning(500, jsonEncode({'message': 'SQLSTATE[42S02]: Base table not found'}));
+    final sqlLeak = await clientReturning(
+      500,
+      jsonEncode({'message': 'SQLSTATE[42S02]: Base table not found'}),
+    );
     await expectLater(
       sqlLeak.dashboard(),
-      throwsA(isA<ApiException>().having((e) => e.message, 'message', AppErrorMessages.server)),
+      throwsA(
+        isA<ApiException>().having(
+          (e) => e.message,
+          'message',
+          AppErrorMessages.server,
+        ),
+      ),
     );
 
-    final htmlPage = await clientReturning(502, '<html><body>Bad Gateway nginx</body></html>', type: 'text/html');
+    final htmlPage = await clientReturning(
+      502,
+      '<html><body>Bad Gateway nginx</body></html>',
+      type: 'text/html',
+    );
     await expectLater(
       htmlPage.dashboard(),
-      throwsA(isA<ApiException>().having((e) => e.message, 'message', AppErrorMessages.server)),
+      throwsA(
+        isA<ApiException>().having(
+          (e) => e.message,
+          'message',
+          AppErrorMessages.server,
+        ),
+      ),
     );
   });
 
   test('connection failures surface as a no-internet ApiException', () async {
     final api = ApiClient(
-      httpClient: MockClient((_) async => throw const SocketException('Connection refused')),
+      httpClient: MockClient(
+        (_) async => throw const SocketException('Connection refused'),
+      ),
       storage: _MemoryStorage(),
     );
 
     await expectLater(
       api.dashboard(),
-      throwsA(isA<ApiException>().having((e) => e.message, 'message', AppErrorMessages.noInternet)),
+      throwsA(
+        isA<ApiException>().having(
+          (e) => e.message,
+          'message',
+          AppErrorMessages.noInternet,
+        ),
+      ),
     );
   });
 }

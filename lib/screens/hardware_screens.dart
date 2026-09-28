@@ -1410,10 +1410,10 @@ class _PriceComparisonPageState extends State<PriceComparisonPage> {
           _loading = false;
         });
       }
-    } on ApiException catch (e) {
+    } on Object catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.message;
+          _error = friendlyError(e);
           _loading = false;
         });
       }
@@ -1456,6 +1456,46 @@ class _PriceComparisonPageState extends State<PriceComparisonPage> {
         : _buildComparison(),
   );
 
+  Widget _buildSummary(BuildContext context, List<PriceComparisonItem> items) {
+    final theme = Theme.of(context);
+    final prices = items.map((i) => i.price).toList()..sort();
+    final currency = items.first.currency;
+    final lowest = items.firstWhere((i) => i.price == prices.first);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+      child: SectionCard(
+        title: '${items.length} prices compared',
+        icon: Icons.compare_arrows,
+        children: [
+          KeyValueRow(
+            label: 'Lowest',
+            value: formatAmount(prices.first, currency: currency),
+            emphasize: true,
+          ),
+          KeyValueRow(
+            label: 'Highest',
+            value: formatAmount(prices.last, currency: currency),
+          ),
+          KeyValueRow(
+            label: 'You save',
+            value: formatAmount(prices.last - prices.first, currency: currency),
+            valueStyle: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: AppColors.success,
+            ),
+          ),
+          KeyValueRow(
+            label: 'Best choice',
+            value: [
+              lowest.supplier,
+              lowest.location,
+            ].where((e) => e.isNotEmpty).join(' · '),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildComparison() {
     final items = _result!.items;
     final cheapest = items.map((i) => i.price).reduce((a, b) => a < b ? a : b);
@@ -1464,9 +1504,12 @@ class _PriceComparisonPageState extends State<PriceComparisonPage> {
       child: ListView.builder(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: AppSpacing.page,
-        itemCount: items.length,
+        itemCount: items.length + 1,
         itemBuilder: (context, index) {
-          final item = items[index];
+          if (index == 0) {
+            return ContentWidth(child: _buildSummary(context, items));
+          }
+          final item = items[index - 1];
           return ContentWidth(
             child: Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.lg),
@@ -1591,9 +1634,8 @@ class _PriceComparisonPageState extends State<PriceComparisonPage> {
                     : item.sourceReference,
               ),
               KeyValueRow(label: 'Updated', value: _formatDate(item.fetchedAt)),
-              KeyValueRow(label: 'Match %', value: '${item.similarityScore}%'),
               KeyValueRow(
-                label: 'Variance',
+                label: 'vs lowest',
                 value: variance == null
                     ? '—'
                     : '${variance >= 0 ? '+' : ''}${variance.toStringAsFixed(1)}%',

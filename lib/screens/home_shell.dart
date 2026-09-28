@@ -140,6 +140,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                 ),
 
+              drawerTile(
+                icon: Icons.receipt_long_outlined,
+                label: 'BOQs',
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => BoqsPage(api: widget.api, l10n: l10n),
+                    ),
+                  );
+                },
+              ),
+
               const Padding(
                 padding: EdgeInsets.symmetric(
                   horizontal: AppSpacing.xxl,

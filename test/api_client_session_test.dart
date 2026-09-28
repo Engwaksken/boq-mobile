@@ -76,27 +76,30 @@ void main() {
     expect(await api.hasSession(), isFalse);
   });
 
-  test('a disabled account signs the user out with the server message', () async {
-    final storage = _MemoryStorage({'auth_token': 'token'});
-    final api = ApiClient(
-      httpClient: MockClient(
-        (request) async => http.Response(
-          jsonEncode({
-            'success': false,
-            'error_code': 'ACCOUNT_DISABLED',
-            'message': 'Your account has been disabled.',
-          }),
-          403,
+  test(
+    'a disabled account signs the user out with the server message',
+    () async {
+      final storage = _MemoryStorage({'auth_token': 'token'});
+      final api = ApiClient(
+        httpClient: MockClient(
+          (request) async => http.Response(
+            jsonEncode({
+              'success': false,
+              'error_code': 'ACCOUNT_DISABLED',
+              'message': 'Your account has been disabled.',
+            }),
+            403,
+          ),
         ),
-      ),
-      storage: storage,
-    );
+        storage: storage,
+      );
 
-    final expired = api.sessionExpired.first;
+      final expired = api.sessionExpired.first;
 
-    await expectLater(api.dashboard(), throwsA(isA<ApiException>()));
-    expect(await expired, 'Your account has been disabled.');
-  });
+      await expectLater(api.dashboard(), throwsA(isA<ApiException>()));
+      expect(await expired, 'Your account has been disabled.');
+    },
+  );
 
   test('a failed login does not trigger session expiry', () async {
     final api = ApiClient(
