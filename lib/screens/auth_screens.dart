@@ -164,39 +164,29 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
 
     return Scaffold(
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.xxl,
+              vertical: AppSpacing.xxxl,
+            ),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
+              constraints: const BoxConstraints(maxWidth: 440),
               child: AutofillGroup(
                 child: Form(
                   key: _formKey,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Icon(
-                        Icons.foundation_outlined,
-                        size: 58,
-                        color: Color(0xFF102A43),
+                      _AuthHeader(
+                        title: l10n.appTitle,
+                        subtitle: l10n.signInDescription,
                       ),
-                      const SizedBox(height: 18),
-                      Text(
-                        l10n.appTitle,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        l10n.signInDescription,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 30),
+                      const SizedBox(height: AppSpacing.xxxl),
                       TextFormField(
                         controller: _email,
                         keyboardType: TextInputType.emailAddress,
@@ -215,7 +205,7 @@ class _LoginPageState extends State<LoginPage> {
                           return null;
                         },
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: AppSpacing.lg),
                       TextFormField(
                         controller: _password,
                         obscureText: _obscurePassword,
@@ -259,53 +249,19 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ),
                       if (_error != null) ...[
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          margin: const EdgeInsets.only(bottom: 16),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFF1F2),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFFDA4AF)),
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(
-                                Icons.error_outline,
-                                color: Color(0xFFBE123C),
-                                size: 20,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  _error!,
-                                  style: const TextStyle(
-                                    color: Color(0xFFBE123C),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                      SizedBox(
-                        height: 52,
-                        child: FilledButton(
-                          onPressed: _loading ? null : _signIn,
-                          child: _loading
-                              ? const SizedBox.square(
-                                  dimension: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Text(l10n.signIn),
-                        ),
+                        InfoBanner(message: _error!),
+                        const SizedBox(height: AppSpacing.lg),
+                      ] else
+                        const SizedBox(height: AppSpacing.sm),
+                      LoadingButton(
+                        label: l10n.signIn,
+                        loading: _loading,
+                        onPressed: _signIn,
                       ),
                       if (_biometricEnabled && _biometricAvailable) ...[
-                        const SizedBox(height: 12),
+                        const SizedBox(height: AppSpacing.md),
                         SizedBox(
-                          height: 52,
+                          height: AppSizes.buttonHeight,
                           child: OutlinedButton.icon(
                             onPressed: _loading
                                 ? null
@@ -315,14 +271,18 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
                       ],
-                      const SizedBox(height: 22),
+                      const SizedBox(height: AppSpacing.xxl),
+                      const Divider(),
+                      const SizedBox(height: AppSpacing.md),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Flexible(
                             child: Text(
                               l10n.noAccount,
-                              style: Theme.of(context).textTheme.bodyMedium,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
                             ),
                           ),
                           TextButton(
@@ -331,22 +291,8 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        spacing: 4,
-                        runSpacing: 0,
-                        children: [
-                          TextButton(
-                            onPressed: () {},
-                            child: Text(l10n.privacyPolicy),
-                          ),
-                          TextButton(
-                            onPressed: () {},
-                            child: Text(l10n.termsOfUse),
-                          ),
-                        ],
-                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      _AuthLegalLinks(l10n: l10n),
                     ],
                   ),
                 ),
@@ -355,6 +301,78 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Brand mark, title and subtitle shown at the top of the auth screens.
+class _AuthHeader extends StatelessWidget {
+  const _AuthHeader({required this.title, this.subtitle, this.icon});
+
+  final String title;
+  final String? subtitle;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      children: [
+        BrandMark(size: 72, icon: icon),
+        const SizedBox(height: AppSpacing.xl),
+        Semantics(
+          header: true,
+          child: Text(
+            title,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            subtitle!,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _AuthLegalLinks extends StatelessWidget {
+  const _AuthLegalLinks({required this.l10n});
+
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextButton.styleFrom(
+      foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+      textStyle: Theme.of(context).textTheme.bodySmall,
+    );
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: AppSpacing.xs,
+      children: [
+        TextButton(
+          style: style,
+          onPressed: () {},
+          child: Text(l10n.privacyPolicy),
+        ),
+        Text('·', style: Theme.of(context).textTheme.bodySmall),
+        TextButton(
+          style: style,
+          onPressed: () {},
+          child: Text(l10n.termsOfUse),
+        ),
+      ],
     );
   }
 }
@@ -450,34 +468,35 @@ class _SignUpPageState extends State<SignUpPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final linkStyle = theme.textTheme.bodyMedium?.copyWith(
+      fontWeight: FontWeight.w700,
+      color: theme.colorScheme.primary,
+    );
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.signUp)),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 560),
+            constraints: const BoxConstraints(maxWidth: 480),
             child: AutofillGroup(
               child: Form(
                 key: _formKey,
                 child: ListView(
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.xxl,
+                    AppSpacing.sm,
+                    AppSpacing.xxl,
+                    AppSpacing.xxxl,
+                  ),
                   children: [
-                    const Icon(
-                      Icons.person_add_alt_1_outlined,
-                      size: 52,
-                      color: Color(0xFF102A43),
+                    _AuthHeader(
+                      title: l10n.createAccount,
+                      subtitle: l10n.signUpDescription,
+                      icon: Icons.person_add_alt_1_outlined,
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      l10n.createAccount,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(l10n.signUpDescription, textAlign: TextAlign.center),
-                    const SizedBox(height: 28),
+                    const SizedBox(height: AppSpacing.xxl + 4),
                     TextFormField(
                       controller: _name,
                       textInputAction: TextInputAction.next,
@@ -493,7 +512,7 @@ class _SignUpPageState extends State<SignUpPage> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppSpacing.lg),
                     TextFormField(
                       controller: _organisation,
                       textInputAction: TextInputAction.next,
@@ -502,7 +521,7 @@ class _SignUpPageState extends State<SignUpPage> {
                         prefixIcon: const Icon(Icons.business_outlined),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppSpacing.lg),
                     TextFormField(
                       controller: _email,
                       keyboardType: TextInputType.emailAddress,
@@ -520,7 +539,7 @@ class _SignUpPageState extends State<SignUpPage> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppSpacing.lg),
                     TextFormField(
                       controller: _password,
                       obscureText: _obscurePassword,
@@ -528,8 +547,12 @@ class _SignUpPageState extends State<SignUpPage> {
                       autofillHints: const [AutofillHints.newPassword],
                       decoration: InputDecoration(
                         labelText: l10n.password,
+                        helperText: l10n.passwordTooShort,
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
+                          tooltip: _obscurePassword
+                              ? 'Show password'
+                              : 'Hide password',
                           onPressed: () {
                             setState(
                               () => _obscurePassword = !_obscurePassword,
@@ -549,7 +572,7 @@ class _SignUpPageState extends State<SignUpPage> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppSpacing.lg),
                     TextFormField(
                       controller: _confirmPassword,
                       obscureText: _obscureConfirmation,
@@ -562,6 +585,9 @@ class _SignUpPageState extends State<SignUpPage> {
                         labelText: l10n.confirmPassword,
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
+                          tooltip: _obscureConfirmation
+                              ? 'Show password'
+                              : 'Hide password',
                           onPressed: () {
                             setState(
                               () =>
@@ -582,7 +608,7 @@ class _SignUpPageState extends State<SignUpPage> {
                         return null;
                       },
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpacing.md),
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
                       controlAffinity: ListTileControlAffinity.leading,
@@ -596,50 +622,24 @@ class _SignUpPageState extends State<SignUpPage> {
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           const Text('I agree to the '),
-                          Text(
-                            l10n.termsOfUse,
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
+                          Text(l10n.termsOfUse, style: linkStyle),
                           const Text(' and '),
-                          Text(
-                            l10n.privacyPolicy,
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
+                          Text(l10n.privacyPolicy, style: linkStyle),
                           const Text('.'),
                         ],
                       ),
                     ),
                     if (_error != null) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFF1F2),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFFDA4AF)),
-                        ),
-                        child: Text(
-                          _error!,
-                          style: const TextStyle(color: Color(0xFFBE123C)),
-                        ),
-                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      InfoBanner(message: _error!),
                     ],
-                    const SizedBox(height: 22),
-                    SizedBox(
-                      height: 52,
-                      child: FilledButton(
-                        onPressed: _loading ? null : _register,
-                        child: _loading
-                            ? const SizedBox.square(
-                                dimension: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : Text(l10n.createAccount),
-                      ),
+                    const SizedBox(height: AppSpacing.xl),
+                    LoadingButton(
+                      label: l10n.createAccount,
+                      loading: _loading,
+                      onPressed: _register,
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpacing.md),
                     TextButton.icon(
                       onPressed: _loading
                           ? null
@@ -724,48 +724,26 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
+            constraints: const BoxConstraints(maxWidth: 440),
             child: ListView(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xxl,
+                AppSpacing.lg,
+                AppSpacing.xxl,
+                AppSpacing.xxxl,
+              ),
               children: [
-                const Icon(
-                  Icons.lock_reset_outlined,
-                  size: 54,
-                  color: Color(0xFF102A43),
+                _AuthHeader(
+                  title: l10n.forgotPassword,
+                  subtitle: l10n.resetPasswordDescription,
+                  icon: Icons.lock_reset_outlined,
                 ),
-                const SizedBox(height: 18),
-                Text(
-                  l10n.forgotPassword,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  l10n.resetPasswordDescription,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 28),
+                const SizedBox(height: AppSpacing.xxl + 4),
                 if (_sent)
-                  Container(
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFECFDF5),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: const Color(0xFF6EE7B7)),
-                    ),
-                    child: Column(
-                      children: [
-                        const Icon(
-                          Icons.check_circle_outline,
-                          color: Color(0xFF047857),
-                          size: 36,
-                        ),
-                        const SizedBox(height: 10),
-                        Text(l10n.resetEmailSent, textAlign: TextAlign.center),
-                      ],
-                    ),
+                  InfoBanner(
+                    tone: BannerTone.success,
+                    icon: Icons.mark_email_read_outlined,
+                    message: l10n.resetEmailSent,
                   )
                 else
                   Form(
@@ -794,42 +772,20 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                           },
                         ),
                         if (_error != null) ...[
-                          const SizedBox(height: 12),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFFF1F2),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: const Color(0xFFFDA4AF),
-                              ),
-                            ),
-                            child: Text(
-                              _error!,
-                              style: const TextStyle(color: Color(0xFFBE123C)),
-                            ),
-                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          InfoBanner(message: _error!),
                         ],
-                        const SizedBox(height: 22),
-                        SizedBox(
-                          height: 52,
-                          child: FilledButton.icon(
-                            onPressed: _loading ? null : _sendResetLink,
-                            icon: _loading
-                                ? const SizedBox.square(
-                                    dimension: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.send_outlined),
-                            label: Text(l10n.sendResetLink),
-                          ),
+                        const SizedBox(height: AppSpacing.xl),
+                        LoadingButton(
+                          label: l10n.sendResetLink,
+                          icon: Icons.send_outlined,
+                          loading: _loading,
+                          onPressed: _sendResetLink,
                         ),
                       ],
                     ),
                   ),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpacing.lg),
                 TextButton.icon(
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.arrow_back),

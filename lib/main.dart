@@ -19,6 +19,7 @@ import 'company_profile_page.dart';
 import 'connectivity_gate.dart';
 import 'boq_share_actions.dart';
 import 'theme/app_theme.dart';
+import 'widgets/widgets.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -259,20 +260,26 @@ class _SessionGateState extends State<SessionGate> {
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+            body: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  BrandMark(size: 72),
+                  SizedBox(height: AppSpacing.xxl),
+                  SizedBox.square(
+                    dimension: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2.5),
+                  ),
+                ],
+              ),
+            ),
           );
         }
 
         if (snapshot.hasError) {
           return Scaffold(
-            body: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  friendlyError(snapshot.error),
-                  textAlign: TextAlign.center,
-                ),
-              ),
+            body: SafeArea(
+              child: ErrorState(error: snapshot.error, onRetry: _refresh),
             ),
           );
         }

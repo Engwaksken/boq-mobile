@@ -24,6 +24,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
 
     final pages = <Widget>[
       DashboardPage(l10n: l10n, api: widget.api),
@@ -47,6 +49,37 @@ class _HomeScreenState extends State<HomeScreen> {
       (Icons.person_outline, Icons.person, l10n.account),
     ];
 
+    Widget drawerTile({
+      required IconData icon,
+      required String label,
+      required VoidCallback onTap,
+      bool selected = false,
+    }) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: 2,
+        ),
+        child: ListTile(
+          selected: selected,
+          selectedColor: scheme.onPrimaryContainer,
+          selectedTileColor: scheme.primaryContainer,
+          iconColor: scheme.onSurfaceVariant,
+          shape: const StadiumBorder(),
+          leading: Icon(icon),
+          title: Text(
+            label,
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontSize: 14.5,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected ? scheme.onPrimaryContainer : scheme.onSurface,
+            ),
+          ),
+          onTap: onTap,
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(title: Text(destinations[_selectedIndex].$3)),
 
@@ -55,26 +88,51 @@ class _HomeScreenState extends State<HomeScreen> {
           child: ListView(
             padding: EdgeInsets.zero,
             children: [
-              DrawerHeader(
-                decoration: const BoxDecoration(color: Color(0xFF102A43)),
-                child: Align(
-                  alignment: Alignment.bottomLeft,
-                  child: Text(
-                    l10n.appTitle,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                    ),
+              Container(
+                margin: const EdgeInsets.all(AppSpacing.md),
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(AppRadii.lg),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [AppColors.primary, AppColors.primaryDark],
                   ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(AppSpacing.sm),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(AppRadii.sm),
+                      ),
+                      child: const Icon(
+                        Icons.foundation_outlined,
+                        color: AppColors.accent,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Text(
+                      l10n.appTitle,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
               for (var index = 0; index < destinations.length; index++)
-                ListTile(
+                drawerTile(
                   selected: _selectedIndex == index,
-                  leading: Icon(destinations[index].$2),
-                  title: Text(destinations[index].$3),
+                  icon: _selectedIndex == index
+                      ? destinations[index].$2
+                      : destinations[index].$1,
+                  label: destinations[index].$3,
                   onTap: () {
                     setState(() => _selectedIndex = index);
 
@@ -82,11 +140,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                 ),
 
-              const Divider(),
+              const Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: AppSpacing.xxl,
+                  vertical: AppSpacing.md,
+                ),
+                child: Divider(),
+              ),
 
-              ListTile(
-                leading: const Icon(Icons.workspace_premium_outlined),
-                title: Text(l10n.managePlan),
+              drawerTile(
+                icon: Icons.workspace_premium_outlined,
+                label: l10n.managePlan,
                 onTap: () {
                   Navigator.of(context).pop();
 
@@ -106,19 +170,25 @@ class _HomeScreenState extends State<HomeScreen> {
         child: IndexedStack(index: _selectedIndex, children: pages),
       ),
 
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) {
-          setState(() => _selectedIndex = index);
-        },
-        destinations: [
-          for (final item in destinations)
-            NavigationDestination(
-              icon: Icon(item.$1),
-              selectedIcon: Icon(item.$2),
-              label: item.$3,
-            ),
-        ],
+      bottomNavigationBar: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: scheme.outlineVariant)),
+        ),
+        child: NavigationBar(
+          selectedIndex: _selectedIndex,
+          onDestinationSelected: (index) {
+            setState(() => _selectedIndex = index);
+          },
+          destinations: [
+            for (final item in destinations)
+              NavigationDestination(
+                icon: Icon(item.$1),
+                selectedIcon: Icon(item.$2),
+                label: item.$3,
+                tooltip: item.$3,
+              ),
+          ],
+        ),
       ),
     );
   }

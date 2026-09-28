@@ -338,25 +338,8 @@ class ProjectDetailPage extends StatelessWidget {
   );
 }
 
-Widget _detailRow(String label, String value) => Padding(
-  padding: const EdgeInsets.symmetric(vertical: 4),
-  child: Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      SizedBox(
-        width: 140,
-        child: Text(
-          label,
-          style: const TextStyle(
-            fontWeight: FontWeight.w500,
-            color: Colors.grey,
-          ),
-        ),
-      ),
-      Expanded(child: Text(value)),
-    ],
-  ),
-);
+Widget _detailRow(String label, String value) =>
+    KeyValueRow(label: label, value: value);
 
 String _formatLocation(String country, String district, String location) {
   final parts = [
@@ -1181,36 +1164,15 @@ class _ProjectTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        leading: CircleAvatar(
-          backgroundColor: color.withValues(alpha: 0.12),
-          child: Icon(Icons.foundation_outlined, color: color),
-        ),
-        title: Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(code),
-        trailing: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 110),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Text(
-                  status,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: color, fontWeight: FontWeight.w600),
-                ),
-              ),
-              const SizedBox(width: 4),
-              const Icon(Icons.chevron_right),
-            ],
-          ),
-        ),
-        onTap: onTap,
+    return ListItemCard(
+      leading: IconTile(icon: Icons.foundation_outlined, color: color),
+      title: name,
+      subtitle: code,
+      trailing: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 110),
+        child: StatusBadge(label: status, color: color),
       ),
+      onTap: onTap,
     );
   }
 }
