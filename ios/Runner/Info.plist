@@ -66,5 +66,12 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>https</string>
+		<string>whatsapp</string>
+	</array>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose your company logo for BOQ PDFs.</string>
 </dict>
 </plist>

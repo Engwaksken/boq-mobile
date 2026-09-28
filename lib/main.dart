@@ -10,12 +10,15 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:boq_mobile/l10n/app_localizations.dart';
 
 import 'api_client.dart';
+import 'app_errors.dart';
+import 'company_profile_page.dart';
+import 'connectivity_gate.dart';
+import 'boq_share_actions.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -132,6 +135,9 @@ class _BoqAppState extends State<BoqApp> {
 
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      // Offline screen above every page, recovering automatically when back online.
+      builder: (context, child) =>
+          ConnectivityGate(child: child ?? const SizedBox.shrink()),
       onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
       locale: _locale,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -284,7 +290,7 @@ class _SessionGateState extends State<SessionGate> {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  snapshot.error.toString(),
+                  friendlyError(snapshot.error),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -1295,7 +1301,7 @@ class DashboardPage extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: Text(
-                snapshot.error.toString(),
+                friendlyError(snapshot.error),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -1518,7 +1524,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  snapshot.error.toString(),
+                  friendlyError(snapshot.error),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -1707,7 +1713,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
               future: _projects,
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
-                  return Center(child: Text(snapshot.error.toString()));
+                  return Center(child: Text(friendlyError(snapshot.error)));
                 }
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
@@ -2524,6 +2530,18 @@ class _AccountPageState extends State<AccountPage> {
                     ),
                   );
                 },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.business_outlined),
+                title: const Text('Company Profile'),
+                subtitle: const Text('Logo and details used on your BOQ PDFs'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => CompanyProfilePage(api: widget.api),
+                  ),
+                ),
               ),
             ],
           ),
@@ -3531,7 +3549,7 @@ class _ProfilePageState extends State<ProfilePage> {
         future: _profile,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(child: Text(snapshot.error.toString()));
+            return Center(child: Text(friendlyError(snapshot.error)));
           }
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
@@ -3867,7 +3885,7 @@ class ProjectDetailPage extends StatelessWidget {
       future: api.project(projectId),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(child: Text(snapshot.error.toString()));
+          return Center(child: Text(friendlyError(snapshot.error)));
         }
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -4705,7 +4723,7 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
       future: _boqDetail,
       builder: (context, snapshot) {
         if (snapshot.hasError)
-          return Center(child: Text(snapshot.error.toString()));
+          return Center(child: Text(friendlyError(snapshot.error)));
         if (!snapshot.hasData)
           return const Center(child: CircularProgressIndicator());
         final boq = snapshot.data!;
@@ -4873,24 +4891,9 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
       },
     ),
     floatingActionButton: FloatingActionButton.extended(
-      onPressed: () async {
-        try {
-          final file = File(
-            '${(await getTemporaryDirectory()).path}/boq-${widget.boqId}.pdf',
-          );
-          await file.writeAsBytes(await widget.api.pdf(widget.boqId));
-          await SharePlus.instance.share(
-            ShareParams(files: [XFile(file.path)]),
-          );
-        } on ApiException catch (error) {
-          if (context.mounted)
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text(error.message)));
-        }
-      },
+      onPressed: () => showBoqShareSheet(context, widget.api, widget.boqId, widget.title),
       icon: const Icon(Icons.share_outlined),
-      label: const Text('Share PDF'),
+      label: const Text('PDF & Share'),
     ),
   );
 }
@@ -5020,6 +5023,9 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
   String? _selectedCategory;
   String? _selectedSupplier;
   String? _selectedLocation;
+
+  /// null = all, 'hardware' = supplier prices, 'factory' = factory prices.
+  String? _selectedPriceType;
   List<String> _categories = [];
   List<String> _suppliers = [];
   List<String> _locations = [];
@@ -5075,6 +5081,7 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
     }
     try {
       final result = await widget.api.hardwarePrices(
+        priceType: _selectedPriceType,
         category: _selectedCategory,
         supplier: _selectedSupplier,
         location: _selectedLocation,
@@ -5302,6 +5309,22 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
           onChanged: _onSearchChanged,
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<String?>(
+            segments: const [
+              ButtonSegment(value: null, label: Text('All'), icon: Icon(Icons.list)),
+              ButtonSegment(value: 'hardware', label: Text('Supplier'), icon: Icon(Icons.storefront_outlined)),
+              ButtonSegment(value: 'factory', label: Text('Factory'), icon: Icon(Icons.factory_outlined)),
+            ],
+            selected: {_selectedPriceType},
+            onSelectionChanged: (selection) => setState(() {
+              _selectedPriceType = selection.first;
+              _fetch();
+            }),
+          ),
         ),
         const SizedBox(height: 12),
         Wrap(
@@ -5541,6 +5564,11 @@ class _HardwarePriceCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 4,
               children: [
+                Chip(
+                  avatar: Icon(item.isFactory ? Icons.factory_outlined : Icons.storefront_outlined, size: 16),
+                  label: Text(item.isFactory ? 'Factory' : 'Supplier'),
+                  backgroundColor: item.isFactory ? Colors.purple[50] : Colors.teal[50],
+                ),
                 if (item.brand.isNotEmpty)
                   Chip(
                     label: Text(item.brand),
@@ -5590,14 +5618,32 @@ class _HardwarePriceCard extends StatelessWidget {
                 Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
                 const SizedBox(width: 4),
                 Text(
-                  'Updated: ${_formatDate(item.fetchedAt)}',
+                  '${item.lastVerifiedAt.isNotEmpty ? 'Verified' : 'Updated'}: ${_formatDate(item.updatedAt)}',
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
                 const Spacer(),
-                if (item.sourceReference.isNotEmpty)
-                  Text(
-                    item.sourceReference,
-                    style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                if (item.sourceUrl.isNotEmpty)
+                  InkWell(
+                    onTap: () => launchUrl(Uri.parse(item.sourceUrl), mode: LaunchMode.externalApplication),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          Uri.tryParse(item.sourceUrl)?.host ?? 'Source',
+                          style: const TextStyle(fontSize: 11, color: Color(0xFF05645B), fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(width: 2),
+                        const Icon(Icons.open_in_new, size: 12, color: Color(0xFF05645B)),
+                      ],
+                    ),
+                  )
+                else if (item.sourceReference.isNotEmpty)
+                  Flexible(
+                    child: Text(
+                      item.sourceReference,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                    ),
                   ),
               ],
             ),
@@ -5652,7 +5698,7 @@ class HardwarePriceDetailPage extends StatelessWidget {
       future: api.hardwarePriceHistory(hardwarePrice.id),
       builder: (context, snapshot) {
         if (snapshot.hasError)
-          return Center(child: Text(snapshot.error.toString()));
+          return Center(child: Text(friendlyError(snapshot.error)));
         if (!snapshot.hasData)
           return const Center(child: CircularProgressIndicator());
         final data = snapshot.data!;
@@ -5806,7 +5852,7 @@ class PriceHistoryPage extends StatelessWidget {
       future: api.hardwarePriceHistory(hardwarePrice.id),
       builder: (context, snapshot) {
         if (snapshot.hasError)
-          return Center(child: Text(snapshot.error.toString()));
+          return Center(child: Text(friendlyError(snapshot.error)));
         if (!snapshot.hasData)
           return const Center(child: CircularProgressIndicator());
         final history = snapshot.data!.history;
@@ -6370,25 +6416,10 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
       appBar: AppBar(
         title: Text(widget.title),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.picture_as_pdf),
-            onPressed: () async {
-              try {
-                final file = File(
-                  '${(await getTemporaryDirectory()).path}/boq-${widget.boqId}.pdf',
-                );
-                await file.writeAsBytes(await widget.api.pdf(widget.boqId));
-                await SharePlus.instance.share(
-                  ShareParams(files: [XFile(file.path)]),
-                );
-              } on ApiException catch (error) {
-                if (context.mounted)
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(error.message)));
-              }
-            },
-            tooltip: 'Export PDF',
+          BoqShareMenu(
+            api: widget.api,
+            boqId: widget.boqId,
+            title: widget.title,
           ),
         ],
       ),
@@ -6396,7 +6427,7 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
         future: _boqDetail,
         builder: (context, snapshot) {
           if (snapshot.hasError)
-            return Center(child: Text(snapshot.error.toString()));
+            return Center(child: Text(friendlyError(snapshot.error)));
           if (!snapshot.hasData)
             return const Center(child: CircularProgressIndicator());
           final boq = snapshot.data!;
@@ -6972,7 +7003,7 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
         future: _itemDetail,
         builder: (context, snapshot) {
           if (snapshot.hasError)
-            return Center(child: Text(snapshot.error.toString()));
+            return Center(child: Text(friendlyError(snapshot.error)));
           if (!snapshot.hasData)
             return const Center(child: CircularProgressIndicator());
           final item = snapshot.data!;
@@ -7266,7 +7297,7 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
                             color: Colors.red,
                           ),
                           const SizedBox(height: 16),
-                          Text(snapshot.error.toString()),
+                          Text(friendlyError(snapshot.error)),
                           const SizedBox(height: 16),
                           FilledButton(
                             onPressed: _refresh,

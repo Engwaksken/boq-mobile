@@ -5,6 +5,8 @@ import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
+import 'app_errors.dart';
+
 int _asInt(dynamic value) =>
     value is num ? value.toInt() : int.tryParse('$value') ?? 0;
 
@@ -29,11 +31,12 @@ class _GuardedClient extends http.BaseClient {
     try {
       response = await _inner.send(request).timeout(_timeout);
     } on TimeoutException {
-      // Surface as a network error so existing error handling applies.
-      throw http.ClientException(
-        'The server took too long to respond. Check your connection and try again.',
-        request.url,
-      );
+      throw const ApiException(AppErrorMessages.timeout);
+    } on ApiException {
+      rethrow;
+    } on Object catch (error) {
+      // SocketException / ClientException / TLS errors: never show raw text.
+      throw ApiException(friendlyError(error));
     }
 
     final isLogin = request.url.path.endsWith('/auth/login');
@@ -501,6 +504,8 @@ class ApiClient {
   }
 
   Future<HardwarePricePaginated> hardwarePrices({
+    String? priceType,
+    String? brand,
     String? category,
     String? supplier,
     String? location,
@@ -515,6 +520,8 @@ class ApiClient {
     int perPage = 20,
   }) async {
     final queryParams = <String, String>{};
+    if (priceType != null) queryParams['price_type'] = priceType;
+    if (brand != null) queryParams['brand'] = brand;
     if (category != null) queryParams['category'] = category;
     if (supplier != null) queryParams['supplier'] = supplier;
     if (location != null) queryParams['location'] = location;
@@ -879,9 +886,108 @@ class ApiClient {
       headers: await _headers(),
     );
     if (response.statusCode != 200) {
-      throw const ApiException('Unable to generate the BOQ PDF.');
+      throw ApiException(
+        response.statusCode == 403
+            ? AppErrorMessages.forbidden
+            : 'The BOQ PDF could not be generated. Please try again.',
+        statusCode: response.statusCode,
+      );
     }
     return response.bodyBytes;
+  }
+
+  /// Email the owner-branded BOQ PDF to a recipient.
+  Future<String> shareBoqByEmail(
+    int boqId, {
+    required String email,
+    String? subject,
+    String? message,
+  }) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/boqs/$boqId/share/email'),
+      headers: await _headers(),
+      body: {
+        'email': email,
+        if (subject != null && subject.trim().isNotEmpty) 'subject': subject.trim(),
+        if (message != null && message.trim().isNotEmpty) 'message': message.trim(),
+      },
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_message(body), statusCode: response.statusCode);
+    }
+    return body['message'] as String? ?? 'BOQ sent.';
+  }
+
+  /// Signed download link plus a ready-made message for WhatsApp / device sharing.
+  Future<BoqShareLink> boqShareLink(int boqId) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/boqs/$boqId/share/link'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_message(body), statusCode: response.statusCode);
+    }
+    return BoqShareLink.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  /// ISO code => country name, from the server's managed list (default country first).
+  Future<Map<String, String>> countries() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/mobile-config'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_message(body), statusCode: response.statusCode);
+    }
+    final data = body['data'];
+    final list = data is Map ? data['countries_detailed'] : null;
+    return {
+      if (list is List)
+        for (final country in list.whereType<Map>())
+          '${country['iso2']}': '${country['name']}',
+    };
+  }
+
+  Future<CompanyProfile?> companyProfile() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/company-profile'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) {
+      throw ApiException(_message(body), statusCode: response.statusCode);
+    }
+    final data = body['data'];
+    return data is Map<String, dynamic> ? CompanyProfile.fromJson(data) : null;
+  }
+
+  /// Create or update the user's company profile; [logoPath] uploads a new logo.
+  Future<CompanyProfile> saveCompanyProfile(
+    Map<String, String> fields, {
+    String? logoPath,
+    bool removeLogo = false,
+  }) async {
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/company-profile'))
+      ..headers.addAll(await _headers())
+      ..fields.addAll(fields);
+    if (removeLogo) request.fields['remove_logo'] = '1';
+    if (logoPath != null) {
+      request.files.add(await http.MultipartFile.fromPath('logo', logoPath));
+    }
+
+    final response = await http.Response.fromStream(await _httpClient.send(request));
+    final body = _decode(response);
+    if (response.statusCode != 200) {
+      final errors = body['errors'];
+      final firstError = errors is Map && errors.values.isNotEmpty && errors.values.first is List
+          ? (errors.values.first as List).first?.toString()
+          : null;
+      throw ApiException(firstError ?? _message(body), statusCode: response.statusCode);
+    }
+    return CompanyProfile.fromJson(body['data'] as Map<String, dynamic>);
   }
 
   Future<void> logout() async {
@@ -1339,11 +1445,29 @@ class ApiClient {
   }
 
   Map<String, dynamic> _decode(http.Response response) {
-    final Map<String, dynamic> body;
+    final status = response.statusCode;
+    Map<String, dynamic> body;
     try {
-      body = jsonDecode(response.body) as Map<String, dynamic>;
+      final decoded = jsonDecode(response.body);
+      body = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
     } on FormatException {
-      throw const ApiException('The server returned an invalid response.');
+      // HTML error page from the server or a proxy: explain by status instead.
+      if (status >= 400) {
+        throw ApiException(friendlyStatusMessage(status), statusCode: status);
+      }
+      throw const ApiException(AppErrorMessages.invalidResponse);
+    }
+
+    if (status >= 400) {
+      final serverMessage = body['message'];
+      final keepServerMessage = serverMessage is String &&
+          serverMessage.trim().isNotEmpty &&
+          // Never pass through generic framework/server wording for 5xx.
+          (status < 500 || status == 503);
+      body = {
+        ...body,
+        'message': keepServerMessage ? serverMessage : friendlyStatusMessage(status),
+      };
     }
 
     if (response.statusCode == 403 &&
@@ -1600,8 +1724,9 @@ class BoqItemSummary {
 }
 
 class ApiException implements Exception {
-  const ApiException(this.message);
+  const ApiException(this.message, {this.statusCode});
   final String message;
+  final int? statusCode;
 
   @override
   String toString() => message;
@@ -1644,6 +1769,9 @@ class HardwarePrice {
     required this.sourceReference,
     required this.fetchedAt,
     required this.isActive,
+    this.priceType = 'hardware',
+    this.sourceUrl = '',
+    this.lastVerifiedAt = '',
     this.priceHistory = const [],
   });
   factory HardwarePrice.fromJson(Map<String, dynamic> json) => HardwarePrice(
@@ -1659,7 +1787,10 @@ class HardwarePrice {
     location: json['location'] as String? ?? '',
     sourceReference: json['source_reference'] as String? ?? '',
     fetchedAt: json['fetched_at'] as String? ?? '',
-    isActive: json['is_active'] as bool? ?? true,
+    isActive: json['is_active'] == true || json['is_active'] == 1,
+    priceType: json['price_type'] as String? ?? 'hardware',
+    sourceUrl: json['source_url'] as String? ?? '',
+    lastVerifiedAt: json['last_verified_at'] as String? ?? '',
     priceHistory: json['price_histories'] != null
         ? (json['price_histories'] as List<dynamic>)
               .cast<Map<String, dynamic>>()
@@ -1680,7 +1811,71 @@ class HardwarePrice {
   final String sourceReference;
   final String fetchedAt;
   final bool isActive;
+  final String priceType;
+  final String sourceUrl;
+  final String lastVerifiedAt;
   final List<PriceHistory> priceHistory;
+
+  bool get isFactory => priceType == 'factory';
+
+  /// When the price was last confirmed (verification, else fetch).
+  String get updatedAt => lastVerifiedAt.isNotEmpty ? lastVerifiedAt : fetchedAt;
+}
+
+class BoqShareLink {
+  const BoqShareLink({
+    required this.url,
+    required this.message,
+    required this.whatsappUrl,
+    required this.filename,
+    required this.expiresInDays,
+  });
+
+  factory BoqShareLink.fromJson(Map<String, dynamic> json) => BoqShareLink(
+    url: json['url'] as String? ?? '',
+    message: json['message'] as String? ?? '',
+    whatsappUrl: json['whatsapp_url'] as String? ?? '',
+    filename: json['filename'] as String? ?? 'boq.pdf',
+    expiresInDays: _asInt(json['expires_in_days']),
+  );
+
+  final String url;
+  final String message;
+  final String whatsappUrl;
+  final String filename;
+  final int expiresInDays;
+}
+
+class CompanyProfile {
+  const CompanyProfile({required this.fields, this.logoUrl});
+
+  factory CompanyProfile.fromJson(Map<String, dynamic> json) => CompanyProfile(
+    fields: {
+      for (final key in keys) key: json[key]?.toString() ?? '',
+    },
+    logoUrl: json['logo_url'] as String?,
+  );
+
+  /// Field names shared with the Laravel API.
+  static const keys = [
+    'company_name',
+    'registration_number',
+    'tin',
+    'country',
+    'city',
+    'physical_address',
+    'postal_address',
+    'telephone',
+    'alt_telephone',
+    'email',
+    'website',
+    'description',
+  ];
+
+  final Map<String, String> fields;
+  final String? logoUrl;
+
+  String get companyName => fields['company_name'] ?? '';
 }
 
 class PriceHistory {
