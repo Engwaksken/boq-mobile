@@ -151,79 +151,195 @@ class _ImportPageState extends State<ImportPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = widget.l10n;
+    final theme = Theme.of(context);
+    final canUpload = _projectId != null && !_uploading;
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: AppSpacing.page,
       children: [
-        Text(
-          l10n.importTitle,
-          style: Theme.of(
-            context,
-          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 8),
-        Text(l10n.importDescription),
-        const SizedBox(height: 28),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFFCBD5E1)),
-          ),
+        ContentWidth(
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Icon(
-                Icons.cloud_upload_outlined,
-                size: 48,
-                color: Color(0xFF1D4ED8),
-              ),
-              const SizedBox(height: 16),
-              FutureBuilder<List<ProjectSummary>>(
-                future: _projects,
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return const CircularProgressIndicator();
-                  }
-                  return DropdownButton<int>(
-                    value: _projectId,
-                    hint: Text(l10n.projects),
-                    items: [
-                      for (final project in snapshot.data!)
-                        DropdownMenuItem(
-                          value: project.id,
-                          child: Text(project.name),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const IconTile(icon: Icons.cloud_upload_outlined, size: 44),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l10n.importTitle,
+                          style: theme.textTheme.titleMedium,
                         ),
-                    ],
-                    onChanged: (value) => setState(() => _projectId = value),
-                  );
-                },
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          l10n.importDescription,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: _projectId == null || _uploading ? null : _upload,
-                icon: const Icon(Icons.upload_file_outlined),
-                label: Text(l10n.uploadDocument),
+              const SizedBox(height: AppSpacing.sectionGap),
+              SectionCard(
+                title: 'Choose project',
+                icon: Icons.looks_one_outlined,
+                children: [
+                  FutureBuilder<List<ProjectSummary>>(
+                    future: _projects,
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return ErrorState(error: snapshot.error, compact: true);
+                      }
+                      if (!snapshot.hasData) {
+                        return const Padding(
+                          padding: EdgeInsets.symmetric(
+                            vertical: AppSpacing.md,
+                          ),
+                          child: LinearProgressIndicator(),
+                        );
+                      }
+                      return InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: l10n.projects,
+                          prefixIcon: const Icon(Icons.folder_outlined),
+                        ),
+                        isEmpty: _projectId == null,
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<int>(
+                            value: _projectId,
+                            isExpanded: true,
+                            isDense: true,
+                            borderRadius: BorderRadius.circular(AppRadii.sm),
+                            items: [
+                              for (final project in snapshot.data!)
+                                DropdownMenuItem(
+                                  value: project.id,
+                                  child: Text(
+                                    project.name,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                            onChanged: (value) =>
+                                setState(() => _projectId = value),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              Text(
-                l10n.supportedFiles,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall,
+              const SizedBox(height: AppSpacing.lg),
+              SectionCard(
+                title: 'Add your BOQ',
+                icon: Icons.looks_two_outlined,
+                spacing: AppSpacing.md,
+                children: [
+                  _ImportOptionCard(
+                    icon: Icons.upload_file_outlined,
+                    title: l10n.uploadDocument,
+                    subtitle: l10n.supportedFiles,
+                    onTap: canUpload ? _upload : null,
+                  ),
+                  _ImportOptionCard(
+                    icon: Icons.document_scanner_outlined,
+                    title: l10n.scanPages,
+                    tone: StatusTone.info,
+                    onTap: canUpload ? _pickImage : null,
+                  ),
+                ],
               ),
+              if (_uploading) ...[
+                const SizedBox(height: AppSpacing.lg),
+                Semantics(
+                  label: 'Uploading',
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadii.pill),
+                    child: const LinearProgressIndicator(minHeight: 6),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: _projectId == null || _uploading ? null : _pickImage,
-            icon: const Icon(Icons.document_scanner_outlined),
-            label: Text(l10n.scanPages),
+      ],
+    );
+  }
+}
+
+/// Large tappable card for one way of bringing a BOQ into the app.
+class _ImportOptionCard extends StatelessWidget {
+  const _ImportOptionCard({
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.tone = StatusTone.brand,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final StatusTone tone;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final enabled = onTap != null;
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.5,
+        child: Material(
+          color: scheme.surfaceContainerLow,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadii.md),
+            side: BorderSide(color: scheme.outlineVariant),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 76),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.lg,
+                  vertical: AppSpacing.md,
+                ),
+                child: Row(
+                  children: [
+                    IconTile(icon: icon, tone: tone, size: 48),
+                    const SizedBox(width: AppSpacing.md + 2),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(title, style: theme.textTheme.titleSmall),
+                          if (subtitle != null) ...[
+                            const SizedBox(height: AppSpacing.xxs),
+                            Text(subtitle!, style: theme.textTheme.bodySmall),
+                          ],
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
-      ],
+      ),
     );
   }
 }

@@ -1,5 +1,32 @@
 part of '../main.dart';
 
+/// Formats an API amount string for display when it is numeric; otherwise the
+/// raw string is shown unchanged.
+String _displayBoqAmount(String raw, {String? currency}) {
+  final value = num.tryParse(raw.trim());
+  if (value == null) return raw;
+  return formatAmount(
+    value,
+    currency: currency ?? '',
+    decimals: value % 1 == 0 ? 0 : 2,
+  );
+}
+
+/// Colour family for BOQ workflow statuses.
+StatusTone _boqStatusTone(String status) {
+  switch (status) {
+    case 'uploaded':
+      return StatusTone.info;
+    case 'analysed':
+    case 'under_review':
+      return StatusTone.warning;
+    case 'approved':
+      return StatusTone.success;
+    default:
+      return StatusTone.forStatus(status);
+  }
+}
+
 class BoqDetailPage extends StatefulWidget {
   const BoqDetailPage({
     super.key,
@@ -31,6 +58,16 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
     _locale = Localizations.localeOf(context);
   }
 
+  Future<void> _reload() async {
+    final future = widget.api.boqDetail(widget.boqId);
+    setState(() => _boqDetail = future);
+    try {
+      await future;
+    } catch (_) {
+      // Shown by the FutureBuilder.
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -43,31 +80,43 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
             boqId: widget.boqId,
             title: widget.title,
           ),
+          const SizedBox(width: AppSpacing.xs),
         ],
       ),
       body: FutureBuilder<BoqDetail>(
         future: _boqDetail,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(child: Text(friendlyError(snapshot.error)));
+            return ErrorState(error: snapshot.error, onRetry: _reload);
           }
           if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            return const LoadingState();
           }
           final boq = snapshot.data!;
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _buildBoqHeader(boq, l10n),
-              const SizedBox(height: 16),
-              _buildSummaries(boq),
-              const SizedBox(height: 16),
-              if (boq.metadata.isNotEmpty) ...[
-                _buildMetadataSection(boq),
-                const SizedBox(height: 16),
+          return RefreshIndicator(
+            onRefresh: _reload,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: AppSpacing.page,
+              children: [
+                ContentWidth(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildBoqHeader(boq, l10n),
+                      const SizedBox(height: AppSpacing.lg),
+                      _buildSummaries(boq),
+                      const SizedBox(height: AppSpacing.lg),
+                      if (boq.metadata.isNotEmpty) ...[
+                        _buildMetadataSection(boq),
+                        const SizedBox(height: AppSpacing.lg),
+                      ],
+                      _buildHierarchy(boq),
+                    ],
+                  ),
+                ),
               ],
-              _buildHierarchy(boq),
-            ],
+            ),
           );
         },
       ),
@@ -75,42 +124,58 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
   }
 
   Widget _buildBoqHeader(BoqDetail boq, AppLocalizations l10n) {
+    final theme = Theme.of(context);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: AppSpacing.card,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const IconTile(icon: Icons.receipt_long_outlined, size: 48),
+                const SizedBox(width: AppSpacing.md),
                 Expanded(
-                  child: Text(
-                    boq.name,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(boq.name, style: theme.textTheme.titleLarge),
+                      if (boq.code.isNotEmpty) ...[
+                        const SizedBox(height: AppSpacing.xxs),
+                        Text(
+                          'Code: ${boq.code}',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-                _statusChip(boq.status),
+                const SizedBox(width: AppSpacing.sm),
+                StatusBadge(
+                  label: boq.status.capitalize(),
+                  tone: _boqStatusTone(boq.status),
+                ),
               ],
             ),
-            const SizedBox(height: 8),
-            if (boq.code.isNotEmpty)
-              Text(
-                'Code: ${boq.code}',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-              ),
             if (boq.description.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(boq.description),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                boq.description,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
             ],
-            const SizedBox(height: 12),
-            Row(
+            const SizedBox(height: AppSpacing.md),
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
               children: [
-                _infoChip(Icons.attach_money, '${boq.currency} ${boq.version}'),
-                const SizedBox(width: 12),
+                _infoChip(
+                  Icons.payments_outlined,
+                  '${boq.currency} ${boq.version}',
+                ),
                 if (boq.metadata['detected_language'] != null)
                   _infoChip(
                     Icons.translate,
@@ -125,208 +190,220 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
   }
 
   Widget _buildSummaries(BoqDetail boq) {
-    final money = NumberFormat('#,##0.00');
     final grandSummary = boq.summaries.firstWhere(
       (s) => s.summaryType == 'grand',
       orElse: () => boq.summaries.first,
     );
+    String money(double value) =>
+        formatAmount(value, currency: boq.currency, decimals: 2);
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        HighlightCard(
+          label: 'Grand Total',
+          value: money(grandSummary.grandTotal),
+          icon: Icons.account_balance_wallet_outlined,
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        SectionCard(
+          title: 'Summary',
+          icon: Icons.summarize_outlined,
           children: [
-            Text(
-              'Summary',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            KeyValueRow(label: 'Subtotal', value: money(grandSummary.subtotal)),
+            KeyValueRow(label: 'VAT (18%)', value: money(grandSummary.vat)),
+            KeyValueRow(
+              label: 'Contingency (5%)',
+              value: money(grandSummary.contingency),
             ),
-            const SizedBox(height: 12),
-            _summaryRow(
-              'Subtotal',
-              '${boq.currency} ${money.format(grandSummary.subtotal)}',
-            ),
-            _summaryRow(
-              'VAT (18%)',
-              '${boq.currency} ${money.format(grandSummary.vat)}',
-            ),
-            _summaryRow(
-              'Contingency (5%)',
-              '${boq.currency} ${money.format(grandSummary.contingency)}',
-            ),
-            const Divider(),
-            _summaryRow(
-              'Grand Total',
-              '${boq.currency} ${money.format(grandSummary.grandTotal)}',
-              isTotal: true,
+            const Divider(height: AppSpacing.lg),
+            KeyValueRow(
+              label: 'Grand Total',
+              value: money(grandSummary.grandTotal),
+              emphasize: true,
             ),
             if (boq.summaries.length > 1) ...[
-              const SizedBox(height: 16),
-              Text(
-                'Breakdown',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              const SizedBox(height: AppSpacing.lg),
+              SectionHeader(
+                title: 'Breakdown',
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
               ),
-              const SizedBox(height: 8),
               ...boq.summaries
                   .where((s) => s.summaryType != 'grand')
-                  .map((s) => _buildBreakdownItem(s, money)),
+                  .map(_buildBreakdownItem),
             ],
           ],
         ),
-      ),
+      ],
     );
   }
 
-  Widget _buildBreakdownItem(BoqCostSummary summary, NumberFormat money) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  summary.summaryType == 'facility'
-                      ? Icons.apartment
-                      : Icons.receipt_long,
-                  size: 18,
-                  color: Colors.grey[600],
+  Widget _buildBreakdownItem(BoqCostSummary summary) {
+    final theme = Theme.of(context);
+    final money = NumberFormat('#,##0.00');
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadii.sm),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              IconTile(
+                icon: summary.summaryType == 'facility'
+                    ? Icons.apartment
+                    : Icons.receipt_long,
+                tone: summary.summaryType == 'facility'
+                    ? StatusTone.info
+                    : StatusTone.success,
+                size: 32,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  summary.name ?? summary.summaryType.capitalize(),
+                  style: theme.textTheme.titleSmall,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    summary.name ?? summary.summaryType.capitalize(),
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                Text(
-                  '${summary.metadata?['item_count'] ?? 0} items',
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _miniSummary('Subtotal', money.format(summary.subtotal)),
-                _miniSummary('VAT', money.format(summary.vat)),
-                _miniSummary(
+              ),
+              StatusBadge(
+                label: '${summary.metadata?['item_count'] ?? 0} items',
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(
+                child: _miniSummary('Subtotal', money.format(summary.subtotal)),
+              ),
+              Expanded(child: _miniSummary('VAT', money.format(summary.vat))),
+              Expanded(
+                child: _miniSummary(
                   'Total',
                   money.format(summary.grandTotal),
                   isTotal: true,
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildMetadataSection(BoqDetail boq) {
+    final theme = Theme.of(context);
     final metadata = boq.metadata;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Import Metadata',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 12),
-            if (metadata['import_sheets'] != null) ...[
-              Text(
-                'Sheets: ${(metadata['import_sheets'] as List).length}',
-                style: const TextStyle(fontWeight: FontWeight.w500),
+    return SectionCard(
+      title: 'Import Metadata',
+      icon: Icons.info_outline,
+      children: [
+        if (metadata['import_sheets'] != null) ...[
+          KeyValueRow(
+            label: 'Sheets',
+            value: '${(metadata['import_sheets'] as List).length}',
+            icon: Icons.table_chart_outlined,
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          ...(metadata['import_sheets'] as List).map<Widget>((sheet) {
+            return Padding(
+              padding: const EdgeInsets.only(
+                left: AppSpacing.xxl + 2,
+                bottom: AppSpacing.xs,
               ),
-              const SizedBox(height: 4),
-              ...(metadata['import_sheets'] as List).map<Widget>((sheet) {
-                return Padding(
-                  padding: const EdgeInsets.only(left: 16, bottom: 4),
-                  child: Text(
-                    '• ${sheet['sheet_name']} (${sheet['rows_processed']} rows)',
-                    style: TextStyle(fontSize: 13, color: Colors.grey[700]),
-                  ),
-                );
-              }),
-              const SizedBox(height: 12),
-            ],
-            if (metadata['translation_sources'] != null) ...[
-              Text(
-                'Translations: ${(metadata['translation_sources'] as Map).keys.join(', ')}',
-                style: const TextStyle(fontWeight: FontWeight.w500),
+              child: Text(
+                '• ${sheet['sheet_name']} (${sheet['rows_processed']} rows)',
+                style: theme.textTheme.bodySmall,
               ),
-            ],
-          ],
-        ),
-      ),
+            );
+          }),
+          const SizedBox(height: AppSpacing.sm),
+        ],
+        if (metadata['translation_sources'] != null)
+          KeyValueRow(
+            label: 'Translations',
+            value: (metadata['translation_sources'] as Map).keys.join(', '),
+            icon: Icons.translate,
+          ),
+      ],
     );
   }
 
   Widget _buildHierarchy(BoqDetail boq) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'BOQ Structure',
-              style: Theme.of(
-                context,
-              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 12),
-            if (boq.facilities.isEmpty)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Text(
-                    'No hierarchy data available. Process the BOQ to generate structure.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                ),
-              )
-            else
-              ...boq.facilities.map(
-                (facility) => _buildFacilityTile(facility, 0),
-              ),
-          ],
+    return SectionCard(
+      title: 'BOQ Structure',
+      icon: Icons.account_tree_outlined,
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.sm,
+        AppSpacing.lg,
+        AppSpacing.sm,
+        AppSpacing.sm,
+      ),
+      children: [
+        if (boq.facilities.isEmpty)
+          const EmptyState(
+            icon: Icons.account_tree_outlined,
+            title: 'No hierarchy data available',
+            message: 'Process the BOQ to generate structure.',
+            compact: true,
+          )
+        else
+          ...boq.facilities.map((facility) => _buildFacilityTile(facility, 0)),
+      ],
+    );
+  }
+
+  Widget _treeTile({
+    required bool initiallyExpanded,
+    required IconData icon,
+    required StatusTone tone,
+    required String title,
+    required String? description,
+    required List<Widget> children,
+    bool bold = false,
+  }) {
+    final theme = Theme.of(context);
+    return ExpansionTile(
+      initiallyExpanded: initiallyExpanded,
+      shape: const Border(),
+      collapsedShape: const Border(),
+      tilePadding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+      childrenPadding: const EdgeInsets.only(
+        left: AppSpacing.md,
+        bottom: AppSpacing.xs,
+      ),
+      leading: IconTile(icon: icon, tone: tone, size: 36),
+      title: Text(
+        title,
+        style: theme.textTheme.titleSmall?.copyWith(
+          fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
         ),
       ),
+      subtitle: description != null
+          ? Text(
+              description,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall,
+            )
+          : null,
+      children: children,
     );
   }
 
   Widget _buildFacilityTile(Facility facility, int depth) {
-    return ExpansionTile(
+    return _treeTile(
       initiallyExpanded: depth == 0,
-      leading: CircleAvatar(
-        backgroundColor: const Color(0xFF1D4ED8).withValues(alpha: 0.12),
-        child: const Icon(Icons.apartment, color: Color(0xFF1D4ED8), size: 20),
-      ),
-      title: Text(
-        _localizedName(facility.name, facility.nameTranslations),
-        style: const TextStyle(fontWeight: FontWeight.w700),
-      ),
-      subtitle: facility.description != null
-          ? Text(
-              facility.description!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            )
-          : null,
+      icon: Icons.apartment,
+      tone: StatusTone.info,
+      title: _localizedName(facility.name, facility.nameTranslations),
+      description: facility.description,
+      bold: true,
       children: [
         ...facility.bills.map((bill) => _buildBillTile(bill, depth + 1)),
         if (facility.summaries.isNotEmpty) ...[
@@ -338,27 +415,12 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
   }
 
   Widget _buildBillTile(Bill bill, int depth) {
-    return ExpansionTile(
+    return _treeTile(
       initiallyExpanded: depth <= 1,
-      leading: CircleAvatar(
-        backgroundColor: const Color(0xFF047857).withValues(alpha: 0.12),
-        child: const Icon(
-          Icons.receipt_long,
-          color: Color(0xFF047857),
-          size: 18,
-        ),
-      ),
-      title: Text(
-        _localizedName(bill.name, bill.nameTranslations),
-        style: const TextStyle(fontWeight: FontWeight.w600),
-      ),
-      subtitle: bill.description != null
-          ? Text(
-              bill.description!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            )
-          : null,
+      icon: Icons.receipt_long,
+      tone: StatusTone.success,
+      title: _localizedName(bill.name, bill.nameTranslations),
+      description: bill.description,
       children: [
         ...bill.elements.map(
           (element) => _buildElementTile(element, depth + 1),
@@ -372,23 +434,12 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
   }
 
   Widget _buildElementTile(Element element, int depth) {
-    return ExpansionTile(
+    return _treeTile(
       initiallyExpanded: depth <= 2,
-      leading: CircleAvatar(
-        backgroundColor: const Color(0xFFB45309).withValues(alpha: 0.12),
-        child: const Icon(Icons.category, color: Color(0xFFB45309), size: 18),
-      ),
-      title: Text(
-        _localizedName(element.name, element.nameTranslations),
-        style: const TextStyle(fontWeight: FontWeight.w600),
-      ),
-      subtitle: element.description != null
-          ? Text(
-              element.description!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            )
-          : null,
+      icon: Icons.category_outlined,
+      tone: StatusTone.warning,
+      title: _localizedName(element.name, element.nameTranslations),
+      description: element.description,
       children: [
         if (element.items.isNotEmpty)
           ...element.items.map((item) => _buildItemTile(item)),
@@ -401,56 +452,52 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
   }
 
   Widget _buildSubElementTile(SubElement subElement, int depth) {
-    return ExpansionTile(
+    return _treeTile(
       initiallyExpanded: false,
-      leading: CircleAvatar(
-        backgroundColor: const Color(0xFF7C3AED).withValues(alpha: 0.12),
-        child: const Icon(
-          Icons.subdirectory_arrow_right,
-          color: Color(0xFF7C3AED),
-          size: 18,
-        ),
-      ),
-      title: Text(
-        _localizedName(subElement.name, subElement.nameTranslations),
-        style: const TextStyle(fontWeight: FontWeight.w600),
-      ),
-      subtitle: subElement.description != null
-          ? Text(
-              subElement.description!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            )
-          : null,
+      icon: Icons.subdirectory_arrow_right,
+      tone: StatusTone.brand,
+      title: _localizedName(subElement.name, subElement.nameTranslations),
+      description: subElement.description,
       children: subElement.items.map((item) => _buildItemTile(item)).toList(),
     );
   }
 
   Widget _buildItemTile(BoqItemSummary item) {
-    return ListTile(
-      dense: true,
-      contentPadding: const EdgeInsets.only(left: 72, right: 16),
-      leading: const Icon(
-        Icons.format_list_numbered,
-        size: 18,
-        color: Colors.grey,
+    final theme = Theme.of(context);
+    return ListItemCard(
+      margin: const EdgeInsets.only(
+        right: AppSpacing.xs,
+        bottom: AppSpacing.sm,
       ),
-      title: Text(
-        item.description,
-        style: const TextStyle(fontWeight: FontWeight.w500),
+      leading: const IconTile(
+        icon: Icons.format_list_numbered,
+        tone: StatusTone.neutral,
+        size: 36,
       ),
-      subtitle: item.code.isNotEmpty ? Text('Code: ${item.code}') : null,
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
+      title: item.description,
+      subtitle: item.code.isNotEmpty ? 'Code: ${item.code}' : null,
+      footer: Row(
         children: [
-          Text(
-            '${item.quantity} ${item.unit}',
-            style: const TextStyle(fontSize: 12, color: Colors.grey),
+          Expanded(child: _miniSummary('Qty', '${item.quantity} ${item.unit}')),
+          Expanded(
+            child: _miniSummary('Rate', _displayBoqAmount(item.currentRate)),
           ),
-          Text(
-            item.amount,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text('Amount', style: theme.textTheme.labelSmall),
+                const SizedBox(height: AppSpacing.xxs),
+                Text(
+                  item.amount,
+                  textAlign: TextAlign.right,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -467,119 +514,67 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
   }
 
   Widget _buildSummaryTile(BoqCostSummary summary) {
+    final theme = Theme.of(context);
     final money = NumberFormat('#,##0.00');
     return ListTile(
       dense: true,
-      leading: const Icon(Icons.summarize, size: 18, color: Colors.grey),
+      contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+      leading: Icon(
+        Icons.summarize_outlined,
+        size: 20,
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
       title: Text(
         '${summary.summaryType.capitalize()}: ${summary.name ?? ''}',
-        style: const TextStyle(fontWeight: FontWeight.w600),
+        style: theme.textTheme.titleSmall,
       ),
       trailing: Text(
         money.format(summary.grandTotal),
-        style: const TextStyle(
-          fontWeight: FontWeight.w700,
-          color: Color(0xFF047857),
+        style: theme.textTheme.titleSmall?.copyWith(
+          fontWeight: FontWeight.w800,
+          color: AppColors.success,
         ),
       ),
     );
   }
 
-  Widget _summaryRow(String label, String value, {bool isTotal = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontWeight: isTotal ? FontWeight.w700 : FontWeight.w500,
-              fontSize: isTotal ? 16 : 14,
-              color: isTotal ? Colors.black : Colors.grey[700],
-            ),
-          ),
-          Text(
-            value,
-            style: TextStyle(
-              fontWeight: isTotal ? FontWeight.w700 : FontWeight.w500,
-              fontSize: isTotal ? 16 : 14,
-              color: isTotal ? const Color(0xFF047857) : Colors.grey[700],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _miniSummary(String label, String value, {bool isTotal = false}) {
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+        Text(label, style: theme.textTheme.labelSmall),
+        const SizedBox(height: AppSpacing.xxs),
         Text(
           value,
-          style: TextStyle(
-            fontWeight: isTotal ? FontWeight.w700 : FontWeight.w500,
-            fontSize: isTotal ? 14 : 12,
-            color: isTotal ? const Color(0xFF047857) : Colors.grey[700],
+          style: theme.textTheme.bodySmall?.copyWith(
+            fontWeight: isTotal ? FontWeight.w800 : FontWeight.w600,
+            color: isTotal
+                ? theme.colorScheme.primary
+                : theme.colorScheme.onSurface,
           ),
         ),
       ],
     );
   }
 
-  Widget _statusChip(String status) {
-    Color color;
-    switch (status) {
-      case 'draft':
-        color = Colors.grey;
-        break;
-      case 'uploaded':
-        color = Colors.blue;
-        break;
-      case 'analysed':
-        color = Colors.orange;
-        break;
-      case 'under_review':
-        color = Colors.amber;
-        break;
-      case 'approved':
-        color = Colors.green;
-        break;
-      default:
-        color = Colors.grey;
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        status.capitalize(),
-        style: TextStyle(
-          color: color,
-          fontWeight: FontWeight.w600,
-          fontSize: 12,
-        ),
-      ),
-    );
-  }
-
   Widget _infoChip(IconData icon, String label) {
+    final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm + 2,
+        vertical: AppSpacing.xs + 2,
+      ),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
-        borderRadius: BorderRadius.circular(8),
+        color: theme.colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(AppRadii.pill),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: Colors.grey[600]),
-          const SizedBox(width: 4),
-          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+          Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
+          const SizedBox(width: AppSpacing.xs + 2),
+          Text(label, style: theme.textTheme.labelMedium),
         ],
       ),
     );
@@ -617,6 +612,16 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
     _itemDetail = widget.api.boqItemDetail(widget.itemId);
   }
 
+  Future<void> _reload() async {
+    final future = widget.api.boqItemDetail(widget.itemId);
+    setState(() => _itemDetail = future);
+    try {
+      await future;
+    } catch (_) {
+      // Shown by the FutureBuilder.
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -625,117 +630,217 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
         future: _itemDetail,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(child: Text(friendlyError(snapshot.error)));
+            return ErrorState(error: snapshot.error, onRetry: _reload);
           }
           if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            return const LoadingState();
           }
           final item = snapshot.data!;
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
+          final hasPricing =
+              item.originalRate != null ||
+              item.aiSuggestedRate != null ||
+              item.approvedRate != null ||
+              item.pricingSource != null ||
+              item.pricingDate != null;
+          return RefreshIndicator(
+            onRefresh: _reload,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: AppSpacing.page,
+              children: [
+                ContentWidth(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(
-                        item.description,
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.w700),
+                      _buildHeader(item),
+                      const SizedBox(height: AppSpacing.lg),
+                      HighlightCard(
+                        label: 'Amount',
+                        value: _displayBoqAmount(
+                          item.amount,
+                          currency: item.currency,
+                        ),
+                        icon: Icons.payments_outlined,
+                        footer: Text('${item.quantity} ${item.unit}'),
                       ),
-                      const SizedBox(height: 8),
-                      if (item.code.isNotEmpty)
-                        Text(
-                          'Code: ${item.code}',
-                          style: TextStyle(color: Colors.grey[600]),
+                      const SizedBox(height: AppSpacing.lg),
+                      SectionCard(
+                        title: 'Quantity & amount',
+                        icon: Icons.straighten_outlined,
+                        children: [
+                          _detailRow(
+                            'Quantity',
+                            '${item.quantity} ${item.unit}',
+                          ),
+                          _detailRow('Amount', item.amount),
+                        ],
+                      ),
+                      if (hasPricing) ...[
+                        const SizedBox(height: AppSpacing.lg),
+                        SectionCard(
+                          title: 'Pricing',
+                          icon: Icons.sell_outlined,
+                          children: [
+                            if (item.originalRate != null)
+                              _detailRow(
+                                'Original Rate',
+                                '${item.originalRate}',
+                              ),
+                            if (item.aiSuggestedRate != null)
+                              _detailRow(
+                                'AI Suggested Rate',
+                                '${item.aiSuggestedRate} (confidence: ${item.aiConfidence?.toStringAsFixed(0)}%)',
+                              ),
+                            if (item.approvedRate != null)
+                              _detailRow(
+                                'Approved Rate',
+                                '${item.approvedRate}',
+                              ),
+                            if (item.pricingSource != null)
+                              _detailRow('Pricing Source', item.pricingSource!),
+                            if (item.pricingDate != null)
+                              _detailRow('Pricing Date', item.pricingDate!),
+                          ],
                         ),
-                      const SizedBox(height: 16),
-                      _detailRow('Quantity', '${item.quantity} ${item.unit}'),
-                      _detailRow('Amount', item.amount),
-                      if (item.originalRate != null)
-                        _detailRow('Original Rate', '${item.originalRate}'),
-                      if (item.aiSuggestedRate != null)
-                        _detailRow(
-                          'AI Suggested Rate',
-                          '${item.aiSuggestedRate} (confidence: ${item.aiConfidence?.toStringAsFixed(0)}%)',
-                        ),
-                      if (item.approvedRate != null)
-                        _detailRow('Approved Rate', '${item.approvedRate}'),
-                      _detailRow('Status', item.status!.capitalize()),
-                      if (item.workCategory != null)
-                        _detailRow('Work Category', item.workCategory!),
-                      if (item.materialCategory != null)
-                        _detailRow('Material Category', item.materialCategory!),
-                      if (item.location != null)
-                        _detailRow('Location', item.location!),
-                      if (item.pricingSource != null)
-                        _detailRow('Pricing Source', item.pricingSource!),
-                      if (item.pricingDate != null)
-                        _detailRow('Pricing Date', item.pricingDate!),
+                      ],
+                      const SizedBox(height: AppSpacing.lg),
+                      SectionCard(
+                        title: 'Classification',
+                        icon: Icons.category_outlined,
+                        children: [
+                          _detailRow('Status', item.status!.capitalize()),
+                          if (item.workCategory != null)
+                            _detailRow('Work Category', item.workCategory!),
+                          if (item.materialCategory != null)
+                            _detailRow(
+                              'Material Category',
+                              item.materialCategory!,
+                            ),
+                          if (item.location != null)
+                            _detailRow('Location', item.location!),
+                        ],
+                      ),
                       if (item.notes != null && item.notes!.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          'Notes',
-                          style: Theme.of(context).textTheme.labelLarge,
+                        const SizedBox(height: AppSpacing.lg),
+                        SectionCard(
+                          title: 'Notes',
+                          icon: Icons.sticky_note_2_outlined,
+                          children: [Text(item.notes!)],
                         ),
-                        const SizedBox(height: 4),
-                        Text(item.notes!),
+                      ],
+                      if (item.translations.isNotEmpty) ...[
+                        const SizedBox(height: AppSpacing.lg),
+                        SectionCard(
+                          title: 'Translations',
+                          icon: Icons.translate,
+                          children: item.translations
+                              .map((t) => _translationTile(t))
+                              .toList(),
+                        ),
                       ],
                     ],
                   ),
                 ),
-              ),
-              if (item.translations.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Translations',
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 12),
-                        ...item.translations.map((t) => _translationTile(t)),
-                      ],
-                    ),
-                  ),
-                ),
               ],
-            ],
+            ),
           );
         },
       ),
     );
   }
 
-  Widget _translationTile(BoqItemTranslation t) {
+  Widget _buildHeader(BoqItemDetail item) {
+    final theme = Theme.of(context);
     return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: Colors.blue[50],
-          child: Text(
-            t.locale.toUpperCase(),
-            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+      child: Padding(
+        padding: AppSpacing.card,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const IconTile(icon: Icons.format_list_numbered, size: 48),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(item.description, style: theme.textTheme.titleLarge),
+                  if (item.code.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.xxs),
+                    Text(
+                      'Code: ${item.code}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                  if (item.status != null) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    StatusBadge(
+                      label: item.status!.capitalize(),
+                      tone: StatusTone.forStatus(item.status),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _translationTile(BoqItemTranslation t) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadii.sm),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: StatusTone.info.background(theme.colorScheme),
+              borderRadius: BorderRadius.circular(AppRadii.sm),
+            ),
+            child: Text(
+              t.locale.toUpperCase(),
+              style: theme.textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: AppColors.info,
+              ),
+            ),
           ),
-        ),
-        title: Text(t.translatedDescription),
-        subtitle: Text(
-          'Provider: ${t.provider ?? 'unknown'}  |  Confidence: ${t.confidence?.toStringAsFixed(0) ?? 'N/A'}%',
-        ),
-        trailing: Text(
-          t.status!.capitalize(),
-          style: TextStyle(
-            color: t.status == 'accepted' ? Colors.green : Colors.orange,
-            fontWeight: FontWeight.w600,
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  t.translatedDescription,
+                  style: theme.textTheme.bodyMedium,
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'Provider: ${t.provider ?? 'unknown'}  |  Confidence: ${t.confidence?.toStringAsFixed(0) ?? 'N/A'}%',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ),
           ),
-        ),
+          const SizedBox(width: AppSpacing.sm),
+          StatusBadge(
+            label: t.status!.capitalize(),
+            tone: t.status == 'accepted'
+                ? StatusTone.success
+                : StatusTone.warning,
+          ),
+        ],
       ),
     );
   }
@@ -743,5 +848,4 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
   Widget _detailRow(String label, String value) {
     return KeyValueRow(label: label, value: value);
   }
-
 }
