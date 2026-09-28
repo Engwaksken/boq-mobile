@@ -19,6 +19,7 @@ import 'app_errors.dart';
 import 'company_profile_page.dart';
 import 'connectivity_gate.dart';
 import 'boq_share_actions.dart';
+import 'upload_compression.dart';
 import 'theme/app_theme.dart';
 import 'widgets/widgets.dart';
 import 'package:local_auth/local_auth.dart';

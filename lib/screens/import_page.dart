@@ -47,9 +47,9 @@ class _ImportPageState extends State<ImportPage> {
     try {
       picked = await ImagePicker().pickImage(
         source: source,
-        maxWidth: 2400,
-        maxHeight: 2400,
-        imageQuality: 85,
+        maxWidth: scanMaxSide.toDouble(),
+        maxHeight: scanMaxSide.toDouble(),
+        imageQuality: 80,
         requestFullMetadata: false,
       );
     } on Object {
@@ -118,20 +118,31 @@ class _ImportPageState extends State<ImportPage> {
       _showMessage('The file could not be read. Choose it again.');
       return;
     }
-    await _runUpload(
-      file.name,
-      () => path != null
+    await _runUpload(file.name, () async {
+      // Photos are resized to JPEG and text files gzipped before upload.
+      final prepared = await prepareUpload(
+        name: file.name,
+        path: path,
+        bytes: path == null ? bytes : null,
+      );
+      if (prepared.compressed) {
+        _showMessage(
+          'Compressed ${describeCompression(prepared)}, uploading...',
+        );
+      }
+      final preparedPath = prepared.path;
+      return preparedPath != null
           ? widget.api.uploadBoq(
               projectId: _projectId!,
-              filePath: path,
-              name: file.name,
+              filePath: preparedPath,
+              name: prepared.name,
             )
           : widget.api.uploadBoqFromBytes(
               projectId: _projectId!,
-              fileName: file.name,
-              bytes: bytes!,
-            ),
-    );
+              fileName: prepared.name,
+              bytes: prepared.bytes!,
+            );
+    });
   }
 
   Future<void> _runUpload(

@@ -1905,9 +1905,10 @@ Future<UserProfile?> changeProfilePicture(
       picked = await ImagePicker().pickImage(
         source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
         preferredCameraDevice: CameraDevice.front,
-        maxWidth: 800,
-        maxHeight: 800,
-        imageQuality: 85,
+        // Matches the server's profile picture size.
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 80,
         requestFullMetadata: false,
       );
     } on Object {

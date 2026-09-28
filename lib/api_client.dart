@@ -786,7 +786,11 @@ class ApiClient {
   }
 
   static String _boqNameFrom(String fileName) {
-    final name = fileName.trim();
+    var name = fileName.trim();
+    // "boq.csv.gz" (compressed by the app) is still named "boq".
+    if (name.toLowerCase().endsWith('.gz')) {
+      name = name.substring(0, name.length - 3);
+    }
     final dot = name.lastIndexOf('.');
     return dot > 0 ? name.substring(0, dot) : name;
   }

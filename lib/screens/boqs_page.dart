@@ -668,11 +668,16 @@ Future<bool> uploadBoqEstimates(
 
   show('Uploading estimated prices...');
   try {
+    final prepared = await prepareUpload(
+      name: file.name,
+      path: path,
+      bytes: path == null ? file.bytes : null,
+    );
     final result = await api.uploadBoqEstimates(
       boqId,
-      fileName: file.name,
-      filePath: path,
-      bytes: file.bytes,
+      fileName: prepared.name,
+      filePath: prepared.path,
+      bytes: prepared.bytes,
     );
     show(result.message);
     return true;
