@@ -22,11 +22,23 @@ class AccountPage extends StatefulWidget {
 
 class _AccountPageState extends State<AccountPage> {
   late Future<Map<String, dynamic>> _subscription;
+  UserProfile? _user;
 
   @override
   void initState() {
     super.initState();
     _subscription = widget.api.currentSubscription();
+    _loadUser();
+  }
+
+  Future<void> _loadUser() async {
+    final user = await _loadOrNull(widget.api.profile);
+    if (mounted && user != null) setState(() => _user = user);
+  }
+
+  Future<void> _changeAvatar() async {
+    final updated = await changeProfilePicture(context, widget.api, _user);
+    if (mounted && updated != null) setState(() => _user = updated);
   }
 
   void _reloadSubscription() {
@@ -70,8 +82,8 @@ class _AccountPageState extends State<AccountPage> {
     );
   }
 
-  void _openProfile() {
-    Navigator.of(context).push(
+  Future<void> _openProfile() async {
+    await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => ProfilePage(
           api: widget.api,
@@ -80,6 +92,7 @@ class _AccountPageState extends State<AccountPage> {
         ),
       ),
     );
+    _loadUser();
   }
 
   Widget _profileHeader(BuildContext context) {
@@ -93,28 +106,29 @@ class _AccountPageState extends State<AccountPage> {
           padding: AppSpacing.card,
           child: Row(
             children: [
-              Container(
-                width: 56,
-                height: 56,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [AppColors.primary, AppColors.primaryDark],
-                  ),
-                ),
-                child: const Icon(Icons.person, color: Colors.white, size: 30),
-              ),
+              ProfileAvatar(user: _user, size: 56, onEdit: _changeAvatar),
               const SizedBox(width: AppSpacing.lg),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      widget.l10n.profile,
+                      (_user?.name.isNotEmpty ?? false)
+                          ? _user!.name
+                          : widget.l10n.profile,
                       style: theme.textTheme.titleMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
+                    if (_user?.email.isNotEmpty ?? false) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        _user!.email,
+                        style: theme.textTheme.bodySmall,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                     const SizedBox(height: 2),
                     Text(
                       widget.l10n.editProfile,
@@ -218,11 +232,6 @@ class _AccountPageState extends State<AccountPage> {
                 ),
               ],
               const SizedBox(height: AppSpacing.md),
-              KeyValueRow(
-                icon: Icons.auto_awesome_outlined,
-                label: widget.l10n.aiCredits,
-                value: '${sub['plan']?['max_ai_credits'] ?? 'N/A'}',
-              ),
               KeyValueRow(
                 icon: Icons.document_scanner_outlined,
                 label: widget.l10n.ocrPages,
@@ -488,7 +497,10 @@ class _PlansPageState extends State<PlansPage> {
     final busy = id != null && _submittingPlanId == id;
     final features = (plan['included_features'] as List<dynamic>? ?? const [])
         .map((item) => '$item')
-        .where((item) => item.trim().isNotEmpty)
+        .where(
+          (item) =>
+              item.trim().isNotEmpty && !item.toLowerCase().contains('credit'),
+        )
         .take(4)
         .toList();
     final limits = <(IconData, String)>[
@@ -496,8 +508,6 @@ class _PlansPageState extends State<PlansPage> {
         (Icons.folder_outlined, '${plan['max_projects']} projects'),
       if (plan['max_boqs'] != null)
         (Icons.receipt_long_outlined, '${plan['max_boqs']} BOQs'),
-      if (plan['max_ai_credits'] != null)
-        (Icons.auto_awesome_outlined, '${plan['max_ai_credits']} AI credits'),
     ];
 
     return Padding(
@@ -1418,6 +1428,7 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _loaded = false;
   bool _saving = false;
   String? _error;
+  UserProfile? _current;
 
   late final BiometricService _biometricService;
   bool _biometricAvailable = false;
@@ -1535,6 +1546,7 @@ class _ProfilePageState extends State<ProfilePage> {
           final profile = snapshot.data!;
           if (!_loaded) {
             _loaded = true;
+            _current = profile;
             _name.text = profile.name;
             _email.text = profile.email;
             _phone.text = profile.phone ?? '';
@@ -1551,6 +1563,44 @@ class _ProfilePageState extends State<ProfilePage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      Center(
+                        child: ProfileAvatar(
+                          user: _current,
+                          size: 96,
+                          onEdit: () async {
+                            final updated = await changeProfilePicture(
+                              context,
+                              widget.api,
+                              _current,
+                            );
+                            if (mounted && updated != null) {
+                              setState(() => _current = updated);
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Center(
+                        child: TextButton.icon(
+                          onPressed: () async {
+                            final updated = await changeProfilePicture(
+                              context,
+                              widget.api,
+                              _current,
+                            );
+                            if (mounted && updated != null) {
+                              setState(() => _current = updated);
+                            }
+                          },
+                          icon: const Icon(Icons.photo_camera_outlined),
+                          label: Text(
+                            _current?.avatarUrl == null
+                                ? 'Add profile photo'
+                                : 'Change profile photo',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
                       SectionCard(
                         title: 'Personal details',
                         icon: Icons.person_outline,
@@ -1707,5 +1757,178 @@ class _ProfilePageState extends State<ProfilePage> {
         },
       ),
     );
+  }
+}
+
+/// Round profile picture with an initials fallback and an edit badge.
+class ProfileAvatar extends StatelessWidget {
+  const ProfileAvatar({
+    super.key,
+    required this.user,
+    this.size = 56,
+    this.onEdit,
+  });
+
+  final UserProfile? user;
+  final double size;
+  final VoidCallback? onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final url = user?.avatarUrl;
+    final placeholder = Container(
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.primary, AppColors.primaryDark],
+        ),
+      ),
+      alignment: Alignment.center,
+      child: user == null
+          ? Icon(Icons.person, color: Colors.white, size: size * 0.54)
+          : Text(
+              user!.initials,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: size * 0.36,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+    );
+
+    final avatar = SizedBox.square(
+      dimension: size,
+      child: ClipOval(
+        child: url == null
+            ? placeholder
+            : Image.network(
+                url,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => placeholder,
+                loadingBuilder: (context, child, progress) =>
+                    progress == null ? child : placeholder,
+              ),
+      ),
+    );
+
+    if (onEdit == null) return avatar;
+    return Semantics(
+      button: true,
+      label: 'Change profile photo',
+      child: GestureDetector(
+        onTap: onEdit,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            avatar,
+            Positioned(
+              right: -2,
+              bottom: -2,
+              child: Container(
+                padding: EdgeInsets.all(size > 70 ? 7 : 4),
+                decoration: BoxDecoration(
+                  color: scheme.primary,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: scheme.surface, width: 2),
+                ),
+                child: Icon(
+                  Icons.photo_camera,
+                  size: size > 70 ? 18 : 12,
+                  color: scheme.onPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Lets the user take, choose or remove a profile photo. Returns the updated
+/// profile, or null when nothing changed.
+Future<UserProfile?> changeProfilePicture(
+  BuildContext context,
+  ApiClient api,
+  UserProfile? current,
+) async {
+  final choice = await showModalBottomSheet<String>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.photo_camera_outlined),
+            title: const Text('Take photo'),
+            onTap: () => Navigator.pop(sheetContext, 'camera'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.photo_library_outlined),
+            title: const Text('Choose from gallery'),
+            onTap: () => Navigator.pop(sheetContext, 'gallery'),
+          ),
+          if (current?.avatarUrl != null)
+            ListTile(
+              leading: const Icon(
+                Icons.delete_outline,
+                color: AppColors.danger,
+              ),
+              title: const Text('Remove photo'),
+              onTap: () => Navigator.pop(sheetContext, 'remove'),
+            ),
+          const SizedBox(height: AppSpacing.sm),
+        ],
+      ),
+    ),
+  );
+  if (choice == null || !context.mounted) return null;
+
+  final messenger = ScaffoldMessenger.of(context);
+  void show(String message) => messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(message)));
+
+  try {
+    if (choice == 'remove') {
+      final updated = await api.deleteAvatar();
+      show('Profile photo removed');
+      return updated;
+    }
+
+    final XFile? picked;
+    try {
+      picked = await ImagePicker().pickImage(
+        source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
+        preferredCameraDevice: CameraDevice.front,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+        requestFullMetadata: false,
+      );
+    } on Object {
+      show(
+        choice == 'camera'
+            ? 'The camera could not be opened. Allow camera access in Settings.'
+            : 'Your photos could not be opened. Allow photo access in Settings.',
+      );
+      return null;
+    }
+    if (picked == null) return null;
+
+    show('Uploading profile photo...');
+    final updated = await api.uploadAvatar(
+      bytes: await picked.readAsBytes(),
+      fileName: 'avatar.jpg',
+    );
+    show('Profile photo updated');
+    return updated;
+  } on Object catch (error) {
+    show(friendlyError(error));
+    return null;
   }
 }

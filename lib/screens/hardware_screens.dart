@@ -56,14 +56,31 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
         await _loadOrNull(widget.api.hardwareCategoriesAdmin) ??
         const <HardwareCategory>[];
     names.addAll(hardwareCats.map((c) => c.name).where((n) => n.isNotEmpty));
+    final filters = await _loadOrNull(widget.api.hardwarePriceFilters);
     if (mounted) {
       setState(() {
         _categories = names.toList()..sort();
+        if (filters != null) {
+          _replaceOptions(_suppliers, filters.suppliers);
+          _replaceOptions(_locations, filters.locations);
+        }
         if (stats.isNotEmpty) {
           _categoryStats = stats..sort((a, b) => a.name.compareTo(b.name));
         }
       });
     }
+  }
+
+  /// Keeps a filter's option list sorted and unique (case-insensitive).
+  void _replaceOptions(List<String> target, Iterable<String> values) {
+    final seen = <String>{};
+    final merged = [
+      for (final v in [...target, ...values].map((e) => e.trim()))
+        if (v.isNotEmpty && seen.add(v.toLowerCase())) v,
+    ]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    target
+      ..clear()
+      ..addAll(merged);
   }
 
   Future<void> _fetch({bool loadMore = false, int? page}) async {
@@ -102,6 +119,8 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
             _result = result;
             _page = target;
           }
+          _replaceOptions(_suppliers, result.data.map((p) => p.supplier));
+          _replaceOptions(_locations, result.data.map((p) => p.location));
           _loading = false;
           _loadingMore = false;
         });
@@ -197,9 +216,62 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
       if (_loading && _result != null)
         const LinearProgressIndicator(minHeight: 2),
       Expanded(child: _buildList()),
+      if (_compareItems.isNotEmpty) _buildCompareBar(),
       if (_result != null && _result!.data.isNotEmpty) _buildPaginationFooter(),
     ],
   );
+
+  Widget _buildCompareBar() {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final count = _compareItems.length;
+    return Material(
+      color: scheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.xs,
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.compare_arrows, color: scheme.onPrimaryContainer),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(
+                count < 2
+                    ? '$count selected · add one more to compare'
+                    : '$count items selected',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: scheme.onPrimaryContainer,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => setState(_compareItems.clear),
+              child: const Text('Clear'),
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            FilledButton(
+              onPressed: count < 2 ? null : _openComparison,
+              child: const Text('Compare'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openComparison() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PriceComparisonPage(
+          api: widget.api,
+          l10n: widget.l10n,
+          items: List.of(_compareItems),
+        ),
+      ),
+    );
+  }
 
   Widget _buildPaginationFooter() {
     final theme = Theme.of(context);
@@ -515,13 +587,23 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
       );
       return;
     }
-    if (_compareItems.any((i) => i.id == item.id)) return;
+    if (_compareItems.any((i) => i.id == item.id)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Already in the comparison')),
+      );
+      return;
+    }
     setState(() => _compareItems.add(item));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Added to comparison (${_compareItems.length}/5)'),
-      ),
-    );
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('Added to comparison (${_compareItems.length}/5)'),
+          action: _compareItems.length >= 2
+              ? SnackBarAction(label: 'Compare', onPressed: _openComparison)
+              : null,
+        ),
+      );
   }
 
   void _fetchNow() async {
@@ -543,7 +625,7 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ).showSnackBar(SnackBar(content: Text(friendlyError(e))));
       }
     }
   }

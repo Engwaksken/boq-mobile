@@ -291,8 +291,6 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: AppSpacing.lg),
-                      _AuthLegalLinks(l10n: l10n),
                     ],
                   ),
                 ),
@@ -340,38 +338,6 @@ class _AuthHeader extends StatelessWidget {
             ),
           ),
         ],
-      ],
-    );
-  }
-}
-
-class _AuthLegalLinks extends StatelessWidget {
-  const _AuthLegalLinks({required this.l10n});
-
-  final AppLocalizations l10n;
-
-  @override
-  Widget build(BuildContext context) {
-    final style = TextButton.styleFrom(
-      foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
-      textStyle: Theme.of(context).textTheme.bodySmall,
-    );
-    return Wrap(
-      alignment: WrapAlignment.center,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: AppSpacing.xs,
-      children: [
-        TextButton(
-          style: style,
-          onPressed: () {},
-          child: Text(l10n.privacyPolicy),
-        ),
-        Text('·', style: Theme.of(context).textTheme.bodySmall),
-        TextButton(
-          style: style,
-          onPressed: () {},
-          child: Text(l10n.termsOfUse),
-        ),
       ],
     );
   }

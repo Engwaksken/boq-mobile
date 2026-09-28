@@ -11,105 +11,140 @@ class ImportPage extends StatefulWidget {
 }
 
 class _ImportPageState extends State<ImportPage> {
-  late final Future<List<ProjectSummary>> _projects = widget.api.projects();
+  late Future<List<ProjectSummary>> _projects = widget.api.projects(
+    perPage: 100,
+  );
   int? _projectId;
   bool _uploading = false;
-  XFile? _pickedImage;
 
-  Future<void> _pickImage() async {
-    final picked = await ImagePicker().pickImage(
-      source: ImageSource.camera,
-      maxWidth: 2048,
-      maxHeight: 2048,
-      imageQuality: 85,
-    );
-    if (picked != null) {
-      setState(() => _pickedImage = picked);
-      _uploadPickedImage();
-    }
+  /// Formats the server accepts; it converts them to a standard format.
+  static const _extensions = [
+    'xlsx',
+    'xlsm',
+    'ods',
+    'xls',
+    'csv',
+    'tsv',
+    'txt',
+    'pdf',
+    'jpg',
+    'jpeg',
+    'png',
+    'webp',
+  ];
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<void> _uploadPickedImage() async {
-    if (_projectId == null) return;
-    final bytes = await _pickedImage!.readAsBytes();
-    setState(() => _uploading = true);
+  /// Photos are re-encoded as JPEG by the picker (also converts HEIC on iOS).
+  Future<void> _pickImage(ImageSource source) async {
+    if (_projectId == null || _uploading) return;
+    final XFile? picked;
     try {
-      final boq = await widget.api.uploadBoqFromBytes(
+      picked = await ImagePicker().pickImage(
+        source: source,
+        maxWidth: 2400,
+        maxHeight: 2400,
+        imageQuality: 85,
+        requestFullMetadata: false,
+      );
+    } on Object {
+      _showMessage(
+        source == ImageSource.camera
+            ? 'The camera could not be opened. Allow camera access in Settings and try again.'
+            : 'Your photos could not be opened. Allow photo access in Settings and try again.',
+      );
+      return;
+    }
+    if (picked == null) return;
+    final photo = picked;
+    await _runUpload(photo.name, () async {
+      final bytes = await photo.readAsBytes();
+      return widget.api.uploadBoqFromBytes(
         projectId: _projectId!,
-        fileName: _pickedImage!.name,
+        fileName: _photoName(photo.name),
         bytes: bytes,
       );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${widget.l10n.imported}: ${_pickedImage!.name}'),
-        ),
-      );
-      await _reviewUploadedBoq(boq);
-    } on ApiException catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.message)));
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Upload failed: check the file and try again'),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _uploading = false);
-      if (mounted) setState(() => _pickedImage = null);
-    }
+    });
+  }
+
+  /// Picker output is JPEG; keep a readable name with a `.jpg` extension.
+  String _photoName(String original) {
+    final base = original.contains('.')
+        ? original.substring(0, original.lastIndexOf('.'))
+        : original;
+    return '${base.isEmpty ? 'scan' : base}.jpg';
   }
 
   Future<void> _upload() async {
-    if (_projectId == null) return;
-    final selected = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['xlsx', 'xls', 'csv', 'pdf', 'jpg', 'jpeg', 'png'],
-      withData: true,
-    );
+    if (_projectId == null || _uploading) return;
+    FilePickerResult? selected;
+    try {
+      selected = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: _extensions,
+        // Phones upload from the file path so large files are not held in memory.
+        withData: kIsWeb,
+      );
+    } on Object {
+      // Some devices reject custom extension filters: fall back to any file.
+      try {
+        selected = await FilePicker.platform.pickFiles(withData: kIsWeb);
+      } on Object {
+        _showMessage('Files could not be opened on this device. Try again.');
+        return;
+      }
+    }
     if (selected == null || selected.files.isEmpty) return;
     final file = selected.files.single;
+    final extension = (file.extension ?? '').toLowerCase();
+    if (extension.isNotEmpty && !_extensions.contains(extension)) {
+      _showMessage(
+        'This file type is not supported. Upload Excel, CSV, PDF or a photo.',
+      );
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      _showMessage('The file is larger than 20 MB. Choose a smaller file.');
+      return;
+    }
     final bytes = file.bytes;
-    final path = file.path;
-    if (bytes == null && path == null) return;
-    setState(() => _uploading = true);
-    try {
-      final boq = bytes != null
-          ? await widget.api.uploadBoqFromBytes(
+    final path = kIsWeb ? null : file.path;
+    if (bytes == null && path == null) {
+      _showMessage('The file could not be read. Choose it again.');
+      return;
+    }
+    await _runUpload(
+      file.name,
+      () => path != null
+          ? widget.api.uploadBoq(
+              projectId: _projectId!,
+              filePath: path,
+              name: file.name,
+            )
+          : widget.api.uploadBoqFromBytes(
               projectId: _projectId!,
               fileName: file.name,
-              bytes: bytes,
-            )
-          : await widget.api.uploadBoq(
-              projectId: _projectId!,
-              filePath: path!,
-              name: file.name,
-            );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${widget.l10n.imported}: ${file.name}')),
-      );
+              bytes: bytes!,
+            ),
+    );
+  }
+
+  Future<void> _runUpload(
+    String displayName,
+    Future<BoqSummary> Function() upload,
+  ) async {
+    setState(() => _uploading = true);
+    try {
+      final boq = await upload();
+      _showMessage('${widget.l10n.imported}: $displayName');
       await _reviewUploadedBoq(boq);
-    } on ApiException catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.message)));
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Upload failed: check the file and try again'),
-          ),
-        );
-      }
+    } on Object catch (error) {
+      _showMessage(friendlyError(error));
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -120,29 +155,25 @@ class _ImportPageState extends State<ImportPage> {
   /// to the project page when processing fails so nothing is lost.
   Future<void> _reviewUploadedBoq(BoqSummary boq) async {
     if (!mounted) return;
+    final projectId = _projectId;
     try {
       final imported = await widget.api.processBoq(boq.id);
       if (!mounted) return;
-      if (imported > 0) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Imported $imported BOQ items')));
-      }
+      if (imported > 0) _showMessage('Imported $imported BOQ items');
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) =>
               BoqItemsPage(api: widget.api, boqId: boq.id, title: boq.name),
         ),
       );
-    } on ApiException catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${error.message} (open the project to retry)')),
-      );
+      _showMessage('${friendlyError(error)} (open the project to retry)');
+      if (projectId == null) return;
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) =>
-              ProjectDetailPage(api: widget.api, projectId: _projectId!),
+              ProjectDetailPage(api: widget.api, projectId: projectId),
         ),
       );
     }
@@ -194,7 +225,13 @@ class _ImportPageState extends State<ImportPage> {
                     future: _projects,
                     builder: (context, snapshot) {
                       if (snapshot.hasError) {
-                        return ErrorState(error: snapshot.error, compact: true);
+                        return ErrorState(
+                          error: snapshot.error,
+                          compact: true,
+                          onRetry: () => setState(
+                            () => _projects = widget.api.projects(perPage: 100),
+                          ),
+                        );
                       }
                       if (!snapshot.hasData) {
                         return const Padding(
@@ -204,20 +241,33 @@ class _ImportPageState extends State<ImportPage> {
                           child: LinearProgressIndicator(),
                         );
                       }
+                      final projects = snapshot.data!;
+                      if (projects.isEmpty) {
+                        return EmptyState(
+                          compact: true,
+                          icon: Icons.folder_open_outlined,
+                          title: l10n.noProjects,
+                          message:
+                              'Create a project first, then import its BOQ.',
+                        );
+                      }
+                      final selected = projects.any((p) => p.id == _projectId)
+                          ? _projectId
+                          : null;
                       return InputDecorator(
                         decoration: InputDecoration(
                           labelText: l10n.projects,
                           prefixIcon: const Icon(Icons.folder_outlined),
                         ),
-                        isEmpty: _projectId == null,
+                        isEmpty: selected == null,
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<int>(
-                            value: _projectId,
+                            value: selected,
                             isExpanded: true,
                             isDense: true,
                             borderRadius: BorderRadius.circular(AppRadii.sm),
                             items: [
-                              for (final project in snapshot.data!)
+                              for (final project in projects)
                                 DropdownMenuItem(
                                   value: project.id,
                                   child: Text(
@@ -251,7 +301,18 @@ class _ImportPageState extends State<ImportPage> {
                     icon: Icons.document_scanner_outlined,
                     title: l10n.scanPages,
                     tone: StatusTone.info,
-                    onTap: canUpload ? _pickImage : null,
+                    onTap: canUpload
+                        ? () => _pickImage(ImageSource.camera)
+                        : null,
+                  ),
+                  _ImportOptionCard(
+                    icon: Icons.photo_library_outlined,
+                    title: 'Choose photo',
+                    subtitle: 'Pick a BOQ photo from your gallery',
+                    tone: StatusTone.info,
+                    onTap: canUpload
+                        ? () => _pickImage(ImageSource.gallery)
+                        : null,
                   ),
                 ],
               ),

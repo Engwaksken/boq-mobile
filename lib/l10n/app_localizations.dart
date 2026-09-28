@@ -128,6 +128,12 @@ abstract class AppLocalizations {
   /// **'Hardware Prices'**
   String get hardwarePrices;
 
+  /// No description provided for @getPrices.
+  ///
+  /// In en, this message translates to:
+  /// **'Get Prices'**
+  String get getPrices;
+
   /// No description provided for @importBoq.
   ///
   /// In en, this message translates to:
@@ -227,7 +233,7 @@ abstract class AppLocalizations {
   /// No description provided for @supportedFiles.
   ///
   /// In en, this message translates to:
-  /// **'XLSX, XLS, CSV, PDF, and images'**
+  /// **'Excel, CSV, PDF and photos, converted automatically'**
   String get supportedFiles;
 
   /// No description provided for @subscription.

@@ -24,6 +24,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get hardwarePrices => 'Hardware Prices';
 
   @override
+  String get getPrices => 'Get Prices';
+
+  @override
   String get importBoq => 'Import BOQ';
 
   @override
@@ -73,7 +76,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get scanPages => 'Scan pages';
 
   @override
-  String get supportedFiles => 'XLSX, XLS, CSV, PDF, and images';
+  String get supportedFiles =>
+      'Excel, CSV, PDF and photos, converted automatically';
 
   @override
   String get subscription => 'Subscription';

@@ -1,20 +1,40 @@
 part of '../main.dart';
 
 class ProjectsPage extends StatefulWidget {
-  const ProjectsPage({super.key, required this.l10n, required this.api});
+  const ProjectsPage({
+    super.key,
+    required this.l10n,
+    required this.api,
+    this.status,
+    this.boqStatus,
+  });
 
   final AppLocalizations l10n;
   final ApiClient api;
+
+  /// Only list projects with this status (e.g. `active`).
+  final String? status;
+
+  /// Only list projects that have a BOQ with this status (e.g. `under_review`).
+  final String? boqStatus;
+
+  bool get _filtered => status != null || boqStatus != null;
 
   @override
   State<ProjectsPage> createState() => _ProjectsPageState();
 }
 
 class _ProjectsPageState extends State<ProjectsPage> {
-  late Future<List<ProjectSummary>> _projects = widget.api.projects();
+  late Future<List<ProjectSummary>> _projects = _fetch();
+
+  Future<List<ProjectSummary>> _fetch() => widget.api.projects(
+    perPage: 50,
+    status: widget.status,
+    boqStatus: widget.boqStatus,
+  );
 
   Future<void> _reload() async {
-    setState(() => _projects = widget.api.projects());
+    setState(() => _projects = _fetch());
     await _projects;
   }
 
@@ -67,9 +87,11 @@ class _ProjectsPageState extends State<ProjectsPage> {
           body = _scrollableFill(
             EmptyState(
               icon: Icons.folder_open_outlined,
-              title: l10n.noProjects,
-              actionLabel: l10n.createProject,
-              onAction: _createProject,
+              title: widget._filtered
+                  ? 'No matching projects'
+                  : l10n.noProjects,
+              actionLabel: widget._filtered ? null : l10n.createProject,
+              onAction: widget._filtered ? null : _createProject,
             ),
           );
         } else {
@@ -103,7 +125,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
             Expanded(
               child: RefreshIndicator(onRefresh: _reload, child: body),
             ),
-            if (!isEmpty)
+            if (!isEmpty && !widget._filtered)
               SafeArea(
                 top: false,
                 child: Padding(
@@ -140,11 +162,13 @@ Widget _projectTextField({
   required String label,
   IconData? icon,
   TextInputType? keyboardType,
+  List<TextInputFormatter>? inputFormatters,
   int maxLines = 1,
   String? Function(String?)? validator,
 }) {
   return TextFormField(
     controller: controller,
+    inputFormatters: inputFormatters,
     decoration: InputDecoration(
       labelText: label,
       prefixIcon: icon == null ? null : Icon(icon),
@@ -283,7 +307,7 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
             : _expectedCompletionDate.text,
         contractValue: _contractValue.text.trim().isEmpty
             ? null
-            : double.tryParse(_contractValue.text.trim()),
+            : parseAmount(_contractValue.text),
         currency: _currency.text.trim(),
         description: _description.text.trim().isEmpty
             ? null
@@ -468,7 +492,12 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
                         controller: _contractValue,
                         label: 'Contract Value',
                         icon: Icons.payments_outlined,
-                        keyboardType: TextInputType.number,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: const [
+                          ThousandsSeparatorInputFormatter(),
+                        ],
                       ),
                       _projectTextField(
                         controller: _currency,

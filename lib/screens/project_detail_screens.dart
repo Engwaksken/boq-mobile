@@ -195,7 +195,6 @@ class ProjectDetailPage extends StatelessWidget {
           return const LoadingState();
         }
         final project = snapshot.data!;
-        final dateFormat = DateFormat('MMM dd, yyyy');
         final theme = Theme.of(context);
         final scheme = theme.colorScheme;
         return ListView(
@@ -361,21 +360,10 @@ class ProjectDetailPage extends StatelessWidget {
                     title: 'Dates',
                     icon: Icons.event_note_outlined,
                     children: [
-                      _detailRow(
-                        'Start Date',
-                        project.startDate.isNotEmpty
-                            ? dateFormat.format(
-                                DateTime.parse(project.startDate),
-                              )
-                            : '—',
-                      ),
+                      _detailRow('Start Date', displayDate(project.startDate)),
                       _detailRow(
                         'Expected Completion',
-                        project.expectedCompletionDate.isNotEmpty
-                            ? dateFormat.format(
-                                DateTime.parse(project.expectedCompletionDate),
-                              )
-                            : '—',
+                        displayDate(project.expectedCompletionDate),
                       ),
                     ],
                   ),
@@ -582,7 +570,7 @@ class _EditProjectPageState extends State<EditProjectPage> {
           _projectType.text = project.projectType;
           _startDate.text = project.startDate;
           _expectedCompletionDate.text = project.expectedCompletionDate;
-          _contractValue.text = project.contractValue.toString();
+          _contractValue.text = amountFieldText(project.contractValue);
           _currency.text = project.currency;
           _description.text = project.description;
           _originalLanguage.text = project.originalLanguage;
@@ -640,7 +628,7 @@ class _EditProjectPageState extends State<EditProjectPage> {
             : _expectedCompletionDate.text,
         contractValue: _contractValue.text.isEmpty
             ? null
-            : double.tryParse(_contractValue.text),
+            : parseAmount(_contractValue.text),
         currency: _currency.text,
         description: _description.text.isEmpty ? null : _description.text,
         status: _status,
@@ -823,7 +811,13 @@ class _EditProjectPageState extends State<EditProjectPage> {
                               controller: _contractValue,
                               label: 'Contract Value',
                               icon: Icons.payments_outlined,
-                              keyboardType: TextInputType.number,
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              inputFormatters: const [
+                                ThousandsSeparatorInputFormatter(),
+                              ],
                             ),
                             _projectTextField(
                               controller: _currency,

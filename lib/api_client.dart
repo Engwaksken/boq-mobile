@@ -7,6 +7,12 @@ import 'package:http/http.dart' as http;
 
 import 'app_errors.dart';
 
+/// `2026-09-01T00:00:00.000000Z` → `2026-09-01` (API date columns).
+String _dateOnly(dynamic value) {
+  final raw = (value as String? ?? '').trim();
+  return RegExp(r'^\d{4}-\d{2}-\d{2}').firstMatch(raw)?.group(0) ?? raw;
+}
+
 int _asInt(dynamic value) =>
     value is num ? value.toInt() : int.tryParse('$value') ?? 0;
 
@@ -163,6 +169,41 @@ class ApiClient {
       throw ApiException(_message(body));
     }
     return DashboardSummary.fromJson(body['data'] as Map<String, dynamic>);
+  }
+
+  /// Uploads a new profile picture (JPEG/PNG/WebP, max 4 MB).
+  Future<UserProfile> uploadAvatar({
+    required Uint8List bytes,
+    required String fileName,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/auth/avatar'),
+    );
+    request.headers.addAll(await _headers());
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'avatar',
+        bytes,
+        filename: standardUploadName(fileName),
+      ),
+    );
+    final response = await http.Response.fromStream(
+      await _httpClient.send(request),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return UserProfile.fromJson(body['data']['user'] as Map<String, dynamic>);
+  }
+
+  Future<UserProfile> deleteAvatar() async {
+    final response = await _httpClient.delete(
+      Uri.parse('$baseUrl/auth/avatar'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return UserProfile.fromJson(body['data']['user'] as Map<String, dynamic>);
   }
 
   Future<UserProfile> profile() async {
@@ -346,12 +387,16 @@ class ApiClient {
   Future<List<ProjectSummary>> projects({
     int page = 1,
     int perPage = 20,
+    String? status,
+    String? boqStatus,
   }) async {
     final response = await _httpClient.get(
       Uri.parse('$baseUrl/projects').replace(
         queryParameters: {
           'page': page.toString(),
           'per_page': perPage.toString(),
+          'status': ?status,
+          'boq_status': ?boqStatus,
         },
       ),
       headers: await _headers(),
@@ -596,6 +641,23 @@ class ApiClient {
         .toList();
   }
 
+  /// Distinct suppliers and locations for the price list filters.
+  Future<({List<String> suppliers, List<String> locations})>
+  hardwarePriceFilters() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/hardware-prices/filters'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    final data = body['data'] as Map<String, dynamic>? ?? const {};
+    List<String> names(String key) => (data[key] as List<dynamic>? ?? const [])
+        .map((e) => '$e'.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    return (suppliers: names('suppliers'), locations: names('locations'));
+  }
+
   Future<List<PriceComparisonItem>> hardwarePriceRecommendations({
     String? category,
     String? location,
@@ -679,36 +741,79 @@ class ApiClient {
     required String filePath,
     String? name,
   }) async {
-    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/boqs'));
-    request.headers.addAll(await _headers());
-    request.fields['project_id'] = '$projectId';
-    if (name != null && name.isNotEmpty) request.fields['name'] = name;
-    request.files.add(await http.MultipartFile.fromPath('file', filePath));
-    final streamed = await request.send().timeout(const Duration(seconds: 120));
-    final response = await http.Response.fromStream(streamed);
-    final body = _decode(response);
-    if (response.statusCode != 201) throw ApiException(_message(body));
-    final data = body['data'];
-    if (data is! Map<String, dynamic>) {
-      throw const ApiException('The server did not return the created BOQ.');
-    }
-    return BoqSummary.fromJson(data);
+    final fileName = name ?? filePath.split(RegExp(r'[\\/]')).last;
+    return _uploadBoqFile(
+      projectId,
+      fileName,
+      await http.MultipartFile.fromPath(
+        'file',
+        filePath,
+        filename: standardUploadName(fileName),
+      ),
+    );
   }
 
   Future<BoqSummary> uploadBoqFromBytes({
     required int projectId,
     required String fileName,
     required Uint8List bytes,
-  }) async {
+  }) {
+    return _uploadBoqFile(
+      projectId,
+      fileName,
+      http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: standardUploadName(fileName),
+      ),
+    );
+  }
+
+  /// `Scan 01.JPEG` → `Scan 01.jpg`; photos without an extension become `.jpg`.
+  /// The server detects the real format and converts it to a standard one.
+  static String standardUploadName(String fileName) {
+    final trimmed = fileName.trim().isEmpty ? 'boq' : fileName.trim();
+    final dot = trimmed.lastIndexOf('.');
+    if (dot <= 0 || dot == trimmed.length - 1) return '$trimmed.jpg';
+    final base = trimmed.substring(0, dot);
+    final extension = switch (trimmed.substring(dot + 1).toLowerCase()) {
+      'jpeg' || 'jpe' || 'jfif' => 'jpg',
+      'text' => 'txt',
+      final other => other,
+    };
+    return '$base.$extension';
+  }
+
+  static String _boqNameFrom(String fileName) {
+    final name = fileName.trim();
+    final dot = name.lastIndexOf('.');
+    return dot > 0 ? name.substring(0, dot) : name;
+  }
+
+  Future<BoqSummary> _uploadBoqFile(
+    int projectId,
+    String fileName,
+    http.MultipartFile file,
+  ) async {
     final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/boqs'));
     request.headers.addAll(await _headers());
     request.fields['project_id'] = '$projectId';
-    request.fields['name'] = fileName;
-    request.files.add(
-      http.MultipartFile.fromBytes('file', bytes, filename: fileName),
-    );
-    final streamed = await request.send().timeout(const Duration(seconds: 120));
-    final response = await http.Response.fromStream(streamed);
+    final name = _boqNameFrom(fileName);
+    if (name.isNotEmpty) request.fields['name'] = name;
+    request.files.add(file);
+
+    final http.Response response;
+    try {
+      // Uploads get longer than the usual request timeout.
+      final streamed = await request.send().timeout(const Duration(minutes: 3));
+      response = await http.Response.fromStream(streamed);
+    } on TimeoutException {
+      throw const ApiException(AppErrorMessages.timeout);
+    } on Object catch (error) {
+      throw ApiException(friendlyError(error));
+    }
+    if (response.statusCode == 401) _expireSession();
+
     final body = _decode(response);
     if (response.statusCode != 201) throw ApiException(_message(body));
     final data = body['data'];
@@ -904,8 +1009,10 @@ class ApiClient {
       headers: await _headers(),
       body: {
         'email': email,
-        if (subject != null && subject.trim().isNotEmpty) 'subject': subject.trim(),
-        if (message != null && message.trim().isNotEmpty) 'message': message.trim(),
+        if (subject != null && subject.trim().isNotEmpty)
+          'subject': subject.trim(),
+        if (message != null && message.trim().isNotEmpty)
+          'message': message.trim(),
       },
     );
     final body = _decode(response);
@@ -966,22 +1073,31 @@ class ApiClient {
     String? logoPath,
     bool removeLogo = false,
   }) async {
-    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/company-profile'))
-      ..headers.addAll(await _headers())
-      ..fields.addAll(fields);
+    final request =
+        http.MultipartRequest('POST', Uri.parse('$baseUrl/company-profile'))
+          ..headers.addAll(await _headers())
+          ..fields.addAll(fields);
     if (removeLogo) request.fields['remove_logo'] = '1';
     if (logoPath != null) {
       request.files.add(await http.MultipartFile.fromPath('logo', logoPath));
     }
 
-    final response = await http.Response.fromStream(await _httpClient.send(request));
+    final response = await http.Response.fromStream(
+      await _httpClient.send(request),
+    );
     final body = _decode(response);
     if (response.statusCode != 200) {
       final errors = body['errors'];
-      final firstError = errors is Map && errors.values.isNotEmpty && errors.values.first is List
-          ? (errors.values.first as List).first?.toString()
+      final firstError =
+          errors is Map &&
+              errors.values.isNotEmpty &&
+              errors.values.first is List
+          ? (errors.values.first as List).firstOrNull?.toString()
           : null;
-      throw ApiException(firstError ?? _message(body), statusCode: response.statusCode);
+      throw ApiException(
+        firstError ?? _message(body),
+        statusCode: response.statusCode,
+      );
     }
     return CompanyProfile.fromJson(body['data'] as Map<String, dynamic>);
   }
@@ -1456,13 +1572,16 @@ class ApiClient {
 
     if (status >= 400) {
       final serverMessage = body['message'];
-      final keepServerMessage = serverMessage is String &&
+      final keepServerMessage =
+          serverMessage is String &&
           serverMessage.trim().isNotEmpty &&
           // Never pass through generic framework/server wording for 5xx.
           (status < 500 || status == 503);
       body = {
         ...body,
-        'message': keepServerMessage ? serverMessage : friendlyStatusMessage(status),
+        'message': keepServerMessage
+            ? serverMessage
+            : friendlyStatusMessage(status),
       };
     }
 
@@ -1515,6 +1634,7 @@ class UserProfile {
     required this.locale,
     this.phone,
     this.location,
+    this.avatarUrl,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
@@ -1523,6 +1643,9 @@ class UserProfile {
     locale: json['locale'] as String? ?? 'en',
     phone: json['phone'] as String?,
     location: json['location'] as String?,
+    avatarUrl: (json['avatar_url'] as String?)?.trim().isEmpty ?? true
+        ? null
+        : json['avatar_url'] as String,
   );
 
   final String name;
@@ -1530,6 +1653,16 @@ class UserProfile {
   final String locale;
   final String? phone;
   final String? location;
+
+  /// Profile picture URL, or null when none was uploaded.
+  final String? avatarUrl;
+
+  /// Up to two initials for the avatar placeholder.
+  String get initials {
+    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
+    final letters = parts.take(2).map((p) => p[0].toUpperCase()).join();
+    return letters.isEmpty ? '?' : letters;
+  }
 }
 
 class NotificationItem {
@@ -1631,8 +1764,8 @@ class ProjectDetail {
     district: json['district'] as String? ?? '',
     location: json['location'] as String? ?? '',
     projectType: json['project_type'] as String? ?? '',
-    startDate: json['start_date'] as String? ?? '',
-    expectedCompletionDate: json['expected_completion_date'] as String? ?? '',
+    startDate: _dateOnly(json['start_date']),
+    expectedCompletionDate: _dateOnly(json['expected_completion_date']),
     contractValue: _asDouble(json['contract_value']),
     currency: json['currency'] as String? ?? 'UGX',
     description: json['description'] as String? ?? '',
@@ -1815,7 +1948,8 @@ class HardwarePrice {
   bool get isFactory => priceType == 'factory';
 
   /// When the price was last confirmed (verification, else fetch).
-  String get updatedAt => lastVerifiedAt.isNotEmpty ? lastVerifiedAt : fetchedAt;
+  String get updatedAt =>
+      lastVerifiedAt.isNotEmpty ? lastVerifiedAt : fetchedAt;
 }
 
 class BoqShareLink {
@@ -1846,9 +1980,7 @@ class CompanyProfile {
   const CompanyProfile({required this.fields, this.logoUrl});
 
   factory CompanyProfile.fromJson(Map<String, dynamic> json) => CompanyProfile(
-    fields: {
-      for (final key in keys) key: json[key]?.toString() ?? '',
-    },
+    fields: {for (final key in keys) key: json[key]?.toString() ?? ''},
     logoUrl: json['logo_url'] as String?,
   );
 

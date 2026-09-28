@@ -83,6 +83,13 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
           const SizedBox(width: AppSpacing.xs),
         ],
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'boq-share-${widget.boqId}',
+        onPressed: () =>
+            showBoqShareSheet(context, widget.api, widget.boqId, widget.title),
+        icon: const Icon(Icons.share_outlined),
+        label: const Text('Share BOQ'),
+      ),
       body: FutureBuilder<BoqDetail>(
         future: _boqDetail,
         builder: (context, snapshot) {
@@ -97,7 +104,7 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
             onRefresh: _reload,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              padding: AppSpacing.page,
+              padding: AppSpacing.page.copyWith(bottom: 96),
               children: [
                 ContentWidth(
                   child: Column(
@@ -190,6 +197,16 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
   }
 
   Widget _buildSummaries(BoqDetail boq) {
+    if (boq.summaries.isEmpty) {
+      return const Card(
+        child: EmptyState(
+          compact: true,
+          icon: Icons.summarize_outlined,
+          title: 'No summaries yet',
+          message: 'Totals appear here once the BOQ items have been priced.',
+        ),
+      );
+    }
     final grandSummary = boq.summaries.firstWhere(
       (s) => s.summaryType == 'grand',
       orElse: () => boq.summaries.first,
@@ -699,7 +716,10 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
                             if (item.pricingSource != null)
                               _detailRow('Pricing Source', item.pricingSource!),
                             if (item.pricingDate != null)
-                              _detailRow('Pricing Date', item.pricingDate!),
+                              _detailRow(
+                                'Pricing Date',
+                                displayDate(item.pricingDate),
+                              ),
                           ],
                         ),
                       ],
@@ -708,7 +728,10 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
                         title: 'Classification',
                         icon: Icons.category_outlined,
                         children: [
-                          _detailRow('Status', item.status!.capitalize()),
+                          _detailRow(
+                            'Status',
+                            (item.status ?? 'pending').capitalize(),
+                          ),
                           if (item.workCategory != null)
                             _detailRow('Work Category', item.workCategory!),
                           if (item.materialCategory != null)
@@ -835,7 +858,7 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
           ),
           const SizedBox(width: AppSpacing.sm),
           StatusBadge(
-            label: t.status!.capitalize(),
+            label: (t.status ?? 'pending').capitalize(),
             tone: t.status == 'accepted'
                 ? StatusTone.success
                 : StatusTone.warning,

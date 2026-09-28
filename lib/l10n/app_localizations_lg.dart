@@ -24,6 +24,9 @@ class AppLocalizationsLg extends AppLocalizations {
   String get hardwarePrices => 'Ebikwano bya Hardware';
 
   @override
+  String get getPrices => 'Funa Ebbeeyi';
+
+  @override
   String get importBoq => 'Yingiza BOQ';
 
   @override
@@ -73,7 +76,7 @@ class AppLocalizationsLg extends AppLocalizations {
   String get scanPages => 'Sika empapula';
 
   @override
-  String get supportedFiles => 'XLSX, XLS, CSV, PDF, n\'ebifaananyi';
+  String get supportedFiles => 'Excel, CSV, PDF n\'ebifaananyi';
 
   @override
   String get subscription => 'Obwammemba';

@@ -35,7 +35,9 @@ String friendlyStatusMessage(int status) {
   if (status == 413) return 'The file is too large to upload.';
   if (status == 419) return AppErrorMessages.sessionExpired;
   if (status == 422) return 'Please check the details you entered.';
-  if (status == 429) return 'Too many requests. Please wait a moment and try again.';
+  if (status == 429) {
+    return 'Too many requests. Please wait a moment and try again.';
+  }
   if (status == 503) return AppErrorMessages.unavailable;
   if (status >= 500) return AppErrorMessages.server;
   return AppErrorMessages.generic;

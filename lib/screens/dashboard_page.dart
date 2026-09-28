@@ -40,6 +40,27 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
+  void _openProjects(
+    BuildContext context,
+    String title, {
+    String? status,
+    String? boqStatus,
+  }) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: Text(title)),
+          body: ProjectsPage(
+            l10n: l10n,
+            api: api,
+            status: status,
+            boqStatus: boqStatus,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildContent(BuildContext context, DashboardSummary summary) {
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -63,10 +84,14 @@ class DashboardPage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: AppSpacing.xl),
-              HighlightCard(
-                label: l10n.estimatedValue,
-                value: formatAmount(summary.totalEstimatedValue),
-                icon: Icons.account_balance_wallet_outlined,
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _openProjects(context, l10n.projects),
+                child: HighlightCard(
+                  label: l10n.estimatedValue,
+                  value: formatAmount(summary.totalEstimatedValue),
+                  icon: Icons.account_balance_wallet_outlined,
+                ),
               ),
               const SizedBox(height: AppSpacing.md),
               IntrinsicHeight(
@@ -79,6 +104,7 @@ class DashboardPage extends StatelessWidget {
                         value: '${summary.totalProjects}',
                         icon: Icons.account_tree_outlined,
                         tone: StatusTone.info,
+                        onTap: () => _openProjects(context, l10n.totalProjects),
                       ),
                     ),
                     const SizedBox(width: AppSpacing.sm + 2),
@@ -88,6 +114,11 @@ class DashboardPage extends StatelessWidget {
                         value: '${summary.activeProjects}',
                         icon: Icons.play_circle_outline,
                         tone: StatusTone.success,
+                        onTap: () => _openProjects(
+                          context,
+                          l10n.activeProjects,
+                          status: 'active',
+                        ),
                       ),
                     ),
                     const SizedBox(width: AppSpacing.sm + 2),
@@ -97,6 +128,11 @@ class DashboardPage extends StatelessWidget {
                         value: '${summary.boqsAwaitingReview}',
                         icon: Icons.fact_check_outlined,
                         tone: StatusTone.warning,
+                        onTap: () => _openProjects(
+                          context,
+                          l10n.boqsInReview,
+                          boqStatus: 'under_review',
+                        ),
                       ),
                     ),
                   ],
@@ -106,14 +142,7 @@ class DashboardPage extends StatelessWidget {
               SectionHeader(
                 title: l10n.recentProjects,
                 actionLabel: l10n.viewAll,
-                onAction: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => Scaffold(
-                      appBar: AppBar(title: Text(l10n.projects)),
-                      body: ProjectsPage(l10n: l10n, api: api),
-                    ),
-                  ),
-                ),
+                onAction: () => _openProjects(context, l10n.projects),
               ),
               if (summary.recentProjects.isEmpty)
                 Card(

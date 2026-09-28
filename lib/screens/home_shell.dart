@@ -44,7 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final destinations = [
       (Icons.space_dashboard_outlined, Icons.space_dashboard, l10n.dashboard),
       (Icons.account_tree_outlined, Icons.account_tree, l10n.projects),
-      (Icons.price_check_outlined, Icons.price_check, l10n.hardwarePrices),
+      (Icons.price_check_outlined, Icons.price_check, l10n.getPrices),
       (Icons.document_scanner_outlined, Icons.document_scanner, l10n.importBoq),
       (Icons.person_outline, Icons.person, l10n.account),
     ];
