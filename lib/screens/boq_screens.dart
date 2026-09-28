@@ -152,6 +152,37 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
                       children: [
                         _buildBoqHeader(boq, l10n),
                         const SizedBox(height: AppSpacing.lg),
+                        BoqTotalsCard(
+                          totals: boq.totals,
+                          currency: boq.currency,
+                          actions: [
+                            FilledButton.tonalIcon(
+                              onPressed: () async {
+                                if (await uploadBoqEstimates(
+                                  context,
+                                  widget.api,
+                                  widget.boqId,
+                                )) {
+                                  _changed = true;
+                                  _reload();
+                                }
+                              },
+                              icon: const Icon(Icons.upload_file_outlined),
+                              label: const Text('Upload estimated prices'),
+                            ),
+                            TextButton.icon(
+                              onPressed: () => shareBoqEstimatesTemplate(
+                                context,
+                                widget.api,
+                                widget.boqId,
+                                _title,
+                              ),
+                              icon: const Icon(Icons.download_outlined),
+                              label: const Text('Template'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
                         _buildSummaries(boq),
                         const SizedBox(height: AppSpacing.lg),
                         if (boq.metadata.isNotEmpty) ...[

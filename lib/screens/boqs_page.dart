@@ -233,10 +233,13 @@ class _BoqListTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final details = [
-      if (boq.projectName.isNotEmpty) boq.projectName,
-      '${boq.itemsCount} items',
-      if (boq.createdAt.isNotEmpty) displayDate(boq.createdAt),
-    ].join(' · ');
+      [
+        if (boq.projectName.isNotEmpty) boq.projectName,
+        '${boq.itemsCount} items',
+        if (boq.createdAt.isNotEmpty) displayDate(boq.createdAt),
+      ].join(' · '),
+      ?boqTotalsLine(boq.totals, boq.currency),
+    ].join('\n');
     return ListItemCard(
       leading: const IconTile(icon: Icons.receipt_long_outlined),
       title: boq.name.isEmpty ? 'Untitled BOQ' : boq.name,
@@ -498,5 +501,208 @@ Future<bool> confirmDeleteBoq(
   } on Object catch (error) {
     messenger.showSnackBar(SnackBar(content: Text(friendlyError(error))));
     return false;
+  }
+}
+
+/// "Estimated UGX 11,000 · Generated UGX 12,900" for list rows.
+String? boqTotalsLine(BoqTotals totals, String currency) {
+  if (totals.items == 0) return null;
+  final estimated = totals.hasEstimate
+      ? formatAmount(totals.estimatedAmount, currency: currency)
+      : '—';
+  final generated = totals.hasGenerated
+      ? formatAmount(totals.generatedTotal, currency: currency)
+      : '—';
+  return 'Estimated $estimated · Generated $generated';
+}
+
+/// Estimated amount (rates from the uploaded file) next to the generated total
+/// (priced rates), with the difference and pricing progress.
+class BoqTotalsCard extends StatelessWidget {
+  const BoqTotalsCard({
+    super.key,
+    required this.totals,
+    required this.currency,
+    this.title = 'Totals',
+    this.actions = const [],
+  });
+
+  final BoqTotals totals;
+  final String currency;
+  final String title;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    String money(double value) => formatAmount(value, currency: currency);
+    final difference = totals.difference;
+    final showDifference = totals.hasEstimate && totals.hasGenerated;
+
+    Widget figure(String label, String value, String note, Color color) =>
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xxs),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  value,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: color,
+                  ),
+                ),
+              ),
+              Text(note, style: theme.textTheme.bodySmall),
+            ],
+          ),
+        );
+
+    return SectionCard(
+      title: title,
+      icon: Icons.account_balance_wallet_outlined,
+      children: [
+        if (totals.items == 0)
+          Text(
+            'Totals appear once BOQ items have been imported.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          )
+        else ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              figure(
+                'Estimated amount',
+                totals.hasEstimate ? money(totals.estimatedAmount) : '—',
+                '${totals.estimatedItems} of ${totals.items} items',
+                scheme.onSurface,
+              ),
+              const SizedBox(width: AppSpacing.md),
+              figure(
+                'Generated total',
+                totals.hasGenerated ? money(totals.generatedTotal) : '—',
+                '${totals.pricedItems} of ${totals.items} priced',
+                scheme.primary,
+              ),
+            ],
+          ),
+          if (showDifference) ...[
+            const SizedBox(height: AppSpacing.md),
+            KeyValueRow(
+              label: difference >= 0 ? 'Above estimate' : 'Below estimate',
+              value: money(difference.abs()),
+              valueStyle: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: difference > 0 ? AppColors.danger : AppColors.success,
+              ),
+            ),
+          ],
+          if (totals.pricedItems < totals.items) ...[
+            const SizedBox(height: AppSpacing.sm),
+            LinearProgressIndicator(
+              value: totals.pricedItems / totals.items,
+              minHeight: 6,
+              borderRadius: BorderRadius.circular(AppRadii.pill),
+            ),
+          ],
+        ],
+        if (actions.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.md),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: actions,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Picks a file of estimated rates and applies it to the BOQ.
+/// Returns true when prices were uploaded.
+Future<bool> uploadBoqEstimates(
+  BuildContext context,
+  ApiClient api,
+  int boqId,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  void show(String message) => messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(message)));
+
+  FilePickerResult? picked;
+  try {
+    picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['xlsx', 'xlsm', 'ods', 'csv', 'tsv', 'txt'],
+      withData: kIsWeb,
+    );
+  } on Object {
+    try {
+      picked = await FilePicker.platform.pickFiles(withData: kIsWeb);
+    } on Object {
+      show('Files could not be opened on this device. Try again.');
+      return false;
+    }
+  }
+  if (picked == null || picked.files.isEmpty) return false;
+  final file = picked.files.single;
+  final path = kIsWeb ? null : file.path;
+  if (path == null && file.bytes == null) {
+    show('The file could not be read. Choose it again.');
+    return false;
+  }
+
+  show('Uploading estimated prices...');
+  try {
+    final result = await api.uploadBoqEstimates(
+      boqId,
+      fileName: file.name,
+      filePath: path,
+      bytes: file.bytes,
+    );
+    show(result.message);
+    return true;
+  } on Object catch (error) {
+    show(friendlyError(error));
+    return false;
+  }
+}
+
+/// Shares the estimated prices template (CSV of the BOQ items) so it can be
+/// filled in with Excel or sent to a quantity surveyor.
+Future<void> shareBoqEstimatesTemplate(
+  BuildContext context,
+  ApiClient api,
+  int boqId,
+  String title,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final bytes = await api.boqEstimatesTemplate(boqId);
+    final slug = title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase();
+    final name = '${slug.isEmpty ? 'boq' : slug}-estimated-prices.csv';
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile.fromData(bytes, mimeType: 'text/csv', name: name)],
+        fileNameOverrides: [name],
+        subject: 'Estimated prices – $title',
+      ),
+    );
+  } on Object catch (error) {
+    messenger.showSnackBar(SnackBar(content: Text(friendlyError(error))));
   }
 }

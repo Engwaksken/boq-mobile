@@ -38,7 +38,10 @@ void main() {
                   'fetched_at': null,
                   'variance_percent': 0,
                   'price_history': {'records': 1, 'lowest': '34000.00'},
-                  'rating': {'overall': 85.0, 'factors': {'a': 1}},
+                  'rating': {
+                    'overall': 85.0,
+                    'factors': {'a': 1},
+                  },
                   'badges': ['Lowest Price'],
                 },
               ],

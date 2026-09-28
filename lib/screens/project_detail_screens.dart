@@ -1,6 +1,6 @@
 part of '../main.dart';
 
-class ProjectDetailPage extends StatelessWidget {
+class ProjectDetailPage extends StatefulWidget {
   const ProjectDetailPage({
     super.key,
     required this.api,
@@ -8,6 +8,17 @@ class ProjectDetailPage extends StatelessWidget {
   });
   final ApiClient api;
   final int projectId;
+
+  @override
+  State<ProjectDetailPage> createState() => _ProjectDetailPageState();
+}
+
+class _ProjectDetailPageState extends State<ProjectDetailPage> {
+  ApiClient get api => widget.api;
+  int get projectId => widget.projectId;
+  late Future<ProjectDetail> _project = api.project(projectId);
+
+  void _reload() => setState(() => _project = api.project(projectId));
 
   Future<void> _generateBoq(
     BuildContext context,
@@ -107,12 +118,13 @@ class ProjectDetailPage extends StatelessWidget {
           tooltip: 'Project actions',
           onSelected: (value) async {
             if (value == 'edit') {
-              await Navigator.of(context).push<bool>(
+              final saved = await Navigator.of(context).push<bool>(
                 MaterialPageRoute(
                   builder: (_) =>
                       EditProjectPage(api: api, projectId: projectId),
                 ),
               );
+              if (saved == true) _reload();
             } else if (value == 'delete') {
               final confirm = await showDialog<bool>(
                 context: context,
@@ -187,11 +199,11 @@ class ProjectDetailPage extends StatelessWidget {
     ),
     body: StatefulBuilder(
       builder: (context, rebuild) => FutureBuilder<ProjectDetail>(
-        future: api.project(projectId),
+        future: _project,
         builder: (context, snapshot) {
-          void reload() => rebuild(() {});
+          void reload() => _reload();
           if (snapshot.hasError) {
-            return ErrorState(error: snapshot.error);
+            return ErrorState(error: snapshot.error, onRetry: _reload);
           }
           if (!snapshot.hasData) {
             return const LoadingState();
@@ -389,6 +401,12 @@ class ProjectDetailPage extends StatelessWidget {
                       ),
                     ],
                     const SizedBox(height: AppSpacing.sectionGap),
+                    BoqTotalsCard(
+                      totals: project.totals,
+                      currency: project.currency,
+                      title: 'Project totals',
+                    ),
+                    const SizedBox(height: AppSpacing.sectionGap),
                     SectionHeader(
                       title: 'BOQs',
                       trailing: project.boqs.isEmpty
@@ -412,6 +430,7 @@ class ProjectDetailPage extends StatelessWidget {
                           icon: Icons.description_outlined,
                         ),
                         title: boq.name,
+                        subtitle: boqTotalsLine(boq.totals, project.currency),
                         showChevron: false,
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -690,16 +709,16 @@ class _EditProjectPageState extends State<EditProjectPage> {
             : _reportLanguage.text,
       );
       if (mounted) {
-        Navigator.pop(context, true);
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Project updated')));
+        Navigator.pop(context, true);
       }
-    } on ApiException catch (e) {
+    } on Object catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(e.message)));
+        ).showSnackBar(SnackBar(content: Text(friendlyError(e))));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -1359,7 +1378,11 @@ class _ProjectTile extends StatelessWidget {
     required this.status,
     required this.color,
     this.onTap,
+    this.totals,
   });
+
+  /// Optional "Estimated … · Generated …" line.
+  final String? totals;
 
   final String name;
   final String code;
@@ -1372,7 +1395,7 @@ class _ProjectTile extends StatelessWidget {
     return ListItemCard(
       leading: IconTile(icon: Icons.foundation_outlined, color: color),
       title: name,
-      subtitle: code,
+      subtitle: [if (code.isNotEmpty) code, ?totals].join('\n'),
       trailing: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 110),
         child: StatusBadge(label: status, color: color),

@@ -106,14 +106,20 @@ class _ProjectsPageState extends State<ProjectsPage> {
                     code: project.code,
                     status: _statusLabel(project.status),
                     color: _statusColor(project.status),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => ProjectDetailPage(
-                          api: widget.api,
-                          projectId: project.id,
+                    totals: project.totals.items > 0
+                        ? boqTotalsLine(project.totals, project.currency)
+                        : null,
+                    onTap: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ProjectDetailPage(
+                            api: widget.api,
+                            projectId: project.id,
+                          ),
                         ),
-                      ),
-                    ),
+                      );
+                      if (mounted) _reload();
+                    },
                   ),
                 ),
             ],

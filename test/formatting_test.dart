@@ -37,4 +37,24 @@ void main() {
     expect(user.initials, 'JA');
     expect(const UserProfile(name: '', email: '', locale: 'en').initials, '?');
   });
+
+  test('BOQ totals parse from the API', () {
+    final totals = BoqTotals.fromJson({
+      'items': 3,
+      'estimated_items': 2,
+      'priced_items': 2,
+      'estimated_amount': '11000.00',
+      'generated_total': 12900,
+    });
+    expect(totals.difference, 1900);
+    expect(totals.hasEstimate, isTrue);
+    expect(BoqTotals.fromJson(null).items, 0);
+    expect(
+      BoqListItem.fromJson({
+        'id': 1,
+        'totals': {'items': 1, 'generated_total': 5},
+      }).totals.generatedTotal,
+      5,
+    );
+  });
 }

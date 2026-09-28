@@ -505,30 +505,31 @@ class ApiClient {
   }) async {
     final response = await _httpClient.put(
       Uri.parse('$baseUrl/projects/$id'),
-      headers: await _headers(),
-      body: {
+      headers: {...await _headers(), 'Content-Type': 'application/json'},
+      // Optional text fields are always sent so a cleared field is saved as empty.
+      body: jsonEncode({
         'name': ?name,
-        'code': ?code,
-        'client': ?client,
-        'contractor': ?contractor,
-        'consultant': ?consultant,
-        'quantity_surveyor': ?quantitySurveyor,
-        'project_manager': ?projectManager,
-        'site_engineer': ?siteEngineer,
-        'funding_organisation': ?fundingOrganisation,
-        'country': ?country,
-        'district': ?district,
-        'location': ?location,
-        'project_type': ?projectType,
-        'start_date': ?startDate,
-        'expected_completion_date': ?expectedCompletionDate,
-        'contract_value': ?contractValue,
+        'code': code,
+        'client': client,
+        'contractor': contractor,
+        'consultant': consultant,
+        'quantity_surveyor': quantitySurveyor,
+        'project_manager': projectManager,
+        'site_engineer': siteEngineer,
+        'funding_organisation': fundingOrganisation,
+        'country': country,
+        'district': district,
+        'location': location,
+        'project_type': projectType,
+        'start_date': startDate,
+        'expected_completion_date': expectedCompletionDate,
+        'contract_value': contractValue,
         'currency': ?currency,
-        'description': ?description,
+        'description': description,
         'status': ?status,
         'original_language': ?originalLanguage,
         'report_language': ?reportLanguage,
-      },
+      }),
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw ApiException(_message(body));
@@ -1197,6 +1198,68 @@ class ApiClient {
     return BoqListItem.fromJson(body['data'] as Map<String, dynamic>);
   }
 
+  /// CSV of the BOQ's items with an "Estimated Rate" column to fill in.
+  Future<Uint8List> boqEstimatesTemplate(int boqId) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/boqs/$boqId/estimates/template'),
+      headers: await _headers(),
+    );
+    if (response.statusCode != 200) {
+      throw ApiException(_message(_decode(response)));
+    }
+    return response.bodyBytes;
+  }
+
+  /// Uploads a file of estimated rates; returns the server's summary message.
+  Future<({String message, BoqTotals totals, List<String> unmatched})>
+  uploadBoqEstimates(
+    int boqId, {
+    required String fileName,
+    String? filePath,
+    Uint8List? bytes,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/boqs/$boqId/estimates'),
+    );
+    request.headers.addAll(await _headers());
+    request.files.add(
+      filePath != null
+          ? await http.MultipartFile.fromPath(
+              'file',
+              filePath,
+              filename: standardUploadName(fileName),
+            )
+          : http.MultipartFile.fromBytes(
+              'file',
+              bytes!,
+              filename: standardUploadName(fileName),
+            ),
+    );
+
+    final http.Response response;
+    try {
+      response = await http.Response.fromStream(
+        await request.send().timeout(const Duration(minutes: 2)),
+      );
+    } on TimeoutException {
+      throw const ApiException(AppErrorMessages.timeout);
+    } on Object catch (error) {
+      throw ApiException(friendlyError(error));
+    }
+    if (response.statusCode == 401) _expireSession();
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    final data = body['data'] as Map<String, dynamic>? ?? const {};
+    return (
+      message: '${body['message'] ?? 'Estimated prices updated.'}',
+      totals: BoqTotals.fromJson(data['totals']),
+      unmatched: (data['unmatched'] as List<dynamic>? ?? const [])
+          .map((e) => '$e')
+          .toList(),
+    );
+  }
+
   Future<void> deleteBoq(int id) async {
     final response = await _httpClient.delete(
       Uri.parse('$baseUrl/boqs/$id'),
@@ -1764,16 +1827,60 @@ class NotificationItem {
   bool get isRead => readAt != null;
 }
 
+/// Estimated vs generated amounts for a BOQ or a whole project.
+class BoqTotals {
+  const BoqTotals({
+    this.items = 0,
+    this.estimatedItems = 0,
+    this.pricedItems = 0,
+    this.estimatedAmount = 0,
+    this.generatedTotal = 0,
+    this.boqs = 0,
+  });
+
+  factory BoqTotals.fromJson(dynamic json) {
+    if (json is! Map) return empty;
+    return BoqTotals(
+      items: _asInt(json['items']),
+      estimatedItems: _asInt(json['estimated_items']),
+      pricedItems: _asInt(json['priced_items']),
+      estimatedAmount: _asDouble(json['estimated_amount']),
+      generatedTotal: _asDouble(json['generated_total']),
+      boqs: _asInt(json['boqs']),
+    );
+  }
+
+  static const empty = BoqTotals();
+
+  final int items;
+  final int estimatedItems;
+  final int pricedItems;
+  final double estimatedAmount;
+  final double generatedTotal;
+  final int boqs;
+
+  double get difference => generatedTotal - estimatedAmount;
+  bool get hasEstimate => estimatedItems > 0;
+  bool get hasGenerated => pricedItems > 0;
+}
+
 class ProjectSummary {
+  /// Estimated amount and generated total from the BOQ items.
+  final BoqTotals totals;
+
   const ProjectSummary({
+    this.totals = BoqTotals.empty,
     required this.id,
     required this.name,
     required this.code,
     required this.status,
     required this.boqCount,
+    this.currency = 'UGX',
   });
 
   factory ProjectSummary.fromJson(Map<String, dynamic> json) => ProjectSummary(
+    currency: json['currency'] as String? ?? 'UGX',
+    totals: BoqTotals.fromJson(json['totals']),
     id: _asInt(json['id']),
     name: json['name'] as String? ?? '',
     code: json['code'] as String? ?? '',
@@ -1786,10 +1893,15 @@ class ProjectSummary {
   final String code;
   final String status;
   final int boqCount;
+  final String currency;
 }
 
 class ProjectDetail {
+  /// Estimated amount and generated total from the BOQ items.
+  final BoqTotals totals;
+
   const ProjectDetail({
+    this.totals = BoqTotals.empty,
     required this.id,
     required this.name,
     required this.code,
@@ -1816,6 +1928,7 @@ class ProjectDetail {
     required this.boqs,
   });
   factory ProjectDetail.fromJson(Map<String, dynamic> json) => ProjectDetail(
+    totals: BoqTotals.fromJson(json['totals']),
     id: _asInt(json['id']),
     name: json['name'] as String? ?? '',
     code: json['code'] as String? ?? '',
@@ -1871,12 +1984,17 @@ class ProjectDetail {
 }
 
 class BoqSummary {
+  /// Estimated amount and generated total from the BOQ items.
+  final BoqTotals totals;
+
   const BoqSummary({
+    this.totals = BoqTotals.empty,
     required this.id,
     required this.name,
     required this.status,
   });
   factory BoqSummary.fromJson(Map<String, dynamic> json) => BoqSummary(
+    totals: BoqTotals.fromJson(json['totals']),
     id: _asInt(json['id']),
     name: json['name'] as String? ?? '',
     status: json['status'] as String? ?? 'draft',
@@ -1888,7 +2006,11 @@ class BoqSummary {
 
 /// A BOQ row in the BOQs list.
 class BoqListItem {
+  /// Estimated amount and generated total from the BOQ items.
+  final BoqTotals totals;
+
   const BoqListItem({
+    this.totals = BoqTotals.empty,
     required this.id,
     required this.name,
     required this.status,
@@ -1897,11 +2019,13 @@ class BoqListItem {
     required this.projectName,
     required this.itemsCount,
     required this.createdAt,
+    this.currency = 'UGX',
   });
 
   factory BoqListItem.fromJson(Map<String, dynamic> json) {
     final project = json['project'];
     return BoqListItem(
+      totals: BoqTotals.fromJson(json['totals']),
       id: _asInt(json['id']),
       name: json['name'] as String? ?? '',
       status: json['status'] as String? ?? 'draft',
@@ -1910,8 +2034,11 @@ class BoqListItem {
       projectName: project is Map ? '${project['name'] ?? ''}' : '',
       itemsCount: _asInt(json['items_count']),
       createdAt: _dateOnly(json['created_at']),
+      currency: json['currency'] as String? ?? 'UGX',
     );
   }
+
+  final String currency;
 
   final int id;
   final String name;
@@ -2415,7 +2542,11 @@ class PriceComparisonResult {
 }
 
 class BoqDetail {
+  /// Estimated amount and generated total from the BOQ items.
+  final BoqTotals totals;
+
   const BoqDetail({
+    this.totals = BoqTotals.empty,
     required this.id,
     required this.name,
     required this.code,
@@ -2429,6 +2560,7 @@ class BoqDetail {
     this.projectId = 0,
   });
   factory BoqDetail.fromJson(Map<String, dynamic> json) => BoqDetail(
+    totals: BoqTotals.fromJson(json['totals']),
     id: _asInt(json['id']),
     projectId: _asInt(json['project_id']),
     name: json['name'] as String? ?? '',
