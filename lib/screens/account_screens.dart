@@ -59,216 +59,321 @@ class _AccountPageState extends State<AccountPage> {
     widget.onSignedOut();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        Text(
-          widget.l10n.account,
-          style: Theme.of(
-            context,
-          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
+  void _openPlans() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => PlansPage(
+          api: widget.api,
+          onSubscriptionCreated: _reloadSubscription,
         ),
-        const SizedBox(height: 20),
-        FutureBuilder<Map<String, dynamic>>(
-          future: _subscription,
-          builder: (context, snapshot) {
-            if (snapshot.hasError) {
-              return Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.l10n.subscription,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text('No active plan'),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => PlansPage(
-                                api: widget.api,
-                                onSubscriptionCreated: _reloadSubscription,
-                              ),
-                            ),
-                          ),
-                          child: Text(widget.l10n.managePlan),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }
-            if (snapshot.hasData) {
-              final sub = snapshot.data!;
-              final progress = _subscriptionProgress(sub);
-              final daysRemaining = _daysRemaining(sub);
-              final status = '${sub['status'] ?? 'N/A'}';
-              final isTrial = status.toLowerCase() == 'trial';
-              return Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.l10n.subscription,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(sub['plan']?['name'] ?? 'No Active Plan'),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Chip(
-                            avatar: Icon(
-                              isTrial
-                                  ? Icons.hourglass_top
-                                  : Icons.verified_outlined,
-                              size: 16,
-                            ),
-                            label: Text(
-                              isTrial ? '7-day trial' : status.toUpperCase(),
-                            ),
-                          ),
-                          if (daysRemaining != null) ...[
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                daysRemaining == 0
-                                    ? 'Expires today'
-                                    : '$daysRemaining day${daysRemaining == 1 ? '' : 's'} remaining',
-                                textAlign: TextAlign.end,
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      if (progress != null) ...[
-                        const SizedBox(height: 12),
-                        LinearProgressIndicator(value: progress),
-                      ],
-                      const SizedBox(height: 12),
-                      Text(
-                        '${widget.l10n.aiCredits}: ${sub['plan']?['max_ai_credits'] ?? 'N/A'}',
-                      ),
-                      Text(
-                        '${widget.l10n.ocrPages}: ${sub['plan']?['max_ocr_pages'] ?? 'N/A'}',
-                      ),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => PlansPage(
-                                api: widget.api,
-                                onSubscriptionCreated: _reloadSubscription,
-                              ),
-                            ),
-                          ),
-                          child: Text(widget.l10n.managePlan),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }
-            return const Card(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: CircularProgressIndicator(),
-              ),
-            );
-          },
+      ),
+    );
+  }
+
+  void _openProfile() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ProfilePage(
+          api: widget.api,
+          locale: widget.locale,
+          onLocaleChanged: widget.onLocaleChanged,
         ),
-        const SizedBox(height: 16),
-        Card(
-          child: Column(
+      ),
+    );
+  }
+
+  Widget _profileHeader(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: _openProfile,
+        child: Padding(
+          padding: AppSpacing.card,
+          child: Row(
             children: [
-              ListTile(
-                leading: const Icon(Icons.language),
-                title: Text(widget.l10n.language),
-                trailing: DropdownButton<Locale>(
-                  value: widget.locale,
-                  underline: const SizedBox(),
-                  onChanged: (value) {
-                    if (value != null) widget.onLocaleChanged(value);
-                  },
-                  items: [
-                    const DropdownMenuItem(
-                      value: Locale('en'),
-                      child: Text('English'),
+              Container(
+                width: 56,
+                height: 56,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [AppColors.primary, AppColors.primaryDark],
+                  ),
+                ),
+                child: const Icon(Icons.person, color: Colors.white, size: 30),
+              ),
+              const SizedBox(width: AppSpacing.lg),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.l10n.profile,
+                      style: theme.textTheme.titleMedium,
                     ),
-                    const DropdownMenuItem(
-                      value: Locale('lg'),
-                      child: Text('Luganda'),
+                    const SizedBox(height: 2),
+                    Text(
+                      widget.l10n.editProfile,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: scheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),
               ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.notifications_outlined),
-                title: Text(widget.l10n.notifications),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('No new notifications')),
-                    );
-                  }
-                },
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.person_outline),
-                title: Text(widget.l10n.profile),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => ProfilePage(
-                        api: widget.api,
-                        locale: widget.locale,
-                        onLocaleChanged: widget.onLocaleChanged,
-                      ),
-                    ),
-                  );
-                },
-              ),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.business_outlined),
-                title: const Text('Company Profile'),
-                subtitle: const Text('Logo and details used on your BOQ PDFs'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => CompanyProfilePage(api: widget.api),
-                  ),
-                ),
-              ),
+              Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: _signOut,
-          icon: const Icon(Icons.logout),
-          label: Text(widget.l10n.signOut),
-        ),
-      ],
+      ),
+    );
+  }
+
+  Widget _managePlanButton() {
+    return OutlinedButton.icon(
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size.fromHeight(AppSizes.minTap),
+      ),
+      onPressed: _openPlans,
+      icon: const Icon(Icons.workspace_premium_outlined),
+      label: Text(widget.l10n.managePlan),
+    );
+  }
+
+  Widget _subscriptionCard(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _subscription,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return SectionCard(
+            title: widget.l10n.subscription,
+            icon: Icons.workspace_premium_outlined,
+            children: [
+              Row(
+                children: [
+                  const IconTile(
+                    icon: Icons.info_outline,
+                    tone: StatusTone.warning,
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Text(
+                      'No active plan',
+                      style: theme.textTheme.titleSmall,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              _managePlanButton(),
+            ],
+          );
+        }
+        if (snapshot.hasData) {
+          final sub = snapshot.data!;
+          final progress = _subscriptionProgress(sub);
+          final daysRemaining = _daysRemaining(sub);
+          final status = '${sub['status'] ?? 'N/A'}';
+          final isTrial = status.toLowerCase() == 'trial';
+          return SectionCard(
+            title: widget.l10n.subscription,
+            icon: Icons.workspace_premium_outlined,
+            trailing: StatusBadge(
+              label: isTrial ? '7-day trial' : status.toUpperCase(),
+              tone: isTrial ? StatusTone.info : StatusTone.forStatus(status),
+              icon: isTrial ? Icons.hourglass_top : Icons.verified_outlined,
+            ),
+            children: [
+              Text(
+                sub['plan']?['name'] ?? 'No Active Plan',
+                style: theme.textTheme.titleLarge,
+              ),
+              if (daysRemaining != null) ...[
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  daysRemaining == 0
+                      ? 'Expires today'
+                      : '$daysRemaining day${daysRemaining == 1 ? '' : 's'} remaining',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: daysRemaining <= 3
+                        ? AppColors.warning
+                        : scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+              if (progress != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 6,
+                  borderRadius: BorderRadius.circular(AppRadii.pill),
+                  backgroundColor: scheme.surfaceContainerHighest,
+                ),
+              ],
+              const SizedBox(height: AppSpacing.md),
+              KeyValueRow(
+                icon: Icons.auto_awesome_outlined,
+                label: widget.l10n.aiCredits,
+                value: '${sub['plan']?['max_ai_credits'] ?? 'N/A'}',
+              ),
+              KeyValueRow(
+                icon: Icons.document_scanner_outlined,
+                label: widget.l10n.ocrPages,
+                value: '${sub['plan']?['max_ocr_pages'] ?? 'N/A'}',
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _managePlanButton(),
+            ],
+          );
+        }
+        return const SectionCard(
+          children: [
+            SkeletonBox(width: 120, height: 16),
+            SizedBox(height: AppSpacing.md),
+            SkeletonBox(width: 200, height: 22),
+            SizedBox(height: AppSpacing.md),
+            SkeletonBox(height: 6),
+            SizedBox(height: AppSpacing.md),
+            SkeletonBox(width: 160),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _settingsTile({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    Widget? trailing,
+    VoidCallback? onTap,
+  }) {
+    return ListTile(
+      minTileHeight: 60,
+      contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      leading: IconTile(icon: icon, size: 36),
+      title: Text(title),
+      subtitle: subtitle == null ? null : Text(subtitle),
+      trailing:
+          trailing ??
+          Icon(
+            Icons.chevron_right,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+      onTap: onTap,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return RefreshIndicator(
+      onRefresh: () async {
+        _reloadSubscription();
+        try {
+          await _subscription;
+        } catch (_) {
+          // The subscription card renders the error state.
+        }
+      },
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: AppSpacing.page,
+        children: [
+          ContentWidth(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _profileHeader(context),
+                const SizedBox(height: AppSpacing.lg),
+                _subscriptionCard(context),
+                const SizedBox(height: AppSpacing.sectionGap),
+                const SectionHeader(title: 'Settings'),
+                Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    children: [
+                      _settingsTile(
+                        icon: Icons.language,
+                        title: widget.l10n.language,
+                        trailing: DropdownButton<Locale>(
+                          value: widget.locale,
+                          underline: const SizedBox(),
+                          borderRadius: BorderRadius.circular(AppRadii.sm),
+                          onChanged: (value) {
+                            if (value != null) widget.onLocaleChanged(value);
+                          },
+                          items: [
+                            const DropdownMenuItem(
+                              value: Locale('en'),
+                              child: Text('English'),
+                            ),
+                            const DropdownMenuItem(
+                              value: Locale('lg'),
+                              child: Text('Luganda'),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Divider(height: 1, indent: 68),
+                      _settingsTile(
+                        icon: Icons.notifications_outlined,
+                        title: widget.l10n.notifications,
+                        onTap: () {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('No new notifications'),
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                      const Divider(height: 1, indent: 68),
+                      _settingsTile(
+                        icon: Icons.person_outline,
+                        title: widget.l10n.profile,
+                        onTap: _openProfile,
+                      ),
+                      const Divider(height: 1, indent: 68),
+                      _settingsTile(
+                        icon: Icons.business_outlined,
+                        title: 'Company Profile',
+                        subtitle: 'Logo and details used on your BOQ PDFs',
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => CompanyProfilePage(api: widget.api),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xxl),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(AppSizes.buttonHeight),
+                    foregroundColor: theme.colorScheme.error,
+                    side: BorderSide(
+                      color: theme.colorScheme.error.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  onPressed: _signOut,
+                  icon: const Icon(Icons.logout),
+                  label: Text(widget.l10n.signOut),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -360,6 +465,158 @@ class _PlansPageState extends State<PlansPage> {
     }
   }
 
+  void _reloadPlans() {
+    setState(() => _plans = widget.api.plans());
+  }
+
+  String _planPrice(Map<String, dynamic> plan) {
+    final currency = '${plan['currency'] ?? 'UGX'}';
+    final raw = plan['price'] ?? '0';
+    final amount = raw is num ? raw : num.tryParse('$raw');
+    if (amount == null) return '$currency $raw';
+    return formatAmount(
+      amount,
+      currency: currency,
+      decimals: amount % 1 == 0 ? 0 : 2,
+    );
+  }
+
+  Widget _planCard(BuildContext context, Map<String, dynamic> plan) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final id = int.tryParse('${plan['id'] ?? ''}');
+    final busy = id != null && _submittingPlanId == id;
+    final features = (plan['included_features'] as List<dynamic>? ?? const [])
+        .map((item) => '$item')
+        .where((item) => item.trim().isNotEmpty)
+        .take(4)
+        .toList();
+    final limits = <(IconData, String)>[
+      if (plan['max_projects'] != null)
+        (Icons.folder_outlined, '${plan['max_projects']} projects'),
+      if (plan['max_boqs'] != null)
+        (Icons.receipt_long_outlined, '${plan['max_boqs']} BOQs'),
+      if (plan['max_ai_credits'] != null)
+        (Icons.auto_awesome_outlined, '${plan['max_ai_credits']} AI credits'),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadii.card,
+          side: BorderSide(
+            color: busy ? scheme.primary : scheme.outlineVariant,
+            width: busy ? 1.5 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: AppSpacing.card,
+              color: scheme.primaryContainer.withValues(alpha: 0.45),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const IconTile(icon: Icons.workspace_premium_outlined),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${plan['name'] ?? 'Plan'}',
+                          style: theme.textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          _planPrice(plan),
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            color: scheme.primary,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (plan['trial_days'] != null)
+                    StatusBadge(
+                      label: '${plan['trial_days']} day trial',
+                      tone: StatusTone.info,
+                      icon: Icons.hourglass_top,
+                    ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: AppSpacing.card,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if ('${plan['description'] ?? ''}'.trim().isNotEmpty) ...[
+                    Text(
+                      '${plan['description']}',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
+                  if (limits.isNotEmpty) ...[
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.sm,
+                      children: [
+                        for (final (icon, label) in limits)
+                          StatusBadge(
+                            label: label,
+                            tone: StatusTone.brand,
+                            icon: icon,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
+                  ...features.map(
+                    (feature) => Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.check_circle,
+                            size: 18,
+                            color: AppColors.success,
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              feature,
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  LoadingButton(
+                    label: 'Select plan',
+                    icon: Icons.arrow_forward,
+                    loading: busy,
+                    onPressed: () => _selectPlan(plan),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -369,140 +626,43 @@ class _PlansPageState extends State<PlansPage> {
         future: _plans,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error_outline, size: 42),
-                    const SizedBox(height: 12),
-                    const Text('Unable to load subscription plans.'),
-                    const SizedBox(height: 12),
-                    OutlinedButton(
-                      onPressed: () =>
-                          setState(() => _plans = widget.api.plans()),
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
-              ),
+            return ErrorState(
+              error: 'Unable to load subscription plans.',
+              onRetry: _reloadPlans,
             );
           }
           if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            return const SkeletonList(itemCount: 3);
           }
           final plans = snapshot.data!;
-          if (plans.isEmpty) {
-            return const Center(
-              child: Text('No plans are currently available.'),
-            );
-          }
-          return ListView.builder(
-            padding: const EdgeInsets.all(20),
-            itemCount: plans.length,
-            itemBuilder: (context, index) {
-              final plan = plans[index];
-              final id = int.tryParse('${plan['id'] ?? ''}');
-              final busy = id != null && _submittingPlanId == id;
-              final features =
-                  (plan['included_features'] as List<dynamic>? ?? const [])
-                      .map((item) => '$item')
-                      .where((item) => item.trim().isNotEmpty)
-                      .take(4)
-                      .toList();
-
-              return Card(
-                margin: const EdgeInsets.only(bottom: 14),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.workspace_premium_outlined),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              '${plan['name'] ?? 'Plan'}',
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                          Text(
-                            '${plan['currency'] ?? 'UGX'} ${plan['price'] ?? '0'}',
-                            style: Theme.of(context).textTheme.titleSmall
-                                ?.copyWith(fontWeight: FontWeight.w700),
-                          ),
-                        ],
-                      ),
-                      if ('${plan['description'] ?? ''}'.trim().isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text('${plan['description']}'),
-                      ],
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          if (plan['trial_days'] != null)
-                            Chip(
-                              label: Text('${plan['trial_days']} day trial'),
-                            ),
-                          if (plan['max_projects'] != null)
-                            Chip(
-                              label: Text('${plan['max_projects']} projects'),
-                            ),
-                          if (plan['max_boqs'] != null)
-                            Chip(label: Text('${plan['max_boqs']} BOQs')),
-                          if (plan['max_ai_credits'] != null)
-                            Chip(
-                              label: Text(
-                                '${plan['max_ai_credits']} AI credits',
-                              ),
-                            ),
-                        ],
-                      ),
-                      if (features.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        ...features.map(
-                          (feature) => Padding(
-                            padding: const EdgeInsets.only(top: 4),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.check_circle_outline,
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(child: Text(feature)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 14),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          onPressed: busy ? null : () => _selectPlan(plan),
-                          child: busy
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Text('Select plan'),
-                        ),
+          return RefreshIndicator(
+            onRefresh: () async {
+              _reloadPlans();
+              try {
+                await _plans;
+              } catch (_) {
+                // The error state is rendered by the builder.
+              }
+            },
+            child: plans.isEmpty
+                ? ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: AppSpacing.page,
+                    children: const [
+                      SizedBox(height: AppSpacing.xxxl),
+                      EmptyState(
+                        icon: Icons.workspace_premium_outlined,
+                        title: 'No plans are currently available.',
                       ),
                     ],
+                  )
+                : ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: AppSpacing.page,
+                    itemCount: plans.length,
+                    itemBuilder: (context, index) =>
+                        ContentWidth(child: _planCard(context, plans[index])),
                   ),
-                ),
-              );
-            },
           );
         },
       ),
@@ -709,40 +869,54 @@ class _PaymentPageState extends State<PaymentPage> {
     }
   }
 
+  Widget _detailLine(String label, dynamic value, {bool selectable = true}) {
+    final theme = Theme.of(context);
+    final valueStyle = theme.textTheme.bodyMedium?.copyWith(
+      fontWeight: FontWeight.w600,
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs + 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 105,
+            child: Text(
+              label,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: selectable
+                ? SelectableText('$value', style: valueStyle)
+                : Text('$value', style: valueStyle),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _receiptCard() {
     final receipt = _receipt;
     if (receipt == null || receipt.isEmpty) return const SizedBox.shrink();
     final currency = '${receipt['currency'] ?? ''}';
     final total = receipt['total_amount'] ?? receipt['amount'] ?? '';
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.receipt_long_outlined),
-                const SizedBox(width: 8),
-                Text(
-                  'Payment receipt',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SelectableText('Invoice: ${receipt['invoice_number'] ?? ''}'),
-            SelectableText(
-              'Reference: ${receipt['transaction_reference'] ?? _transaction?['reference'] ?? ''}',
-            ),
-            Text('Amount: $currency $total'),
-            if (receipt['payment_date'] != null)
-              Text('Paid: ${receipt['payment_date']}'),
-          ],
+    return SectionCard(
+      title: 'Payment receipt',
+      icon: Icons.receipt_long_outlined,
+      children: [
+        _detailLine('Invoice', receipt['invoice_number'] ?? ''),
+        _detailLine(
+          'Reference',
+          receipt['transaction_reference'] ?? _transaction?['reference'] ?? '',
         ),
-      ),
+        _detailLine('Amount', '$currency $total', selectable: false),
+        if (receipt['payment_date'] != null)
+          _detailLine('Paid', receipt['payment_date'], selectable: false),
+      ],
     );
   }
 
@@ -753,24 +927,7 @@ class _PaymentPageState extends State<PaymentPage> {
 
     void addRow(String label, dynamic value) {
       if (value == null || '$value'.trim().isEmpty) return;
-      rows.add(
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 105,
-                child: Text(
-                  label,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-              Expanded(child: SelectableText('$value')),
-            ],
-          ),
-        ),
-      );
+      rows.add(_detailLine(label, value));
     }
 
     addRow('Reference', gateway['transaction_reference']);
@@ -784,7 +941,7 @@ class _PaymentPageState extends State<PaymentPage> {
       rows.add(
         ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.link),
+          leading: const IconTile(icon: Icons.link, size: 36),
           title: const Text('Checkout URL'),
           subtitle: SelectableText(checkoutUrl),
           trailing: Wrap(
@@ -837,28 +994,134 @@ class _PaymentPageState extends State<PaymentPage> {
       addRow('Bank details', bankDetails);
     }
 
+    return SectionCard(
+      title: 'Payment instructions',
+      icon: Icons.fact_check_outlined,
+      children: rows,
+    );
+  }
+
+  String _formatPlanPrice(Map<String, dynamic> plan) {
+    final currency = '${plan['currency'] ?? 'UGX'}';
+    final raw = plan['price'] ?? '0';
+    final amount = raw is num ? raw : num.tryParse('$raw');
+    if (amount == null) return '$currency $raw';
+    return formatAmount(
+      amount,
+      currency: currency,
+      decimals: amount % 1 == 0 ? 0 : 2,
+    );
+  }
+
+  BannerTone _statusBannerTone(String status) {
+    switch (StatusTone.forStatus(status)) {
+      case StatusTone.success:
+        return BannerTone.success;
+      case StatusTone.danger:
+        return BannerTone.error;
+      case StatusTone.warning:
+        return BannerTone.warning;
+      default:
+        return status.toLowerCase() == 'under_review'
+            ? BannerTone.warning
+            : BannerTone.info;
+    }
+  }
+
+  Widget _summaryCard(
+    BuildContext context,
+    Map<String, dynamic> plan,
+    Map<String, dynamic>? transaction,
+    String status,
+  ) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final subscriptionStatus = '${widget.subscription['status'] ?? 'pending'}';
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Payment instructions',
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: AppSpacing.card,
+            color: scheme.primaryContainer.withValues(alpha: 0.45),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const IconTile(icon: Icons.shopping_bag_outlined),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${plan['name'] ?? 'Subscription plan'}',
+                        style: theme.textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        _formatPlanPrice(plan),
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            ...rows,
-          ],
-        ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg,
+              vertical: AppSpacing.sm,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _badgeRow(context, 'Subscription status', subscriptionStatus),
+                if (transaction != null) ...[
+                  const Divider(height: AppSpacing.lg),
+                  KeyValueRow(
+                    label: 'Transaction',
+                    value:
+                        '${transaction['reference'] ?? transaction['id'] ?? ''}',
+                  ),
+                  _badgeRow(context, 'Payment status', status),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _badgeRow(BuildContext context, String label, String value) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm - 1),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          StatusBadge(label: value, tone: StatusTone.forStatus(value)),
+        ],
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final plan =
         widget.subscription['plan'] as Map<String, dynamic>? ?? const {};
     final transaction = _transaction;
@@ -870,274 +1133,255 @@ class _PaymentPageState extends State<PaymentPage> {
         future: _gateways,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.error_outline, size: 44),
-                    const SizedBox(height: 12),
-                    const Text('Unable to load payment methods.'),
-                    const SizedBox(height: 12),
-                    OutlinedButton(
-                      onPressed: () => setState(
-                        () => _gateways = widget.api.paymentGateways(),
-                      ),
-                      child: const Text('Retry'),
-                    ),
-                  ],
-                ),
-              ),
+            return ErrorState(
+              error: 'Unable to load payment methods.',
+              onRetry: () =>
+                  setState(() => _gateways = widget.api.paymentGateways()),
             );
           }
           if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            return const LoadingState();
           }
           final gateways = snapshot.data!;
           return ListView(
-            padding: const EdgeInsets.all(20),
+            padding: AppSpacing.page,
             children: [
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${plan['name'] ?? 'Subscription plan'}',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
+              ContentWidth(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _summaryCard(context, plan, transaction, status),
+                    if (_paymentData != null) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      InfoBanner(
+                        tone: _statusBannerTone(status),
+                        title: 'Payment status: $status',
+                        message:
+                            'Your plan is activated only after the server confirms a successful payment. Closing this screen does not delete the pending subscription.',
+                      ),
+                    ],
+                    const SizedBox(height: AppSpacing.sectionGap),
+                    if (gateways.isEmpty)
+                      const InfoBanner(
+                        tone: BannerTone.warning,
+                        message:
+                            'No payment methods are currently enabled. Please contact the administrator.',
+                      )
+                    else ...[
+                      const SectionHeader(title: 'Choose payment method'),
+                      RadioGroup<String>(
+                        groupValue: _selectedGatewayCode,
+                        onChanged: (value) {
+                          if (_paymentData != null || value == null) return;
+                          final gateway = gateways.firstWhere(
+                            (g) => '${g['code'] ?? ''}' == value,
+                            orElse: () => const <String, dynamic>{},
+                          );
+                          final methods =
+                              (gateway['supported_methods'] as List<dynamic>? ??
+                                      const [])
+                                  .map((e) => '$e')
+                                  .where((e) => e.trim().isNotEmpty)
+                                  .toList();
+                          setState(() {
+                            _selectedGatewayCode = value;
+                            _selectedMethod = methods.isNotEmpty
+                                ? methods.first
+                                : null;
+                            _idempotencyKey = null;
+                          });
+                        },
+                        child: Column(
+                          children: [
+                            ...gateways.map((gateway) {
+                              final code = '${gateway['code'] ?? ''}';
+                              final selected = _selectedGatewayCode == code;
+                              return Padding(
+                                padding: const EdgeInsets.only(
+                                  bottom: AppSpacing.sm,
+                                ),
+                                child: Card(
+                                  clipBehavior: Clip.antiAlias,
+                                  color: selected
+                                      ? scheme.primaryContainer.withValues(
+                                          alpha: 0.35,
+                                        )
+                                      : null,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: AppRadii.card,
+                                    side: BorderSide(
+                                      color: selected
+                                          ? scheme.primary
+                                          : scheme.outlineVariant,
+                                      width: selected ? 1.5 : 1,
+                                    ),
+                                  ),
+                                  child: RadioListTile<String>(
+                                    value: code,
+                                    enabled: _paymentData == null,
+                                    title: Text(
+                                      '${gateway['name'] ?? code}',
+                                      style: theme.textTheme.titleSmall,
+                                    ),
+                                    subtitle: Text(
+                                      '${gateway['description'] ?? gateway['driver'] ?? ''}'
+                                      '${gateway['is_aggregator'] == true ? ' • Aggregator' : ''}'
+                                      '${gateway['is_test_mode'] == true ? ' • Test mode' : ''}',
+                                      style: theme.textTheme.bodySmall,
+                                    ),
+                                    secondary: IconTile(
+                                      icon: selected
+                                          ? Icons.check_circle
+                                          : Icons.payments_outlined,
+                                      tone: selected
+                                          ? StatusTone.success
+                                          : StatusTone.brand,
+                                      size: 36,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '${plan['currency'] ?? 'UGX'} ${plan['price'] ?? '0'}',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Subscription status: ${widget.subscription['status'] ?? 'pending'}',
-                      ),
-                      if (transaction != null) ...[
-                        const Divider(height: 24),
-                        Text(
-                          'Transaction: ${transaction['reference'] ?? transaction['id'] ?? ''}',
+                      if (_selectedGatewayCode != null &&
+                          _paymentData == null) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        Builder(
+                          builder: (context) {
+                            final selected = gateways.firstWhere(
+                              (g) =>
+                                  '${g['code'] ?? ''}' == _selectedGatewayCode,
+                              orElse: () => const <String, dynamic>{},
+                            );
+                            final methods =
+                                (selected['supported_methods']
+                                            as List<dynamic>? ??
+                                        const [])
+                                    .map((e) => '$e')
+                                    .where((e) => e.trim().isNotEmpty)
+                                    .toList();
+                            final driver = '${selected['driver'] ?? ''}';
+                            final isAggregator =
+                                selected['is_aggregator'] == true;
+                            final effectiveMethod =
+                                methods.contains(_selectedMethod)
+                                ? _selectedMethod
+                                : (methods.isNotEmpty ? methods.first : null);
+                            final aggregatorMobile =
+                                isAggregator &&
+                                !['card', 'visa', 'mastercard'].contains(
+                                  (effectiveMethod ?? '').toLowerCase(),
+                                );
+                            final needsPhone =
+                                driver == 'mtn_momo' ||
+                                driver == 'airtel_money' ||
+                                aggregatorMobile;
+                            return SectionCard(
+                              title: 'Payment details',
+                              icon: Icons.lock_outline,
+                              children: [
+                                if (needsPhone) ...[
+                                  TextField(
+                                    controller: _phoneNumber,
+                                    keyboardType: TextInputType.phone,
+                                    onChanged: (_) => setState(() {}),
+                                    decoration: InputDecoration(
+                                      labelText: driver == 'mtn_momo'
+                                          ? 'MTN MoMo number'
+                                          : driver == 'airtel_money'
+                                          ? 'Airtel Money number'
+                                          : 'Mobile money number',
+                                      hintText: 'e.g. 0772 123 456',
+                                      prefixIcon: const Icon(
+                                        Icons.phone_android,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: AppSpacing.md),
+                                ],
+                                if (methods.length > 1)
+                                  DropdownButtonFormField<String>(
+                                    key: ValueKey(
+                                      'method-$_selectedGatewayCode-$effectiveMethod',
+                                    ),
+                                    initialValue:
+                                        methods.contains(_selectedMethod)
+                                        ? _selectedMethod
+                                        : methods.first,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Payment option',
+                                      prefixIcon: Icon(
+                                        Icons.account_balance_wallet_outlined,
+                                      ),
+                                    ),
+                                    items: methods
+                                        .map(
+                                          (method) => DropdownMenuItem(
+                                            value: method,
+                                            child: Text(method),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (value) =>
+                                        setState(() => _selectedMethod = value),
+                                  ),
+                                if (methods.length > 1)
+                                  const SizedBox(height: AppSpacing.md),
+                                LoadingButton(
+                                  label: 'Continue to payment',
+                                  icon: Icons.lock_outline,
+                                  loading: _initiating,
+                                  onPressed:
+                                      needsPhone &&
+                                          _phoneNumber.text.trim().isEmpty
+                                      ? null
+                                      : () => _initiate(selected),
+                                ),
+                              ],
+                            );
+                          },
                         ),
-                        Text('Payment status: $status'),
                       ],
                     ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              if (gateways.isEmpty)
-                const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(18),
-                    child: Text(
-                      'No payment methods are currently enabled. Please contact the administrator.',
-                    ),
-                  ),
-                )
-              else ...[
-                Text(
-                  'Choose payment method',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                RadioGroup<String>(
-                  groupValue: _selectedGatewayCode,
-                  onChanged: (value) {
-                    if (_paymentData != null || value == null) return;
-                    final gateway = gateways.firstWhere(
-                      (g) => '${g['code'] ?? ''}' == value,
-                      orElse: () => const <String, dynamic>{},
-                    );
-                    final methods =
-                        (gateway['supported_methods'] as List<dynamic>? ??
-                                const [])
-                            .map((e) => '$e')
-                            .where((e) => e.trim().isNotEmpty)
-                            .toList();
-                    setState(() {
-                      _selectedGatewayCode = value;
-                      _selectedMethod = methods.isNotEmpty
-                          ? methods.first
-                          : null;
-                      _idempotencyKey = null;
-                    });
-                  },
-                  child: Column(
-                    children: [
-                      ...gateways.map((gateway) {
-                        final code = '${gateway['code'] ?? ''}';
-                        final selected = _selectedGatewayCode == code;
-                        return Card(
-                          child: RadioListTile<String>(
-                            value: code,
-                            enabled: _paymentData == null,
-                            title: Text('${gateway['name'] ?? code}'),
-                            subtitle: Text(
-                              '${gateway['description'] ?? gateway['driver'] ?? ''}'
-                              '${gateway['is_aggregator'] == true ? ' • Aggregator' : ''}'
-                              '${gateway['is_test_mode'] == true ? ' • Test mode' : ''}',
-                            ),
-                            secondary: selected
-                                ? const Icon(Icons.check_circle)
-                                : const Icon(Icons.payments_outlined),
-                          ),
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-                if (_selectedGatewayCode != null && _paymentData == null) ...[
-                  const SizedBox(height: 10),
-                  Builder(
-                    builder: (context) {
-                      final selected = gateways.firstWhere(
-                        (g) => '${g['code'] ?? ''}' == _selectedGatewayCode,
-                        orElse: () => const <String, dynamic>{},
-                      );
-                      final methods =
-                          (selected['supported_methods'] as List<dynamic>? ??
-                                  const [])
-                              .map((e) => '$e')
-                              .where((e) => e.trim().isNotEmpty)
-                              .toList();
-                      final driver = '${selected['driver'] ?? ''}';
-                      final isAggregator = selected['is_aggregator'] == true;
-                      final effectiveMethod = methods.contains(_selectedMethod)
-                          ? _selectedMethod
-                          : (methods.isNotEmpty ? methods.first : null);
-                      final aggregatorMobile =
-                          isAggregator &&
-                          ![
-                            'card',
-                            'visa',
-                            'mastercard',
-                          ].contains((effectiveMethod ?? '').toLowerCase());
-                      final needsPhone =
-                          driver == 'mtn_momo' ||
-                          driver == 'airtel_money' ||
-                          aggregatorMobile;
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                    if (_paymentData != null) ...[
+                      const SizedBox(height: AppSpacing.lg),
+                      _gatewayInstructions(),
+                      if (_receipt != null) ...[
+                        const SizedBox(height: AppSpacing.lg),
+                        _receiptCard(),
+                      ],
+                      const SizedBox(height: AppSpacing.lg),
+                      Row(
                         children: [
-                          if (needsPhone) ...[
-                            TextField(
-                              controller: _phoneNumber,
-                              keyboardType: TextInputType.phone,
-                              onChanged: (_) => setState(() {}),
-                              decoration: InputDecoration(
-                                labelText: driver == 'mtn_momo'
-                                    ? 'MTN MoMo number'
-                                    : driver == 'airtel_money'
-                                    ? 'Airtel Money number'
-                                    : 'Mobile money number',
-                                hintText: 'e.g. 0772 123 456',
-                                prefixIcon: const Icon(Icons.phone_android),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(
+                                  AppSizes.buttonHeight,
+                                ),
                               ),
+                              onPressed: _refreshTransaction,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Refresh status'),
                             ),
-                            const SizedBox(height: 12),
-                          ],
-                          if (methods.length > 1)
-                            DropdownButtonFormField<String>(
-                              key: ValueKey(
-                                'method-$_selectedGatewayCode-$effectiveMethod',
-                              ),
-                              initialValue: methods.contains(_selectedMethod)
-                                  ? _selectedMethod
-                                  : methods.first,
-                              decoration: const InputDecoration(
-                                labelText: 'Payment option',
-                              ),
-                              items: methods
-                                  .map(
-                                    (method) => DropdownMenuItem(
-                                      value: method,
-                                      child: Text(method),
-                                    ),
-                                  )
-                                  .toList(),
-                              onChanged: (value) =>
-                                  setState(() => _selectedMethod = value),
-                            ),
-                          if (methods.length > 1) const SizedBox(height: 12),
-                          FilledButton.icon(
-                            onPressed:
-                                _initiating ||
-                                    (needsPhone &&
-                                        _phoneNumber.text.trim().isEmpty)
-                                ? null
-                                : () => _initiate(selected),
-                            icon: _initiating
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  )
-                                : const Icon(Icons.lock_outline),
-                            label: Text(
-                              _initiating
-                                  ? 'Starting payment…'
-                                  : 'Continue to payment',
+                          ),
+                          const SizedBox(width: AppSpacing.md),
+                          Expanded(
+                            child: LoadingButton(
+                              label: 'Verify payment',
+                              icon: Icons.verified_outlined,
+                              loading: _verifying,
+                              onPressed: _verify,
                             ),
                           ),
                         ],
-                      );
-                    },
-                  ),
-                ],
-              ],
-              if (_paymentData != null) ...[
-                const SizedBox(height: 12),
-                _gatewayInstructions(),
-                if (_receipt != null) ...[
-                  const SizedBox(height: 12),
-                  _receiptCard(),
-                ],
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _refreshTransaction,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Refresh status'),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: _verifying ? null : _verify,
-                        icon: _verifying
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.verified_outlined),
-                        label: Text(
-                          _verifying ? 'Checking…' : 'Verify payment',
-                        ),
-                      ),
-                    ),
+                    ],
                   ],
                 ),
-                const SizedBox(height: 10),
-                const Text(
-                  'Your plan is activated only after the server confirms a successful payment. Closing this screen does not delete the pending subscription.',
-                  style: TextStyle(fontSize: 12),
-                ),
-              ],
+              ),
             ],
           );
         },
@@ -1274,16 +1518,18 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.editProfile)),
       body: FutureBuilder<UserProfile>(
         future: _profile,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(child: Text(friendlyError(snapshot.error)));
+            return ErrorState(error: snapshot.error);
           }
           if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
+            return const LoadingState();
           }
 
           final profile = snapshot.data!;
@@ -1299,123 +1545,161 @@ class _ProfilePageState extends State<ProfilePage> {
           return Form(
             key: _formKey,
             child: ListView(
-              padding: const EdgeInsets.all(20),
+              padding: AppSpacing.page,
               children: [
-                TextFormField(
-                  controller: _name,
-                  decoration: InputDecoration(labelText: l10n.fullName),
-                  validator: (value) => value == null || value.trim().isEmpty
-                      ? l10n.fullName
-                      : null,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _email,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: InputDecoration(labelText: l10n.email),
-                  validator: (value) =>
-                      value == null || !value.contains('@') ? l10n.email : null,
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _phone,
-                  keyboardType: TextInputType.phone,
-                  decoration: InputDecoration(labelText: l10n.phoneNumber),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _location,
-                  decoration: InputDecoration(labelText: l10n.location),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedLocale,
-                  decoration: InputDecoration(labelText: l10n.language),
-                  items: [
-                    DropdownMenuItem(value: 'en', child: Text(l10n.english)),
-                    DropdownMenuItem(value: 'lg', child: Text(l10n.luganda)),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _selectedLocale = value);
-                    }
-                  },
-                ),
-                const SizedBox(height: 16),
-                // Biometric section
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          l10n.enableBiometricLogin,
-                          style: Theme.of(context).textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          _biometricAvailable
-                              ? '${l10n.biometricAvailable} - ${l10n.biometricTypes}${_availableBiometrics.map((t) => _biometricService.getBiometricTypeName(t)).join(', ')}'
-                              : l10n.biometricNotAvailable,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: _biometricAvailable
-                                    ? null
-                                    : Colors.grey[600],
-                              ),
-                        ),
-                        const SizedBox(height: 12),
-                        SwitchListTile(
-                          title: Text(l10n.enableBiometricLogin),
-                          subtitle: Text(l10n.biometricLoginDescription),
-                          value: _biometricEnabled,
-                          onChanged: _biometricAvailable
-                              ? _toggleBiometric
-                              : null,
-                          secondary: Icon(
-                            _biometricAvailable
-                                ? Icons.fingerprint
-                                : Icons.fingerprint_outlined,
-                            color: _biometricAvailable
-                                ? Theme.of(context).colorScheme.primary
-                                : Colors.grey,
+                ContentWidth(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      SectionCard(
+                        title: 'Personal details',
+                        icon: Icons.person_outline,
+                        spacing: AppSpacing.lg,
+                        children: [
+                          TextFormField(
+                            controller: _name,
+                            textInputAction: TextInputAction.next,
+                            decoration: InputDecoration(
+                              labelText: l10n.fullName,
+                              prefixIcon: const Icon(Icons.badge_outlined),
+                            ),
+                            validator: (value) =>
+                                value == null || value.trim().isEmpty
+                                ? l10n.fullName
+                                : null,
                           ),
-                        ),
+                          TextFormField(
+                            controller: _email,
+                            keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
+                            decoration: InputDecoration(
+                              labelText: l10n.email,
+                              prefixIcon: const Icon(Icons.email_outlined),
+                            ),
+                            validator: (value) =>
+                                value == null || !value.contains('@')
+                                ? l10n.email
+                                : null,
+                          ),
+                          TextFormField(
+                            controller: _phone,
+                            keyboardType: TextInputType.phone,
+                            textInputAction: TextInputAction.next,
+                            decoration: InputDecoration(
+                              labelText: l10n.phoneNumber,
+                              prefixIcon: const Icon(Icons.phone_outlined),
+                            ),
+                          ),
+                          TextFormField(
+                            controller: _location,
+                            decoration: InputDecoration(
+                              labelText: l10n.location,
+                              prefixIcon: const Icon(
+                                Icons.location_on_outlined,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      SectionCard(
+                        title: l10n.language,
+                        icon: Icons.language,
+                        children: [
+                          DropdownButtonFormField<String>(
+                            initialValue: _selectedLocale,
+                            decoration: InputDecoration(
+                              labelText: l10n.language,
+                              prefixIcon: const Icon(Icons.translate),
+                            ),
+                            items: [
+                              DropdownMenuItem(
+                                value: 'en',
+                                child: Text(l10n.english),
+                              ),
+                              DropdownMenuItem(
+                                value: 'lg',
+                                child: Text(l10n.luganda),
+                              ),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() => _selectedLocale = value);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      // Biometric section
+                      SectionCard(
+                        title: l10n.enableBiometricLogin,
+                        icon: Icons.fingerprint,
+                        children: [
+                          Text(
+                            _biometricAvailable
+                                ? '${l10n.biometricAvailable} - ${l10n.biometricTypes}${_availableBiometrics.map((t) => _biometricService.getBiometricTypeName(t)).join(', ')}'
+                                : l10n.biometricNotAvailable,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: scheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(l10n.enableBiometricLogin),
+                            subtitle: Text(l10n.biometricLoginDescription),
+                            value: _biometricEnabled,
+                            onChanged: _biometricAvailable
+                                ? _toggleBiometric
+                                : null,
+                            secondary: IconTile(
+                              icon: _biometricAvailable
+                                  ? Icons.fingerprint
+                                  : Icons.fingerprint_outlined,
+                              tone: _biometricAvailable
+                                  ? StatusTone.brand
+                                  : StatusTone.neutral,
+                              size: 36,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      SectionCard(
+                        title: 'Security',
+                        icon: Icons.lock_outline,
+                        children: [
+                          TextFormField(
+                            controller: _password,
+                            obscureText: true,
+                            decoration: InputDecoration(
+                              labelText: l10n.newPassword,
+                              helperText: l10n.passwordHint,
+                              prefixIcon: const Icon(Icons.key_outlined),
+                            ),
+                            validator: (value) =>
+                                value != null &&
+                                    value.isNotEmpty &&
+                                    value.length < 8
+                                ? l10n.newPassword
+                                : null,
+                          ),
+                        ],
+                      ),
+                      if (_error != null) ...[
+                        const SizedBox(height: AppSpacing.lg),
+                        InfoBanner(message: _error!),
                       ],
-                    ),
+                      const SizedBox(height: AppSpacing.xxl),
+                      LoadingButton(
+                        label: l10n.saveChanges,
+                        icon: Icons.save_outlined,
+                        loading: _saving,
+                        onPressed: () => _save(l10n),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _password,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    labelText: l10n.newPassword,
-                    helperText: l10n.passwordHint,
-                  ),
-                  validator: (value) =>
-                      value != null && value.isNotEmpty && value.length < 8
-                      ? l10n.newPassword
-                      : null,
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    _error!,
-                    style: const TextStyle(color: Color(0xFFBE123C)),
-                  ),
-                ],
-                const SizedBox(height: 28),
-                FilledButton(
-                  onPressed: _saving ? null : () => _save(l10n),
-                  child: _saving
-                      ? const SizedBox.square(
-                          dimension: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text(l10n.saveChanges),
                 ),
               ],
             ),

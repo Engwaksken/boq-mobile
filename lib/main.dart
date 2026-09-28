@@ -14,7 +14,6 @@ import 'package:intl/intl.dart';
 import 'package:boq_mobile/l10n/app_localizations.dart';
 
 import 'api_client.dart';
-import 'app_errors.dart';
 import 'company_profile_page.dart';
 import 'connectivity_gate.dart';
 import 'boq_share_actions.dart';
