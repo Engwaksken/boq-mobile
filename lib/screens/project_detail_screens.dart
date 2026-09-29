@@ -20,14 +20,17 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
 
   void _reload() => setState(() => _project = api.project(projectId));
 
-  Future<String?> _askProjectLocation(BuildContext context) async {
-    final controller = TextEditingController();
+  Future<String?> _askProjectLocation(
+    BuildContext context, {
+    String initial = '',
+  }) async {
+    final controller = TextEditingController(text: initial);
     final formKey = GlobalKey<FormState>();
     final location = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         icon: const Icon(Icons.location_on_outlined),
-        title: const Text('Where is this project?'),
+        title: const Text('Generate BOQ'),
         content: Form(
           key: formKey,
           child: Column(
@@ -71,7 +74,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                 Navigator.pop(dialogContext, controller.text.trim());
               }
             },
-            child: const Text('Save and generate'),
+            child: const Text('Generate BOQ'),
           ),
         ],
       ),
@@ -85,15 +88,16 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
     ProjectDetail project,
     BoqSummary boq,
   ) async {
-    var place = [
-      project.country,
-      project.district,
+    // Prices depend on the location: always confirm it first (pre-filled).
+    final current = [
       project.location,
-    ].where((e) => e.isNotEmpty).toList().join(', ');
-    // Prices depend on the location: ask for it (and save it) instead of failing.
-    if (place.isEmpty) {
-      final entered = await _askProjectLocation(context);
-      if (entered == null || !context.mounted) return;
+      project.district,
+      project.country,
+    ].firstWhere((e) => e.trim().isNotEmpty, orElse: () => '');
+    final entered = await _askProjectLocation(context, initial: current);
+    if (entered == null || !context.mounted) return;
+    var place = entered;
+    if (entered != project.location.trim()) {
       try {
         await api.updateProjectLocation(project.id, entered);
       } on Object catch (error) {
@@ -104,7 +108,6 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
         }
         return;
       }
-      place = entered;
       _reload();
       if (!context.mounted) return;
     }
