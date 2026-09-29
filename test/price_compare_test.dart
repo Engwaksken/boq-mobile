@@ -153,4 +153,53 @@ void main() {
       ),
     );
   });
+
+  test('location prices and bulk review', () async {
+    final requests = <http.Request>[];
+    final api = ApiClient(
+      storage: _Storage(),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        final body = request.url.path.endsWith('/locations')
+            ? {
+                'data': [
+                  {
+                    'key': 'gulu',
+                    'location': 'Gulu',
+                    'priced_items': 2,
+                    'total_items': 3,
+                    'total': '400000.00',
+                    'current': true,
+                  },
+                ],
+              }
+            : {
+                'data': {'done': 2, 'skipped': 1},
+              };
+        return http.Response(
+          jsonEncode(body),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }),
+    );
+
+    final locations = await api.boqLocations(5);
+    expect(locations.single.location, 'Gulu');
+    expect(locations.single.total, 400000);
+    expect(locations.single.current, isTrue);
+
+    final result = await api.bulkReviewItems(
+      5,
+      action: 'reject',
+      itemIds: [1, 2, 3],
+      reason: 'Too high',
+    );
+    expect(result.done, 2);
+    expect(jsonDecode(requests.last.body), {
+      'action': 'reject',
+      'item_ids': [1, 2, 3],
+      'reason': 'Too high',
+    });
+  });
 }

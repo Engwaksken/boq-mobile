@@ -36,6 +36,7 @@ part 'screens/project_detail_screens.dart';
 part 'screens/hardware_screens.dart';
 part 'screens/boq_screens.dart';
 part 'screens/boqs_page.dart';
+part 'screens/boq_review_locations.dart';
 part 'screens/proxy_subscriptions_page.dart';
 
 /// Service for handling biometric authentication operations.

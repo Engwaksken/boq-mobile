@@ -1279,6 +1279,42 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
                           ),
                       ],
                     ),
+                    const SizedBox(height: AppSpacing.md),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => BoqReviewPricesPage(
+                                  api: widget.api,
+                                  boqId: widget.boqId,
+                                  title: widget.title,
+                                ),
+                              ),
+                            ),
+                            icon: const Icon(Icons.fact_check_outlined),
+                            label: const Text('Review prices'),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => BoqLocationPricesPage(
+                                  api: widget.api,
+                                  boqId: widget.boqId,
+                                  currency: boq.currency,
+                                ),
+                              ),
+                            ),
+                            icon: const Icon(Icons.map_outlined),
+                            label: const Text('Location prices'),
+                          ),
+                        ),
+                      ],
+                    ),
                     if (_failedReport.isNotEmpty) ...[
                       const SizedBox(height: AppSpacing.md),
                       InfoBanner(

@@ -1311,6 +1311,75 @@ class ApiClient {
     );
   }
 
+  /// Locations this BOQ has prices for, with totals.
+  Future<List<BoqLocation>> boqLocations(int boqId) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/boqs/$boqId/locations'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return (body['data'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(BoqLocation.fromJson)
+        .toList();
+  }
+
+  /// Item rates side by side for 2 to 4 location keys.
+  Future<LocationComparison> compareBoqLocations(
+    int boqId,
+    List<String> keys,
+  ) async {
+    final query = keys
+        .map((k) => 'locations[]=${Uri.encodeQueryComponent(k)}')
+        .join('&');
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/boqs/$boqId/locations/compare?$query'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return LocationComparison.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
+  /// Switches the BOQ to one location's saved prices. Returns items changed.
+  Future<int> useBoqLocation(int boqId, String location) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/boqs/$boqId/locations/use'),
+      headers: {...await _headers(), 'Content-Type': 'application/json'},
+      body: jsonEncode({'location': location}),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return _asInt(body['data']?['applied']);
+  }
+
+  /// action: accept (use suggested as reviewed) | approve | reject (reason).
+  Future<({int done, int skipped})> bulkReviewItems(
+    int boqId, {
+    required String action,
+    required List<int> itemIds,
+    String? reason,
+  }) async {
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/boqs/$boqId/items/bulk-review'),
+      headers: {...await _headers(), 'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'action': action,
+        'item_ids': itemIds,
+        'reason': ?reason,
+      }),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return (
+      done: _asInt(body['data']?['done']),
+      skipped: _asInt(body['data']?['skipped']),
+    );
+  }
+
   Future<void> deleteBoq(int id) async {
     final response = await _httpClient.delete(
       Uri.parse('$baseUrl/boqs/$id'),
@@ -1878,6 +1947,90 @@ class NotificationItem {
   bool get isRead => readAt != null;
 }
 
+/// A location a BOQ has been priced for.
+class BoqLocation {
+  const BoqLocation({
+    required this.key,
+    required this.location,
+    required this.pricedItems,
+    required this.totalItems,
+    required this.total,
+    this.current = false,
+    this.pricedAt,
+  });
+
+  factory BoqLocation.fromJson(Map<String, dynamic> json) => BoqLocation(
+    key: '${json['key'] ?? ''}',
+    location: '${json['location'] ?? ''}',
+    pricedItems: _asInt(json['priced_items']),
+    totalItems: _asInt(json['total_items']),
+    total: _asDouble(json['total']),
+    current: json['current'] == true,
+    pricedAt: json['priced_at'] as String?,
+  );
+
+  final String key;
+  final String location;
+  final int pricedItems;
+  final int totalItems;
+  final double total;
+  final bool current;
+  final String? pricedAt;
+}
+
+class LocationComparison {
+  const LocationComparison({required this.locations, required this.rows});
+
+  factory LocationComparison.fromJson(Map<String, dynamic> json) =>
+      LocationComparison(
+        locations: (json['locations'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(BoqLocation.fromJson)
+            .toList(),
+        rows: (json['rows'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(LocationComparisonRow.fromJson)
+            .toList(),
+      );
+
+  final List<BoqLocation> locations;
+  final List<LocationComparisonRow> rows;
+}
+
+class LocationComparisonRow {
+  const LocationComparisonRow({
+    required this.itemId,
+    required this.code,
+    required this.description,
+    required this.quantity,
+    required this.rates,
+    this.lowest,
+  });
+
+  factory LocationComparisonRow.fromJson(Map<String, dynamic> json) {
+    final raw = json['rates'];
+    return LocationComparisonRow(
+      itemId: _asInt(json['item_id']),
+      code: '${json['item_code'] ?? ''}',
+      description: '${json['description'] ?? ''}',
+      quantity: _asDouble(json['quantity']),
+      rates: {
+        if (raw is Map)
+          for (final entry in raw.entries)
+            '${entry.key}': entry.value == null ? null : _asDouble(entry.value),
+      },
+      lowest: json['lowest'] as String?,
+    );
+  }
+
+  final int itemId;
+  final String code;
+  final String description;
+  final double quantity;
+  final Map<String, double?> rates;
+  final String? lowest;
+}
+
 /// Categories managed in the database (never hard-coded in the app).
 class CategoryCatalog {
   const CategoryCatalog({
@@ -2159,8 +2312,10 @@ class BoqItemSummary {
     required this.amount,
     required this.currentRate,
     required this.aiRate,
+    this.reviewStatus = 'pending',
   });
   factory BoqItemSummary.fromJson(Map<String, dynamic> json) => BoqItemSummary(
+    reviewStatus: json['status'] as String? ?? 'pending',
     id: json['id'] as int,
     code: json['item_code'] as String? ?? '',
     description: json['description'] as String? ?? '',
@@ -2179,6 +2334,9 @@ class BoqItemSummary {
   final String amount;
   final String currentRate;
   final String aiRate;
+
+  /// pending | reviewed | approved | rejected
+  final String reviewStatus;
 }
 
 class ApiException implements Exception {
