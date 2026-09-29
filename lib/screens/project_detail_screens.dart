@@ -20,16 +20,94 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
 
   void _reload() => setState(() => _project = api.project(projectId));
 
+  Future<String?> _askProjectLocation(BuildContext context) async {
+    final controller = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    final location = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.location_on_outlined),
+        title: const Text('Where is this project?'),
+        content: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Prices depend on the location. Enter the town or district '
+                'where the project will be built; it is saved to the project.',
+              ),
+              const SizedBox(height: AppSpacing.md),
+              TextFormField(
+                controller: controller,
+                autofocus: true,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(
+                  labelText: 'Project location',
+                  hintText: 'e.g. Kampala, Wakiso',
+                  prefixIcon: Icon(Icons.place_outlined),
+                ),
+                validator: (value) => (value ?? '').trim().isEmpty
+                    ? 'Enter the project location'
+                    : null,
+                onFieldSubmitted: (_) {
+                  if (formKey.currentState!.validate()) {
+                    Navigator.pop(dialogContext, controller.text.trim());
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState!.validate()) {
+                Navigator.pop(dialogContext, controller.text.trim());
+              }
+            },
+            child: const Text('Save and generate'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return location;
+  }
+
   Future<void> _generateBoq(
     BuildContext context,
     ProjectDetail project,
     BoqSummary boq,
   ) async {
-    final place = [
+    var place = [
       project.country,
       project.district,
       project.location,
     ].where((e) => e.isNotEmpty).toList().join(', ');
+    // Prices depend on the location: ask for it (and save it) instead of failing.
+    if (place.isEmpty) {
+      final entered = await _askProjectLocation(context);
+      if (entered == null || !context.mounted) return;
+      try {
+        await api.updateProjectLocation(project.id, entered);
+      } on Object catch (error) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(friendlyError(error))));
+        }
+        return;
+      }
+      place = entered;
+      _reload();
+      if (!context.mounted) return;
+    }
     try {
       final created = await api.processBoq(boq.id);
       if (!context.mounted) return;
@@ -39,14 +117,6 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('$created BOQ items created')));
-        return;
-      }
-      if (place.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Set a location on the project to fetch prices.'),
-          ),
-        );
         return;
       }
       final progress = ValueNotifier<String>('Preparing to fetch prices...');

@@ -550,6 +550,17 @@ class ApiClient {
     return ProjectDetail.fromJson(body['data'] as Map<String, dynamic>);
   }
 
+  /// Sets only the project's location (other fields are left as they are).
+  Future<void> updateProjectLocation(int id, String location) async {
+    final response = await _httpClient.put(
+      Uri.parse('$baseUrl/projects/$id'),
+      headers: {...await _headers(), 'Content-Type': 'application/json'},
+      body: jsonEncode({'location': location}),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+  }
+
   Future<void> deleteProject(int id) async {
     final response = await _httpClient.delete(
       Uri.parse('$baseUrl/projects/$id'),
