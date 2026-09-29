@@ -186,6 +186,88 @@ Widget _projectTextField({
   );
 }
 
+/// Project type: pick one of the types stored in the database, or type another.
+class _ProjectTypeField extends StatefulWidget {
+  const _ProjectTypeField({required this.api, required this.controller});
+
+  final ApiClient api;
+  final TextEditingController controller;
+
+  @override
+  State<_ProjectTypeField> createState() => _ProjectTypeFieldState();
+}
+
+class _ProjectTypeFieldState extends State<_ProjectTypeField> {
+  List<String> _types = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final catalog = await _loadOrNull(widget.api.categories);
+    if (mounted && catalog != null) {
+      setState(() => _types = catalog.projectTypes);
+    }
+  }
+
+  Future<void> _choose() async {
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.7,
+          ),
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              const ListTile(
+                title: Text(
+                  'Project type',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+              for (final type in _types)
+                ListTile(
+                  title: Text(type),
+                  trailing: type == widget.controller.text
+                      ? const Icon(Icons.check)
+                      : null,
+                  onTap: () => Navigator.pop(sheetContext, type),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (chosen != null) widget.controller.text = chosen;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      controller: widget.controller,
+      decoration: InputDecoration(
+        labelText: 'Project Type',
+        hintText: 'Choose or type a project type',
+        prefixIcon: const Icon(Icons.category_outlined),
+        suffixIcon: _types.isEmpty
+            ? null
+            : IconButton(
+                tooltip: 'Choose a project type',
+                icon: const Icon(Icons.arrow_drop_down_circle_outlined),
+                onPressed: _choose,
+              ),
+      ),
+    );
+  }
+}
+
 /// Read-only date field that opens a picker when tapped.
 Widget _projectDateField({
   required TextEditingController controller,
@@ -372,10 +454,9 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
                         label: l10n.projectCode,
                         icon: Icons.tag,
                       ),
-                      _projectTextField(
+                      _ProjectTypeField(
+                        api: widget.api,
                         controller: _projectType,
-                        label: 'Project Type',
-                        icon: Icons.category_outlined,
                       ),
                       DropdownButtonFormField<String>(
                         initialValue: _status,

@@ -52,10 +52,13 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
         const <HardwarePriceCategory>[];
     stats.addAll(priceCats);
     names.addAll(priceCats.map((c) => c.name).where((n) => n.isNotEmpty));
-    final hardwareCats =
-        await _loadOrNull(widget.api.hardwareCategoriesAdmin) ??
-        const <HardwareCategory>[];
-    names.addAll(hardwareCats.map((c) => c.name).where((n) => n.isNotEmpty));
+    // Every managed material category, even ones without prices yet.
+    final catalog = await _loadOrNull(widget.api.categories);
+    names.addAll(
+      (catalog?.materials ?? const <MaterialCategory>[])
+          .map((c) => c.name)
+          .where((n) => n.isNotEmpty),
+    );
     final filters = await _loadOrNull(widget.api.hardwarePriceFilters);
     if (mounted) {
       setState(() {

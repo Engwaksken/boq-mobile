@@ -96,4 +96,61 @@ void main() {
       ),
     );
   });
+
+  test('categories come from the API', () async {
+    final api = ApiClient(
+      storage: _Storage(),
+      httpClient: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'data': {
+              'project_types': ['Health Facility', 'Road Works'],
+              'work_sections': ['Substructure'],
+              'materials': [
+                {
+                  'name': 'Cement',
+                  'items': ['Portland Cement 42.5N'],
+                },
+              ],
+            },
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        ),
+      ),
+    );
+
+    final catalog = await api.categories();
+
+    expect(catalog.projectTypes, ['Health Facility', 'Road Works']);
+    expect(catalog.materials.single.items, ['Portland Cement 42.5N']);
+  });
+
+  test('importing without a plan explains what to do', () async {
+    final api = ApiClient(
+      storage: _Storage(),
+      httpClient: MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'success': false,
+            'error_code': 'FEATURE_TOPUP_REQUIRED',
+            'message': 'This feature is not included in your current plan.',
+          }),
+          403,
+          headers: {'content-type': 'application/json'},
+        ),
+      ),
+    );
+
+    await expectLater(
+      api.processBoq(1),
+      throwsA(
+        isA<ApiException>().having(
+          (e) => e.message,
+          'message',
+          contains('Start a trial or choose a plan'),
+        ),
+      ),
+    );
+  });
 }

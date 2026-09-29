@@ -756,10 +756,9 @@ class _EditProjectPageState extends State<EditProjectPage> {
                               label: 'Project Code',
                               icon: Icons.tag,
                             ),
-                            _projectTextField(
+                            _ProjectTypeField(
+                              api: widget.api,
                               controller: _projectType,
-                              label: 'Project Type',
-                              icon: Icons.category_outlined,
                             ),
                             DropdownButtonFormField<String>(
                               initialValue: _status,

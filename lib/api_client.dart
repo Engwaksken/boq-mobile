@@ -28,6 +28,20 @@ class _GuardedClient extends http.BaseClient {
 
   static const _timeout = Duration(seconds: 30);
 
+  /// Reading a BOQ (AI extraction of PDFs/photos, large spreadsheets) and
+  /// pricing run on the server for several minutes.
+  static const _longTimeout = Duration(minutes: 5);
+
+  static Duration _timeoutFor(Uri url) {
+    final path = url.path;
+    return path.endsWith('/process') ||
+            path.endsWith('/price-all') ||
+            path.endsWith('/pricing-batches') ||
+            path.contains('/pricing-jobs')
+        ? _longTimeout
+        : _timeout;
+  }
+
   final http.Client _inner;
   final void Function() _onUnauthorized;
 
@@ -35,7 +49,7 @@ class _GuardedClient extends http.BaseClient {
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     final http.StreamedResponse response;
     try {
-      response = await _inner.send(request).timeout(_timeout);
+      response = await _inner.send(request).timeout(_timeoutFor(request.url));
     } on TimeoutException {
       throw const ApiException(AppErrorMessages.timeout);
     } on ApiException {
@@ -642,6 +656,20 @@ class ApiClient {
         .toList();
   }
 
+  /// Selectable categories from the database: project types, BOQ work
+  /// sections and material categories (with their items).
+  Future<CategoryCatalog> categories() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/categories'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return CategoryCatalog.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
   /// Distinct suppliers and locations for the price list filters.
   Future<({List<String> suppliers, List<String> locations})>
   hardwarePriceFilters() async {
@@ -835,7 +863,15 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) {
-      throw ApiException(_message(body));
+      if (body['error_code'] == 'FEATURE_TOPUP_REQUIRED') {
+        throw ApiException(
+          'The BOQ was uploaded, but reading its items needs an active plan '
+          'with BOQ imports. Start a trial or choose a plan, then tap '
+          '"Generate BOQ" on the project.',
+          statusCode: response.statusCode,
+        );
+      }
+      throw ApiException(_message(body), statusCode: response.statusCode);
     }
     final meta = body['meta'];
     if (meta is Map && meta['items_imported'] is int) {
@@ -1829,6 +1865,54 @@ class NotificationItem {
   final Map<String, dynamic>? data;
 
   bool get isRead => readAt != null;
+}
+
+/// Categories managed in the database (never hard-coded in the app).
+class CategoryCatalog {
+  const CategoryCatalog({
+    this.projectTypes = const [],
+    this.workSections = const [],
+    this.materials = const [],
+  });
+
+  factory CategoryCatalog.fromJson(Map<String, dynamic> json) {
+    List<String> names(dynamic list) => (list is List ? list : const [])
+        .map((e) => '$e'.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    return CategoryCatalog(
+      projectTypes: names(json['project_types']),
+      workSections: names(json['work_sections']),
+      materials:
+          (json['materials'] is List ? json['materials'] as List : const [])
+              .whereType<Map>()
+              .map(
+                (m) => MaterialCategory(
+                  name: '${m['name'] ?? ''}',
+                  description: '${m['description'] ?? ''}',
+                  items: names(m['items']),
+                ),
+              )
+              .where((m) => m.name.isNotEmpty)
+              .toList(),
+    );
+  }
+
+  final List<String> projectTypes;
+  final List<String> workSections;
+  final List<MaterialCategory> materials;
+}
+
+class MaterialCategory {
+  const MaterialCategory({
+    required this.name,
+    this.description = '',
+    this.items = const [],
+  });
+
+  final String name;
+  final String description;
+  final List<String> items;
 }
 
 /// Estimated vs generated amounts for a BOQ or a whole project.
