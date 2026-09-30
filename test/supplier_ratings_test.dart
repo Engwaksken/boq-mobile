@@ -374,6 +374,40 @@ void main() {
       expect(result.rating.supplier?.name, 'Kampala Hardware');
     });
 
+    test('fetch latest prices accepts the background answer (202)', () async {
+      final api = ApiClient(
+        storage: _Storage(),
+        httpClient: MockClient(
+          (_) async => _json({
+            'success': true,
+            'status': 'started',
+            'message': 'Fetching the latest prices. This takes a few minutes.',
+            'data': {'status': 'started', 'fetched': 0},
+          }, 202),
+        ),
+      );
+
+      final result = await api.fetchDailyPrices();
+      expect(result.status, 'started');
+      expect(
+        result.message,
+        'Fetching the latest prices. This takes a few minutes.',
+      );
+    });
+
+    test('fetch latest prices shows the server error message', () async {
+      final api = ApiClient(
+        storage: _Storage(),
+        httpClient: MockClient(
+          (_) async => _json({
+            'message': 'You do not have permission to perform this action.',
+          }, 403),
+        ),
+      );
+
+      await expectLater(api.fetchDailyPrices(), throwsA(isA<ApiException>()));
+    });
+
     test('rating validation errors show the field message', () async {
       final api = ApiClient(
         storage: _Storage(),

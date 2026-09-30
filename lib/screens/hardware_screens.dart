@@ -629,9 +629,12 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
       final result = await widget.api.fetchDailyPrices();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fetched: ${result['fetched']} prices')),
+          SnackBar(
+            content: Text(result.message),
+            duration: const Duration(seconds: 6),
+            action: SnackBarAction(label: 'Refresh', onPressed: _fetch),
+          ),
         );
-        _fetch();
       }
     } on ApiException catch (e) {
       if (mounted) {

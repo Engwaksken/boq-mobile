@@ -1397,14 +1397,27 @@ class ApiClient {
     if (response.statusCode != 200) throw ApiException(_message(body));
   }
 
-  Future<Map<String, dynamic>> fetchDailyPrices() async {
+  /// Starts fetching the latest prices on the server. The server answers at
+  /// once (202) and fetches in the background; the returned message says so.
+  Future<({String status, String message})> fetchDailyPrices() async {
     final response = await _httpClient.post(
       Uri.parse('$baseUrl/hardware-prices/fetch'),
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
-    return body['data'] as Map<String, dynamic>;
+    if (response.statusCode != 200 && response.statusCode != 202) {
+      throw ApiException(_message(body));
+    }
+    final data = body['data'] is Map<String, dynamic>
+        ? body['data'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    final status = '${body['status'] ?? data['status'] ?? 'started'}';
+    final message = body['message'] is String && '${body['message']}'.isNotEmpty
+        ? body['message'] as String
+        : status == 'running'
+        ? 'Prices are already being fetched.'
+        : 'Fetching the latest prices. New prices appear in a few minutes.';
+    return (status: status, message: message);
   }
 
   // Proxy subscription API methods.
