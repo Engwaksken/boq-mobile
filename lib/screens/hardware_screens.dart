@@ -27,6 +27,8 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
   List<String> _categories = [];
   final List<String> _suppliers = [];
   final List<String> _locations = [];
+  final List<String> _regions = [];
+  String? _selectedRegion;
   List<HardwarePriceCategory> _categoryStats = [];
 
   @override
@@ -66,6 +68,7 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
         if (filters != null) {
           _replaceOptions(_suppliers, filters.suppliers);
           _replaceOptions(_locations, filters.locations);
+          _replaceOptions(_regions, filters.regions);
         }
         if (stats.isNotEmpty) {
           _categoryStats = stats..sort((a, b) => a.name.compareTo(b.name));
@@ -103,6 +106,7 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
         category: _selectedCategory,
         supplier: _selectedSupplier,
         location: _selectedLocation,
+        region: _selectedRegion,
         search: _searchController.text.isEmpty ? null : _searchController.text,
         page: target,
         perPage: 20,
@@ -488,6 +492,17 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
                     options: _suppliers,
                     onChanged: (v) => setState(() {
                       _selectedSupplier = v;
+                      _fetch();
+                    }),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  _FilterMenuChip(
+                    label: 'Region',
+                    icon: Icons.map_outlined,
+                    value: _selectedRegion,
+                    options: _regions,
+                    onChanged: (v) => setState(() {
+                      _selectedRegion = v;
                       _fetch();
                     }),
                   ),

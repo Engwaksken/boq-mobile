@@ -576,6 +576,7 @@ class ApiClient {
     String? category,
     String? supplier,
     String? location,
+    String? region,
     String? search,
     double? minPrice,
     double? maxPrice,
@@ -592,6 +593,7 @@ class ApiClient {
     if (category != null) queryParams['category'] = category;
     if (supplier != null) queryParams['supplier'] = supplier;
     if (location != null) queryParams['location'] = location;
+    if (region != null) queryParams['region'] = region;
     if (search != null) queryParams['search'] = search;
     if (minPrice != null) queryParams['min_price'] = minPrice.toString();
     if (maxPrice != null) queryParams['max_price'] = maxPrice.toString();
@@ -681,8 +683,10 @@ class ApiClient {
     );
   }
 
-  /// Distinct suppliers and locations for the price list filters.
-  Future<({List<String> suppliers, List<String> locations})>
+  /// Distinct suppliers, locations and regions for the price list filters.
+  Future<
+    ({List<String> suppliers, List<String> locations, List<String> regions})
+  >
   hardwarePriceFilters() async {
     final response = await _httpClient.get(
       Uri.parse('$baseUrl/hardware-prices/filters'),
@@ -695,7 +699,11 @@ class ApiClient {
         .map((e) => '$e'.trim())
         .where((e) => e.isNotEmpty)
         .toList();
-    return (suppliers: names('suppliers'), locations: names('locations'));
+    return (
+      suppliers: names('suppliers'),
+      locations: names('locations'),
+      regions: names('regions'),
+    );
   }
 
   Future<List<PriceComparisonItem>> hardwarePriceRecommendations({
