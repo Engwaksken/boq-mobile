@@ -403,4 +403,7 @@ class AppLocalizationsLg extends AppLocalizations {
 
   @override
   String get recentLocations => 'Eby\'Ekiwaaliro eby\'Olugendo';
+
+  @override
+  String get topSuppliers => 'Abatunzi Abasinga';
 }

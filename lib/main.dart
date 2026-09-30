@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:boq_mobile/l10n/app_localizations.dart';
@@ -38,6 +39,7 @@ part 'screens/boq_screens.dart';
 part 'screens/boqs_page.dart';
 part 'screens/boq_review_locations.dart';
 part 'screens/proxy_subscriptions_page.dart';
+part 'screens/supplier_ratings_screens.dart';
 
 /// Service for handling biometric authentication operations.
 class BiometricService {

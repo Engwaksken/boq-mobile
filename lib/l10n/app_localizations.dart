@@ -865,6 +865,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Recent Locations'**
   String get recentLocations;
+
+  /// No description provided for @topSuppliers.
+  ///
+  /// In en, this message translates to:
+  /// **'Top Suppliers'**
+  String get topSuppliers;
 }
 
 class _AppLocalizationsDelegate

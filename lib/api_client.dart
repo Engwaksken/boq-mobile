@@ -1784,6 +1784,143 @@ class ApiClient {
     return HardwareCategory.fromJson(body['data'] as Map<String, dynamic>);
   }
 
+  // Supplier and factory ratings ("Top Suppliers").
+
+  /// Top rated (or [lowest] rated) suppliers of a [type] (`supplier` =
+  /// hardware, `factory`) in a [period]: `week`, `month`, `year` or `all`.
+  Future<SupplierLeaderboard> supplierLeaderboard({
+    String period = 'month',
+    String type = 'supplier',
+    int limit = 10,
+    bool lowest = false,
+  }) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/supplier-ratings/leaderboard').replace(
+        queryParameters: {
+          'period': period,
+          'type': type,
+          'limit': '$limit',
+          'order': lowest ? 'lowest' : 'top',
+        },
+      ),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return SupplierLeaderboard.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
+  /// Totals, distribution, by type, scores by area and 12-month trends.
+  Future<SupplierRatingSummary> supplierRatingSummary({
+    String period = 'month',
+  }) async {
+    final response = await _httpClient.get(
+      Uri.parse(
+        '$baseUrl/supplier-ratings/summary',
+      ).replace(queryParameters: {'period': period}),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return SupplierRatingSummary.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
+  /// Active suppliers and factories to pick one to rate.
+  Future<List<RatedSupplier>> ratableSuppliers({
+    String search = '',
+    String? type,
+    int limit = 20,
+  }) async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/supplier-ratings/suppliers').replace(
+        queryParameters: {
+          if (search.trim().isNotEmpty) 'search': search.trim(),
+          'type': ?type,
+          'limit': '$limit',
+        },
+      ),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return (body['data'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(RatedSupplier.fromJson)
+        .toList();
+  }
+
+  /// One supplier's performance and the user's rating this month.
+  Future<SupplierPerformance> supplierPerformance(
+    int supplierId, {
+    String period = 'month',
+  }) async {
+    final response = await _httpClient.get(
+      Uri.parse(
+        '$baseUrl/supplier-ratings/suppliers/$supplierId',
+      ).replace(queryParameters: {'period': period}),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return SupplierPerformance.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
+  /// Rates a supplier (1 to 5 stars). A second rating in the same month
+  /// updates the first. Returns the server's message and the saved rating.
+  Future<({String message, SupplierRatingEntry rating})> rateSupplier(
+    int supplierId, {
+    required int rating,
+    int? priceRating,
+    int? qualityRating,
+    int? deliveryRating,
+    int? serviceRating,
+    String? comment,
+  }) async {
+    final text = comment?.trim() ?? '';
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/supplier-ratings/suppliers/$supplierId'),
+      headers: {...await _headers(), 'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'rating': rating,
+        'price_rating': priceRating,
+        'quality_rating': qualityRating,
+        'delivery_rating': deliveryRating,
+        'service_rating': serviceRating,
+        'comment': text.isEmpty ? null : text,
+      }),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw ApiException(_message(body), statusCode: response.statusCode);
+    }
+    return (
+      message: '${body['message'] ?? 'Your rating was saved.'}',
+      rating: SupplierRatingEntry.fromJson(
+        body['data'] as Map<String, dynamic>? ?? const {},
+      ),
+    );
+  }
+
+  /// The user's latest supplier ratings.
+  Future<List<SupplierRatingEntry>> mySupplierRatings() async {
+    final response = await _httpClient.get(
+      Uri.parse('$baseUrl/supplier-ratings/mine'),
+      headers: await _headers(),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw ApiException(_message(body));
+    return (body['data'] as List<dynamic>? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(SupplierRatingEntry.fromJson)
+        .toList();
+  }
+
   Future<Map<String, String>> _headers() async {
     final token = await _storage.read(key: _tokenKey);
     return {
@@ -3366,4 +3503,425 @@ class HardwareCategory {
   final bool isActive;
   final String createdAt;
   final String updatedAt;
+}
+
+// Supplier and factory ratings.
+
+Map<String, dynamic> _asMap(dynamic value) =>
+    value is Map<String, dynamic> ? value : const <String, dynamic>{};
+
+List<Map<String, dynamic>> _asMapList(dynamic value) =>
+    (value is List ? value : const [])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+
+int? _asIntOrNull(dynamic value) => value == null ? null : _asInt(value);
+
+String? _asTextOrNull(dynamic value) {
+  final text = value?.toString().trim() ?? '';
+  return text.isEmpty ? null : text;
+}
+
+/// A hardware supplier or factory as the ratings API returns it.
+class RatedSupplier {
+  const RatedSupplier({
+    required this.id,
+    required this.name,
+    required this.type,
+    this.location,
+    this.region,
+    this.country,
+    this.websiteUrl,
+    this.rating = 0,
+    this.ratingsCount = 0,
+  });
+
+  factory RatedSupplier.fromJson(Map<String, dynamic> json) => RatedSupplier(
+    id: _asInt(json['id']),
+    name: '${json['name'] ?? ''}',
+    type: '${json['type'] ?? 'supplier'}',
+    location: _asTextOrNull(json['location']),
+    region: _asTextOrNull(json['region']),
+    country: _asTextOrNull(json['country']),
+    websiteUrl: _asTextOrNull(json['website_url']),
+    rating: _asDouble(json['rating']),
+    ratingsCount: _asInt(json['ratings_count']),
+  );
+
+  final int id;
+  final String name;
+
+  /// `supplier` (hardware shop) or `factory`.
+  final String type;
+  final String? location;
+  final String? region;
+  final String? country;
+  final String? websiteUrl;
+
+  /// All-time average (each user's latest rating) and number of raters.
+  final double rating;
+  final int ratingsCount;
+
+  bool get isFactory => type == 'factory';
+
+  /// `Kampala, Central`: location and region, without repeats.
+  String get place => {location, region}.whereType<String>().join(', ');
+}
+
+/// Average score in each area (1 to 5, null when nobody scored that area).
+class RatingCriteria {
+  const RatingCriteria({this.price, this.quality, this.delivery, this.service});
+
+  factory RatingCriteria.fromJson(dynamic json) {
+    final map = _asMap(json);
+    return RatingCriteria(
+      price: _asDoubleOrNull(map['price']),
+      quality: _asDoubleOrNull(map['quality']),
+      delivery: _asDoubleOrNull(map['delivery']),
+      service: _asDoubleOrNull(map['service']),
+    );
+  }
+
+  final double? price;
+  final double? quality;
+  final double? delivery;
+  final double? service;
+
+  /// Label and score of each area, in display order.
+  List<(String, double?)> get entries => [
+    ('Price', price),
+    ('Quality', quality),
+    ('Delivery', delivery),
+    ('Service', service),
+  ];
+
+  bool get isEmpty => entries.every((e) => e.$2 == null);
+}
+
+/// One row of a top 10 ranking.
+class SupplierLeaderboardEntry {
+  const SupplierLeaderboardEntry({
+    required this.rank,
+    required this.supplier,
+    required this.average,
+    required this.score,
+    required this.count,
+    required this.criteria,
+  });
+
+  factory SupplierLeaderboardEntry.fromJson(Map<String, dynamic> json) =>
+      SupplierLeaderboardEntry(
+        rank: _asInt(json['rank']),
+        supplier: RatedSupplier.fromJson(_asMap(json['supplier'])),
+        average: _asDouble(json['average']),
+        score: _asDouble(json['score']),
+        count: _asInt(json['count']),
+        criteria: RatingCriteria.fromJson(json['criteria']),
+      );
+
+  final int rank;
+  final RatedSupplier supplier;
+
+  /// Average stars in the period.
+  final double average;
+
+  /// Weighted score used for the order.
+  final double score;
+
+  /// Ratings in the period.
+  final int count;
+  final RatingCriteria criteria;
+}
+
+class SupplierLeaderboard {
+  const SupplierLeaderboard({
+    required this.period,
+    required this.periodLabel,
+    required this.type,
+    required this.items,
+  });
+
+  factory SupplierLeaderboard.fromJson(Map<String, dynamic> json) =>
+      SupplierLeaderboard(
+        period: '${json['period'] ?? 'month'}',
+        periodLabel: '${json['period_label'] ?? ''}',
+        type: '${json['type'] ?? 'supplier'}',
+        items: _asMapList(
+          json['items'],
+        ).map(SupplierLeaderboardEntry.fromJson).toList(),
+      );
+
+  final String period;
+  final String periodLabel;
+  final String type;
+  final List<SupplierLeaderboardEntry> items;
+}
+
+/// Number of ratings with [stars] stars.
+class RatingBucket {
+  const RatingBucket({required this.stars, required this.count});
+
+  factory RatingBucket.fromJson(Map<String, dynamic> json) =>
+      RatingBucket(stars: _asInt(json['stars']), count: _asInt(json['count']));
+
+  final int stars;
+  final int count;
+
+  /// 5 down to 1, filling in missing star values with 0.
+  static List<RatingBucket> listFrom(dynamic json) {
+    final counts = {
+      for (final row in _asMapList(json).map(RatingBucket.fromJson))
+        row.stars: row.count,
+    };
+    return [
+      for (var stars = 5; stars >= 1; stars--)
+        RatingBucket(stars: stars, count: counts[stars] ?? 0),
+    ];
+  }
+}
+
+/// One month of a ratings trend.
+class RatingTrendPoint {
+  const RatingTrendPoint({
+    required this.period,
+    required this.label,
+    required this.count,
+    this.average,
+  });
+
+  factory RatingTrendPoint.fromJson(Map<String, dynamic> json) =>
+      RatingTrendPoint(
+        period: '${json['period'] ?? ''}',
+        label: '${json['label'] ?? json['period'] ?? ''}',
+        average: _asDoubleOrNull(json['average']),
+        count: _asInt(json['count']),
+      );
+
+  /// `YYYY-MM`.
+  final String period;
+
+  /// `Sep 2026`.
+  final String label;
+  final double? average;
+  final int count;
+
+  static List<RatingTrendPoint> listFrom(dynamic json) =>
+      _asMapList(json).map(RatingTrendPoint.fromJson).toList();
+}
+
+class RatingTypeStat {
+  const RatingTypeStat({this.count = 0, this.average});
+
+  factory RatingTypeStat.fromJson(dynamic json) {
+    final map = _asMap(json);
+    return RatingTypeStat(
+      count: _asInt(map['count']),
+      average: _asDoubleOrNull(map['average']),
+    );
+  }
+
+  final int count;
+  final double? average;
+}
+
+/// Figures for the charts on the Top Suppliers screen.
+class SupplierRatingSummary {
+  const SupplierRatingSummary({
+    required this.period,
+    required this.periodLabel,
+    required this.total,
+    required this.suppliers,
+    required this.distribution,
+    required this.hardware,
+    required this.factories,
+    required this.criteria,
+    required this.trend,
+    required this.hardwareTrend,
+    required this.factoryTrend,
+    this.average,
+  });
+
+  factory SupplierRatingSummary.fromJson(Map<String, dynamic> json) {
+    final byType = _asMap(json['by_type']);
+    final trendByType = _asMap(json['trend_by_type']);
+    return SupplierRatingSummary(
+      period: '${json['period'] ?? 'month'}',
+      periodLabel: '${json['period_label'] ?? ''}',
+      total: _asInt(json['total']),
+      suppliers: _asInt(json['suppliers']),
+      average: _asDoubleOrNull(json['average']),
+      distribution: RatingBucket.listFrom(json['distribution']),
+      hardware: RatingTypeStat.fromJson(byType['supplier']),
+      factories: RatingTypeStat.fromJson(byType['factory']),
+      criteria: RatingCriteria.fromJson(json['criteria']),
+      trend: RatingTrendPoint.listFrom(json['trend']),
+      hardwareTrend: RatingTrendPoint.listFrom(trendByType['supplier']),
+      factoryTrend: RatingTrendPoint.listFrom(trendByType['factory']),
+    );
+  }
+
+  final String period;
+  final String periodLabel;
+
+  /// Ratings in the period.
+  final int total;
+
+  /// Suppliers and factories rated in the period.
+  final int suppliers;
+  final double? average;
+
+  /// 5 stars down to 1 star.
+  final List<RatingBucket> distribution;
+  final RatingTypeStat hardware;
+  final RatingTypeStat factories;
+  final RatingCriteria criteria;
+
+  /// Last 12 months, oldest first.
+  final List<RatingTrendPoint> trend;
+  final List<RatingTrendPoint> hardwareTrend;
+  final List<RatingTrendPoint> factoryTrend;
+}
+
+/// A rating shown in a supplier's recent reviews.
+class SupplierReview {
+  const SupplierReview({
+    required this.id,
+    required this.rating,
+    this.comment,
+    this.author,
+    this.isHidden = false,
+    this.ratedAt,
+  });
+
+  factory SupplierReview.fromJson(Map<String, dynamic> json) => SupplierReview(
+    id: _asInt(json['id']),
+    rating: _asInt(json['rating']),
+    comment: _asTextOrNull(json['comment']),
+    author: _asTextOrNull(json['author']),
+    isHidden: json['is_hidden'] == true || json['is_hidden'] == 1,
+    ratedAt: json['rated_at'] as String?,
+  );
+
+  final int id;
+  final int rating;
+  final String? comment;
+
+  /// Only sent to administrators.
+  final String? author;
+  final bool isHidden;
+  final String? ratedAt;
+}
+
+/// A rating the user gave (their rating this month, or one of "My ratings").
+class SupplierRatingEntry {
+  const SupplierRatingEntry({
+    required this.rating,
+    this.id,
+    this.supplierId,
+    this.priceRating,
+    this.qualityRating,
+    this.deliveryRating,
+    this.serviceRating,
+    this.comment,
+    this.period,
+    this.ratedAt,
+    this.supplier,
+  });
+
+  factory SupplierRatingEntry.fromJson(Map<String, dynamic> json) {
+    final supplier = json['supplier'];
+    return SupplierRatingEntry(
+      id: _asIntOrNull(json['id']),
+      supplierId: _asIntOrNull(json['supplier_id']),
+      rating: _asInt(json['rating']),
+      priceRating: _asIntOrNull(json['price_rating']),
+      qualityRating: _asIntOrNull(json['quality_rating']),
+      deliveryRating: _asIntOrNull(json['delivery_rating']),
+      serviceRating: _asIntOrNull(json['service_rating']),
+      comment: _asTextOrNull(json['comment']),
+      period: json['period'] as String?,
+      ratedAt: json['rated_at'] as String?,
+      supplier: supplier is Map<String, dynamic>
+          ? RatedSupplier.fromJson(supplier)
+          : null,
+    );
+  }
+
+  final int? id;
+  final int? supplierId;
+  final int rating;
+  final int? priceRating;
+  final int? qualityRating;
+  final int? deliveryRating;
+  final int? serviceRating;
+  final String? comment;
+
+  /// Month rated, `YYYY-MM`.
+  final String? period;
+  final String? ratedAt;
+  final RatedSupplier? supplier;
+}
+
+/// One supplier's performance: rank, figures, reviews and the user's rating.
+class SupplierPerformance {
+  const SupplierPerformance({
+    required this.supplier,
+    required this.period,
+    required this.periodTotal,
+    required this.total,
+    required this.distribution,
+    required this.criteria,
+    required this.trend,
+    required this.reviews,
+    this.rank,
+    this.rankOf,
+    this.periodAverage,
+    this.average,
+    this.mine,
+  });
+
+  factory SupplierPerformance.fromJson(Map<String, dynamic> json) {
+    final rank = json['rank'];
+    final mine = json['mine'];
+    return SupplierPerformance(
+      supplier: RatedSupplier.fromJson(_asMap(json['supplier'])),
+      period: '${json['period'] ?? 'month'}',
+      rank: rank is Map ? _asIntOrNull(rank['rank']) : null,
+      rankOf: rank is Map ? _asIntOrNull(rank['of']) : null,
+      periodTotal: _asInt(json['period_total']),
+      periodAverage: _asDoubleOrNull(json['period_average']),
+      total: _asInt(json['total']),
+      average: _asDoubleOrNull(json['average']),
+      distribution: RatingBucket.listFrom(json['distribution']),
+      criteria: RatingCriteria.fromJson(json['criteria']),
+      trend: RatingTrendPoint.listFrom(json['trend']),
+      reviews: _asMapList(
+        json['reviews'],
+      ).map(SupplierReview.fromJson).toList(),
+      mine: mine is Map<String, dynamic>
+          ? SupplierRatingEntry.fromJson(mine)
+          : null,
+    );
+  }
+
+  final RatedSupplier supplier;
+  final String period;
+
+  /// Position among suppliers of the same type in the period (null = not
+  /// rated in the period) and how many were ranked.
+  final int? rank;
+  final int? rankOf;
+  final int periodTotal;
+  final double? periodAverage;
+
+  /// All-time figures.
+  final int total;
+  final double? average;
+  final List<RatingBucket> distribution;
+  final RatingCriteria criteria;
+  final List<RatingTrendPoint> trend;
+  final List<SupplierReview> reviews;
+
+  /// The user's rating this month (pre-fills "Rate again").
+  final SupplierRatingEntry? mine;
 }

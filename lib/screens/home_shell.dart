@@ -21,6 +21,9 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
 
+  /// Position of Get Prices in the destinations below.
+  static const _getPricesIndex = 2;
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -126,7 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              for (var index = 0; index < destinations.length; index++)
+              for (var index = 0; index < destinations.length; index++) ...[
                 drawerTile(
                   selected: _selectedIndex == index,
                   icon: _selectedIndex == index
@@ -139,6 +142,21 @@ class _HomeScreenState extends State<HomeScreen> {
                     Navigator.of(context).pop();
                   },
                 ),
+                // Top Suppliers sits under Get Prices (same permission).
+                if (index == _getPricesIndex)
+                  drawerTile(
+                    icon: Icons.emoji_events_outlined,
+                    label: l10n.topSuppliers,
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => TopSuppliersPage(api: widget.api),
+                        ),
+                      );
+                    },
+                  ),
+              ],
 
               drawerTile(
                 icon: Icons.receipt_long_outlined,

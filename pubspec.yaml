@@ -49,6 +49,7 @@ dependencies:
   app_settings: ^9.0.0
   image: ^4.10.1
   archive: ^4.3.0
+  fl_chart: ^1.2.0
 
 dev_dependencies:
   flutter_test:

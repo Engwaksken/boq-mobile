@@ -404,4 +404,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get recentLocations => 'Recent Locations';
+
+  @override
+  String get topSuppliers => 'Top Suppliers';
 }

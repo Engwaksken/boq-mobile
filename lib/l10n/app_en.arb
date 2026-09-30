@@ -126,5 +126,6 @@
   "selectBoqs": "Select BOQs",
   "selectedCount": "selected",
   "locationHistory": "Location History",
-  "recentLocations": "Recent Locations"
+  "recentLocations": "Recent Locations",
+  "topSuppliers": "Top Suppliers"
 }
