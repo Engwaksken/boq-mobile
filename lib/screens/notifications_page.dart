@@ -274,6 +274,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
         return StatusTone.warning;
       case 'error':
         return StatusTone.danger;
+      case 'price_alert':
+        return StatusTone.brand;
       default:
         return StatusTone.info;
     }
@@ -287,6 +289,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
         return Icons.warning_amber_rounded;
       case 'error':
         return Icons.error_outline_rounded;
+      case 'price_alert':
+        return Icons.price_change_outlined;
       default:
         return Icons.info_outline_rounded;
     }
