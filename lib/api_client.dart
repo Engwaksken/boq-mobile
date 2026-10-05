@@ -7,6 +7,8 @@ import 'package:http/http.dart' as http;
 
 import 'app_errors.dart';
 
+part 'organisation_api.dart';
+
 /// `2026-09-01T00:00:00.000000Z` → `2026-09-01` (API date columns).
 String _dateOnly(dynamic value) {
   final raw = (value as String? ?? '').trim();
@@ -112,7 +114,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) {
-      throw ApiException(_message(body));
+      throw _apiError(response, body);
     }
 
     final token = body['data']?['token'] as String?;
@@ -145,7 +147,7 @@ class ApiClient {
     final body = _decode(response);
 
     if (response.statusCode != 200 && response.statusCode != 201) {
-      throw ApiException(_message(body));
+      throw _apiError(response, body);
     }
 
     final token = body['data']?['token'] as String?;
@@ -169,7 +171,7 @@ class ApiClient {
     final body = _decode(response);
 
     if (response.statusCode != 200 && response.statusCode != 202) {
-      throw ApiException(_message(body));
+      throw _apiError(response, body);
     }
   }
 
@@ -180,7 +182,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) {
-      throw ApiException(_message(body));
+      throw _apiError(response, body);
     }
     return DashboardSummary.fromJson(body['data'] as Map<String, dynamic>);
   }
@@ -206,7 +208,7 @@ class ApiClient {
       await _httpClient.send(request),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return UserProfile.fromJson(body['data']['user'] as Map<String, dynamic>);
   }
 
@@ -216,7 +218,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return UserProfile.fromJson(body['data']['user'] as Map<String, dynamic>);
   }
 
@@ -227,7 +229,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) {
-      throw ApiException(_message(body));
+      throw _apiError(response, body);
     }
     return UserProfile.fromJson(body['data']['user'] as Map<String, dynamic>);
   }
@@ -238,7 +240,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return body['data'] as Map<String, dynamic>;
   }
 
@@ -248,7 +250,7 @@ class ApiClient {
       headers: const {'Accept': 'application/json'},
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return (body['data'] as List<dynamic>? ?? [])
         .whereType<Map<String, dynamic>>()
         .toList();
@@ -262,7 +264,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 201) {
-      throw ApiException(_message(body));
+      throw _apiError(response, body);
     }
     return body['data'] as Map<String, dynamic>;
   }
@@ -274,7 +276,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) {
-      throw ApiException(_message(body));
+      throw _apiError(response, body);
     }
     return (body['data'] as List<dynamic>? ?? [])
         .whereType<Map<String, dynamic>>()
@@ -306,7 +308,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 201) {
-      throw ApiException(_message(body));
+      throw _apiError(response, body);
     }
     return body['data'] as Map<String, dynamic>;
   }
@@ -318,7 +320,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) {
-      throw ApiException(_message(body));
+      throw _apiError(response, body);
     }
     return body['data'] as Map<String, dynamic>;
   }
@@ -330,7 +332,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) {
-      throw ApiException(_message(body));
+      throw _apiError(response, body);
     }
     return body['data'] as Map<String, dynamic>;
   }
@@ -349,7 +351,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) {
-      throw ApiException(_message(body));
+      throw _apiError(response, body);
     }
     return body['data'] as Map<String, dynamic>;
   }
@@ -361,7 +363,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) {
-      throw ApiException(_message(body));
+      throw _apiError(response, body);
     }
     return (body['data'] as List<dynamic>? ?? [])
         .whereType<Map<String, dynamic>>()
@@ -393,7 +395,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) {
-      throw ApiException(_message(body));
+      throw _apiError(response, body);
     }
     return UserProfile.fromJson(body['data']['user'] as Map<String, dynamic>);
   }
@@ -417,7 +419,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) {
-      throw ApiException(_message(body));
+      throw _apiError(response, body);
     }
     final pageData = body['data'] as Map<String, dynamic>;
     return (pageData['data'] as List<dynamic>)
@@ -432,7 +434,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return ProjectDetail.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -488,7 +490,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 201) {
-      throw ApiException(_message(body));
+      throw _apiError(response, body);
     }
     return ProjectSummary.fromJson(body['data'] as Map<String, dynamic>);
   }
@@ -546,7 +548,7 @@ class ApiClient {
       }),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return ProjectDetail.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -558,7 +560,7 @@ class ApiClient {
       body: jsonEncode({'location': location}),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
   }
 
   Future<void> deleteProject(int id) async {
@@ -567,7 +569,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
   }
 
   Future<HardwarePricePaginated> hardwarePrices({
@@ -609,7 +611,7 @@ class ApiClient {
     ).replace(queryParameters: queryParams);
     final response = await _httpClient.get(uri, headers: await _headers());
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return HardwarePricePaginated.fromJson(
       body['data'] as Map<String, dynamic>,
     );
@@ -621,7 +623,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return HardwarePrice.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -640,7 +642,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return HardwarePriceHistory.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -650,7 +652,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return HardwarePriceStatistics.fromJson(
       body['data'] as Map<String, dynamic>,
     );
@@ -662,7 +664,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return (body['data'] as List<dynamic>)
         .cast<Map<String, dynamic>>()
         .map(HardwarePriceCategory.fromJson)
@@ -677,7 +679,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return CategoryCatalog.fromJson(
       body['data'] as Map<String, dynamic>? ?? const {},
     );
@@ -693,7 +695,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     final data = body['data'] as Map<String, dynamic>? ?? const {};
     List<String> names(String key) => (data[key] as List<dynamic>? ?? const [])
         .map((e) => '$e'.trim())
@@ -722,7 +724,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return (body['data'] as List<dynamic>)
         .cast<Map<String, dynamic>>()
         .map(PriceComparisonItem.fromJson)
@@ -736,7 +738,7 @@ class ApiClient {
       body: jsonEncode({'ids': ids}),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return PriceComparisonResult.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -746,7 +748,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return BoqItemPriceMatch.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -760,7 +762,7 @@ class ApiClient {
       body: {'hardware_price_id': hardwarePriceId},
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return BoqItemSummary.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -770,7 +772,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return BoqDetail.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -780,7 +782,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return BoqItemDetail.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -867,7 +869,7 @@ class ApiClient {
     if (response.statusCode == 401) _expireSession();
 
     final body = _decode(response);
-    if (response.statusCode != 201) throw ApiException(_message(body));
+    if (response.statusCode != 201) throw _apiError(response, body);
     final data = body['data'];
     if (data is! Map<String, dynamic>) {
       throw const ApiException('The server did not return the created BOQ.');
@@ -888,9 +890,10 @@ class ApiClient {
           'with BOQ imports. Start a trial or choose a plan, then tap '
           '"Generate BOQ" on the project.',
           statusCode: response.statusCode,
+          errorCode: 'FEATURE_TOPUP_REQUIRED',
         );
       }
-      throw ApiException(_message(body), statusCode: response.statusCode);
+      throw _apiError(response, body);
     }
     final meta = body['meta'];
     if (meta is Map && meta['items_imported'] is int) {
@@ -933,7 +936,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) {
-      throw ApiException(_message(body));
+      throw _apiError(response, body);
     }
     final pageData = body['data'] as Map<String, dynamic>;
     return (pageData['data'] as List<dynamic>)
@@ -955,7 +958,7 @@ class ApiClient {
         headers: await _headers(),
       );
       final body = _decode(response);
-      if (response.statusCode != 200) throw ApiException(_message(body));
+      if (response.statusCode != 200) throw _apiError(response, body);
       final pageData = body['data'];
       if (pageData is! Map<String, dynamic>) break;
       final rows = pageData['data'];
@@ -976,7 +979,7 @@ class ApiClient {
       body: {'location': location},
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return body['data'] as Map<String, dynamic>;
   }
 
@@ -987,7 +990,7 @@ class ApiClient {
       body: {'location': location},
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return body['data']['items_priced'] as int? ?? 0;
   }
 
@@ -1000,7 +1003,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return (body['data'] as List<dynamic>)
         .cast<Map<String, dynamic>>()
         .toList();
@@ -1012,7 +1015,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return (body['data'] as List<dynamic>)
         .cast<Map<String, dynamic>>()
         .toList();
@@ -1025,7 +1028,7 @@ class ApiClient {
       body: {'location': location},
     );
     final body = _decode(response);
-    if (response.statusCode != 202) throw ApiException(_message(body));
+    if (response.statusCode != 202) throw _apiError(response, body);
     return PricingBatch.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -1036,7 +1039,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) {
-      throw ApiException(_message(body));
+      throw _apiError(response, body);
     }
     return PricingBatch.fromJson(body['data'] as Map<String, dynamic>);
   }
@@ -1077,7 +1080,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) {
-      throw ApiException(_message(body), statusCode: response.statusCode);
+      throw _apiError(response, body);
     }
     return body['message'] as String? ?? 'BOQ sent.';
   }
@@ -1090,7 +1093,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) {
-      throw ApiException(_message(body), statusCode: response.statusCode);
+      throw _apiError(response, body);
     }
     return BoqShareLink.fromJson(body['data'] as Map<String, dynamic>);
   }
@@ -1103,7 +1106,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) {
-      throw ApiException(_message(body), statusCode: response.statusCode);
+      throw _apiError(response, body);
     }
     final data = body['data'];
     final list = data is Map ? data['countries_detailed'] : null;
@@ -1121,7 +1124,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) {
-      throw ApiException(_message(body), statusCode: response.statusCode);
+      throw _apiError(response, body);
     }
     final data = body['data'];
     return data is Map<String, dynamic> ? CompanyProfile.fromJson(data) : null;
@@ -1154,9 +1157,11 @@ class ApiClient {
               errors.values.first is List
           ? (errors.values.first as List).firstOrNull?.toString()
           : null;
+      final code = body['error_code'] ?? body['code'];
       throw ApiException(
         firstError ?? _message(body),
         statusCode: response.statusCode,
+        errorCode: code is String && code.trim().isNotEmpty ? code : null,
       );
     }
     return CompanyProfile.fromJson(body['data'] as Map<String, dynamic>);
@@ -1187,7 +1192,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     final pageData = body['data'] as Map<String, dynamic>;
     return (pageData['data'] as List<dynamic>)
         .cast<Map<String, dynamic>>()
@@ -1201,7 +1206,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
   }
 
   /// BOQs the user can see, newest first.
@@ -1224,7 +1229,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     final pageData = body['data'] as Map<String, dynamic>? ?? const {};
     final rows = pageData['data'] as List<dynamic>? ?? const [];
     return (
@@ -1253,7 +1258,7 @@ class ApiClient {
       }),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return BoqListItem.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -1264,7 +1269,7 @@ class ApiClient {
       headers: await _headers(),
     );
     if (response.statusCode != 200) {
-      throw ApiException(_message(_decode(response)));
+      throw _apiError(response, _decode(response));
     }
     return response.bodyBytes;
   }
@@ -1308,7 +1313,7 @@ class ApiClient {
     }
     if (response.statusCode == 401) _expireSession();
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     final data = body['data'] as Map<String, dynamic>? ?? const {};
     return (
       message: '${body['message'] ?? 'Estimated prices updated.'}',
@@ -1326,7 +1331,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return (body['data'] as List<dynamic>? ?? const [])
         .whereType<Map<String, dynamic>>()
         .map(BoqLocation.fromJson)
@@ -1346,7 +1351,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return LocationComparison.fromJson(
       body['data'] as Map<String, dynamic>? ?? const {},
     );
@@ -1360,7 +1365,7 @@ class ApiClient {
       body: jsonEncode({'location': location}),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return _asInt(body['data']?['applied']);
   }
 
@@ -1381,7 +1386,7 @@ class ApiClient {
       }),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return (
       done: _asInt(body['data']?['done']),
       skipped: _asInt(body['data']?['skipped']),
@@ -1394,7 +1399,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
   }
 
   /// Starts fetching the latest prices on the server. The server answers at
@@ -1406,7 +1411,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200 && response.statusCode != 202) {
-      throw ApiException(_message(body));
+      throw _apiError(response, body);
     }
     final data = body['data'] is Map<String, dynamic>
         ? body['data'] as Map<String, dynamic>
@@ -1430,7 +1435,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return (body['data'] as List<dynamic>? ?? [])
         .cast<Map<String, dynamic>>()
         .map(BeneficiaryUser.fromJson)
@@ -1450,7 +1455,7 @@ class ApiClient {
       },
     );
     final body = _decode(response);
-    if (response.statusCode != 201) throw ApiException(_message(body));
+    if (response.statusCode != 201) throw _apiError(response, body);
     return ProxySubscription.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -1477,7 +1482,7 @@ class ApiClient {
       },
     );
     final body = _decode(response);
-    if (response.statusCode != 201) throw ApiException(_message(body));
+    if (response.statusCode != 201) throw _apiError(response, body);
     return body['data'] as Map<String, dynamic>;
   }
 
@@ -1496,7 +1501,7 @@ class ApiClient {
       },
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return body['data'] as Map<String, dynamic>;
   }
 
@@ -1506,7 +1511,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return (body['data'] as List<dynamic>? ?? [])
         .cast<Map<String, dynamic>>()
         .map(ProxySubscription.fromJson)
@@ -1519,7 +1524,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return ProxySubscription.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -1529,7 +1534,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
   }
 
   // BOQ pricing job API methods.
@@ -1541,7 +1546,7 @@ class ApiClient {
       body: {'batch_size': batchSize.toString()},
     );
     final body = _decode(response);
-    if (response.statusCode != 201) throw ApiException(_message(body));
+    if (response.statusCode != 201) throw _apiError(response, body);
     return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -1551,7 +1556,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -1561,7 +1566,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -1571,7 +1576,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return BoqPricingJobProgress.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -1581,7 +1586,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -1591,7 +1596,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -1601,7 +1606,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -1611,7 +1616,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -1624,7 +1629,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return BoqPricingJobProgress.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -1636,7 +1641,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return (body['data'] as List<dynamic>? ?? [])
         .cast<Map<String, dynamic>>()
         .map(AiProvider.fromJson)
@@ -1664,7 +1669,7 @@ class ApiClient {
       },
     );
     final body = _decode(response);
-    if (response.statusCode != 201) throw ApiException(_message(body));
+    if (response.statusCode != 201) throw _apiError(response, body);
     return AiProvider.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -1689,7 +1694,7 @@ class ApiClient {
       body: body,
     );
     final responseBody = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(responseBody));
+    if (response.statusCode != 200) throw _apiError(response, responseBody);
     return AiProvider.fromJson(responseBody['data'] as Map<String, dynamic>);
   }
 
@@ -1699,7 +1704,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
   }
 
   Future<Map<String, dynamic>> testAiProvider(int id) async {
@@ -1708,7 +1713,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return body['data'] as Map<String, dynamic>;
   }
 
@@ -1718,7 +1723,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return AiProvider.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -1730,7 +1735,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     final raw = body['data'];
     final list = raw is List
         ? raw
@@ -1759,7 +1764,7 @@ class ApiClient {
       },
     );
     final body = _decode(response);
-    if (response.statusCode != 201) throw ApiException(_message(body));
+    if (response.statusCode != 201) throw _apiError(response, body);
     return HardwareCategory.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -1780,7 +1785,7 @@ class ApiClient {
       body: body,
     );
     final responseBody = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(responseBody));
+    if (response.statusCode != 200) throw _apiError(response, responseBody);
     return HardwareCategory.fromJson(
       responseBody['data'] as Map<String, dynamic>,
     );
@@ -1792,7 +1797,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
   }
 
   Future<HardwareCategory> toggleHardwareCategory(int id) async {
@@ -1801,7 +1806,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return HardwareCategory.fromJson(body['data'] as Map<String, dynamic>);
   }
 
@@ -1827,7 +1832,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return SupplierLeaderboard.fromJson(
       body['data'] as Map<String, dynamic>? ?? const {},
     );
@@ -1844,7 +1849,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return SupplierRatingSummary.fromJson(
       body['data'] as Map<String, dynamic>? ?? const {},
     );
@@ -1867,7 +1872,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return (body['data'] as List<dynamic>? ?? const [])
         .whereType<Map<String, dynamic>>()
         .map(RatedSupplier.fromJson)
@@ -1886,7 +1891,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return SupplierPerformance.fromJson(
       body['data'] as Map<String, dynamic>? ?? const {},
     );
@@ -1918,7 +1923,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200 && response.statusCode != 201) {
-      throw ApiException(_message(body), statusCode: response.statusCode);
+      throw _apiError(response, body);
     }
     return (
       message: '${body['message'] ?? 'Your rating was saved.'}',
@@ -1935,7 +1940,7 @@ class ApiClient {
       headers: await _headers(),
     );
     final body = _decode(response);
-    if (response.statusCode != 200) throw ApiException(_message(body));
+    if (response.statusCode != 200) throw _apiError(response, body);
     return (body['data'] as List<dynamic>? ?? const [])
         .whereType<Map<String, dynamic>>()
         .map(SupplierRatingEntry.fromJson)
@@ -2003,6 +2008,15 @@ class ApiClient {
     return message is String && message.trim().isNotEmpty
         ? message
         : 'Unable to complete the request.';
+  }
+
+  ApiException _apiError(http.Response response, Map<String, dynamic> body) {
+    final code = body['error_code'] ?? body['code'];
+    return ApiException(
+      _message(body),
+      statusCode: response.statusCode,
+      errorCode: code is String && code.trim().isNotEmpty ? code : null,
+    );
   }
 }
 
@@ -2498,9 +2512,12 @@ class BoqItemSummary {
 }
 
 class ApiException implements Exception {
-  const ApiException(this.message, {this.statusCode});
+  const ApiException(this.message, {this.statusCode, this.errorCode});
   final String message;
   final int? statusCode;
+
+  /// Machine-readable code from the server (`error_code` or `code`), if any.
+  final String? errorCode;
 
   @override
   String toString() => message;

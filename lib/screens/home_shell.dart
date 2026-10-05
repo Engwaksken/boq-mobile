@@ -192,6 +192,30 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 },
               ),
+              drawerTile(
+                icon: Icons.payments_outlined,
+                label: l10n.orgExpenses,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ExpensesPage(api: widget.api),
+                    ),
+                  );
+                },
+              ),
+              drawerTile(
+                icon: Icons.group_add_outlined,
+                label: l10n.orgInvitations,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => InvitationsPage(api: widget.api),
+                    ),
+                  );
+                },
+              ),
             ],
           ),
         ),

@@ -411,22 +411,20 @@ class _PlansPageState extends State<PlansPage> {
     final id = int.tryParse('${plan['id'] ?? ''}');
     if (id == null || _submittingPlanId != null) return;
 
+    final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Select subscription plan'),
-        content: Text(
-          'Create a pending subscription for ${plan['name'] ?? 'this plan'}? '
-          'Your plan becomes active only after payment is confirmed.',
-        ),
+        title: Text(l10n.confirmPurchaseTitle),
+        content: Text(l10n.confirmPurchaseMessage('${plan['name'] ?? ''}')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Continue'),
+            child: Text(l10n.continueAction),
           ),
         ],
       ),
@@ -466,9 +464,11 @@ class _PlansPageState extends State<PlansPage> {
       }
     } on ApiException catch (e) {
       if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
+      final friendly = planLimitErrorMessage(l10n, e.errorCode);
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(e.message)));
+      ).showSnackBar(SnackBar(content: Text(friendly ?? e.message)));
     } finally {
       if (mounted) setState(() => _submittingPlanId = null);
     }
@@ -495,20 +495,52 @@ class _PlansPageState extends State<PlansPage> {
     final scheme = theme.colorScheme;
     final id = int.tryParse('${plan['id'] ?? ''}');
     final busy = id != null && _submittingPlanId == id;
-    final features = (plan['included_features'] as List<dynamic>? ?? const [])
-        .map((item) => '$item')
-        .where(
-          (item) =>
-              item.trim().isNotEmpty && !item.toLowerCase().contains('credit'),
-        )
-        .take(4)
-        .toList();
+    final l10n = AppLocalizations.of(context)!;
+    final isOneTime = '${plan['type'] ?? ''}' == 'one_time';
+
+    int? asInt(dynamic value) =>
+        value is num ? value.toInt() : int.tryParse('$value');
+
+    final hours = asInt(plan['duration_hours']);
+    final days = asInt(plan['duration_days']);
+    final maxProjects = asInt(plan['max_projects']);
+    final maxBoqs = asInt(plan['max_boqs']);
+    final maxAiCredits = asInt(plan['max_ai_credits']);
+    final autoRenewal = plan['auto_renewal'];
+
     final limits = <(IconData, String)>[
-      if (plan['max_projects'] != null)
-        (Icons.folder_outlined, '${plan['max_projects']} projects'),
-      if (plan['max_boqs'] != null)
-        (Icons.receipt_long_outlined, '${plan['max_boqs']} BOQs'),
+      if (hours != null)
+        (Icons.schedule_outlined, l10n.validityHours(hours))
+      else if (days != null)
+        (Icons.schedule_outlined, l10n.validityDays(days)),
+      if (maxProjects != null)
+        (Icons.folder_outlined, l10n.maxProjectsLabel(maxProjects)),
+      if (maxBoqs != null)
+        (Icons.receipt_long_outlined, l10n.maxBoqsLabel(maxBoqs)),
+      if (isOneTime && maxAiCredits != null)
+        (Icons.auto_awesome_outlined, l10n.maxAiCreditsLabel(maxAiCredits)),
     ];
+
+    final checks = <String>[
+      if (isOneTime) ...[
+        l10n.featureHardwareFactoryPrices,
+        l10n.featurePdfExcelExport,
+        l10n.featureCompanyBranding,
+        if (maxAiCredits == null) l10n.featureLimitedAiCredits,
+      ],
+      if (autoRenewal == false) l10n.noRecurringPayment,
+      if (autoRenewal == true) l10n.renewsAutomatically,
+    ];
+    final seen = checks.map((c) => c.toLowerCase()).toSet();
+    final rawFeatures =
+        (plan['features'] ?? plan['included_features']) as List<dynamic>? ??
+        const [];
+    for (final raw in rawFeatures) {
+      final feature = '$raw'.trim();
+      if (feature.isEmpty) continue;
+      if (feature.toLowerCase().contains('credit')) continue;
+      if (seen.add(feature.toLowerCase())) checks.add(feature);
+    }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.lg),
@@ -537,7 +569,7 @@ class _PlansPageState extends State<PlansPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${plan['name'] ?? 'Plan'}',
+                          '${plan['name'] ?? ''}',
                           style: theme.textTheme.titleMedium,
                         ),
                         const SizedBox(height: AppSpacing.xs),
@@ -551,7 +583,13 @@ class _PlansPageState extends State<PlansPage> {
                       ],
                     ),
                   ),
-                  if (plan['trial_days'] != null)
+                  if (isOneTime)
+                    StatusBadge(
+                      label: l10n.oneTimeBadge,
+                      tone: StatusTone.brand,
+                      icon: Icons.bolt_outlined,
+                    )
+                  else if (plan['trial_days'] != null)
                     StatusBadge(
                       label: '${plan['trial_days']} day trial',
                       tone: StatusTone.info,
@@ -565,6 +603,15 @@ class _PlansPageState extends State<PlansPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (isOneTime) ...[
+                    Text(
+                      l10n.oneTimeSubtitle,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
                   if ('${plan['description'] ?? ''}'.trim().isNotEmpty) ...[
                     Text(
                       '${plan['description']}',
@@ -589,7 +636,7 @@ class _PlansPageState extends State<PlansPage> {
                     ),
                     const SizedBox(height: AppSpacing.md),
                   ],
-                  ...features.map(
+                  ...checks.map(
                     (feature) => Padding(
                       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                       child: Row(
@@ -613,7 +660,7 @@ class _PlansPageState extends State<PlansPage> {
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   LoadingButton(
-                    label: 'Select plan',
+                    label: isOneTime ? l10n.buyOneTimeAccess : l10n.selectPlan,
                     icon: Icons.arrow_forward,
                     loading: busy,
                     onPressed: () => _selectPlan(plan),
@@ -644,7 +691,23 @@ class _PlansPageState extends State<PlansPage> {
           if (!snapshot.hasData) {
             return const SkeletonList(itemCount: 3);
           }
-          final plans = snapshot.data!;
+          final indexed =
+              [
+                for (var i = 0; i < snapshot.data!.length; i++)
+                  (
+                    order:
+                        int.tryParse(
+                          '${snapshot.data![i]['display_order'] ?? ''}',
+                        ) ??
+                        0,
+                    index: i,
+                    plan: snapshot.data![i],
+                  ),
+              ]..sort((a, b) {
+                final byOrder = a.order.compareTo(b.order);
+                return byOrder != 0 ? byOrder : a.index.compareTo(b.index);
+              });
+          final plans = [for (final entry in indexed) entry.plan];
           return RefreshIndicator(
             onRefresh: () async {
               _reloadPlans();

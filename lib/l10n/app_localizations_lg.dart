@@ -9,6 +9,122 @@ class AppLocalizationsLg extends AppLocalizations {
   AppLocalizationsLg([String locale = 'lg']) : super(locale);
 
   @override
+  String get orgExpenses => 'Ensaasaanya ne lisiiti';
+
+  @override
+  String get orgInvitations => 'Okuyita abakozi';
+
+  @override
+  String get orgAddExpense => 'Wandiika ensaasaanya';
+
+  @override
+  String get orgEditExpense => 'Kyusa ensaasaanya';
+
+  @override
+  String get orgSave => 'Tereka';
+
+  @override
+  String get orgProject => 'Pulojekiti ekuweereddwa';
+
+  @override
+  String get orgPurchaseDate => 'Olunaku lw\'okugula';
+
+  @override
+  String get orgSupplier => 'Omuguzi w\'ebintu';
+
+  @override
+  String get orgDescription => 'Ennyonnyola';
+
+  @override
+  String get orgQuantity => 'Obungi';
+
+  @override
+  String get orgUnit => 'Ekipimo';
+
+  @override
+  String get orgRate => 'Omuwendo';
+
+  @override
+  String get orgPaymentMethod => 'Engeri y\'okusasula';
+
+  @override
+  String get orgPlanned => 'Okugula okwategekebwa';
+
+  @override
+  String get orgExplanation => 'Ensonga y\'okugula okutali mu nteekateeka';
+
+  @override
+  String get orgRequired => 'Teekamu omuwendo omutuufu.';
+
+  @override
+  String get orgNoProjects =>
+      'Tewali pulojekiti ekuweereddwa. Saba omuddukanya akuwe pulojekiti.';
+
+  @override
+  String get orgEmpty => 'Tewali biwandiiko.';
+
+  @override
+  String get orgPrevious => 'Ebyasooka';
+
+  @override
+  String get orgNext => 'Ebiddako';
+
+  @override
+  String get orgReceipts => 'Lisiiti';
+
+  @override
+  String get orgAddReceipt =>
+      'Teekako lisiiti (PDF oba ekifaananyi, okutuuka ku MB 20)';
+
+  @override
+  String get orgInvite => 'Yita omukozi';
+
+  @override
+  String get orgAccept => 'Kkiriza okuyitibwa';
+
+  @override
+  String get orgToken => 'Akabonero k\'okuyitibwa';
+
+  @override
+  String get orgRole => 'Obuvunaanyizibwa';
+
+  @override
+  String get orgExpiry => 'Kiggwaako';
+
+  @override
+  String get orgEdit => 'Kyusa';
+
+  @override
+  String get orgRevoke => 'Sazaamu';
+
+  @override
+  String get orgRevokeConfirm =>
+      'Osazaamu okuyitibwa kuno? Tekujja kuddamu kukkirizibwa.';
+
+  @override
+  String get orgPending => 'Kulindirira';
+
+  @override
+  String get orgAccepted => 'Kukkiriziddwa';
+
+  @override
+  String get orgRevoked => 'Kusaziddwamu';
+
+  @override
+  String get orgExpired => 'Kuweddeko';
+
+  @override
+  String get orgTokenHelp =>
+      'Weereza akabonero kano mu ngeri ey\'ekyama eri email eyayitiddwa. Kalagibwa omulundi gumu gwokka.';
+
+  @override
+  String get orgCopy => 'Koppa akabonero';
+
+  @override
+  String get orgAcceptSuccess =>
+      'Okuyitibwa kukkiriziddwa. Obuyinza bwo mu kitongole bukyusiddwa.';
+
+  @override
   String get appTitle => 'BOQ Works';
 
   @override
@@ -406,4 +522,133 @@ class AppLocalizationsLg extends AppLocalizations {
 
   @override
   String get topSuppliers => 'Abatunzi Abasinga';
+
+  @override
+  String get oneTimeSubtitle => 'Ku kutegeka BOQ akaseera konna';
+
+  @override
+  String get oneTimeBadge => 'Lumu';
+
+  @override
+  String get buyOneTimeAccess => 'Gula Obukwakkulizo bwa Lumu';
+
+  @override
+  String get selectPlan => 'Londa pulaani';
+
+  @override
+  String validityHours(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: 'essaawa $hours',
+      one: 'essaawa 1',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String validityDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'ennaku $days',
+      one: 'olunaku 1',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String maxProjectsLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'pulojekiti $count',
+      one: 'pulojekiti 1',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String maxBoqsLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'BOQ $count',
+      one: 'BOQ 1',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String maxAiCreditsLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'AI credits $count',
+      one: 'AI credit 1',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get featureHardwareFactoryPrices =>
+      'Ebbeeyi za Hardware ne Fekitoli ez\'akati';
+
+  @override
+  String get featureLimitedAiCredits => 'AI credits entono';
+
+  @override
+  String get featurePdfExcelExport => 'Okufulumya PDF ne Excel';
+
+  @override
+  String get featureCompanyBranding => 'Ekifaananyi ky\'ekibiina';
+
+  @override
+  String get noRecurringPayment => 'Tewali kusasula buli mwezi';
+
+  @override
+  String get renewsAutomatically => 'Kiddamu mu bwesona';
+
+  @override
+  String get confirmPurchaseTitle => 'Kakasa okugula';
+
+  @override
+  String confirmPurchaseMessage(String planName) {
+    return 'Tonda obwammemba butannatuukiriziddwa bwa $planName? Pulaani yo etandika okukola nga ssente zikakasiddwa.';
+  }
+
+  @override
+  String get cancel => 'Gana';
+
+  @override
+  String get continueAction => 'Weyongereyo';
+
+  @override
+  String get buyAnotherOneTimeAccess => 'Gula Obukwakkulizo bwa Lumu obulala';
+
+  @override
+  String get renewAccess => 'Ddaabiriza Obukwakkulizo';
+
+  @override
+  String get upgradeToSubscription => 'Kyusa ku Bwammemba';
+
+  @override
+  String get errorOneTimeProjectLimit =>
+      'Otuuse ku kkomo lya pulojekiti mu Bukwakkulizo bwo obwa Lumu. Gula obukwakkulizo obulala obwa Lumu oba okwongeza ku bwammemba.';
+
+  @override
+  String get errorOneTimeBoqLimit =>
+      'Otuuse ku kkomo lya BOQ mu Bukwakkulizo bwo obwa Lumu. Gula obukwakkulizo obulala obwa Lumu oba okwongeza ku bwammemba.';
+
+  @override
+  String get errorAiCreditsExhausted =>
+      'AI credits zo ziwedde. Gula obukwakkulizo obulala obwa Lumu oba okwongeza ku bwammemba.';
+
+  @override
+  String get errorOcrLimitReached =>
+      'Otuuse ku kkomo lya mpapula za OCR mu Bukwakkulizo bwo obwa Lumu. Gula obukwakkulizo obulala obwa Lumu oba okwongeza ku bwammemba.';
+
+  @override
+  String get errorOneTimeAccessExpired =>
+      'Obukwakkulizo bwo obwa Lumu buwedde. Ddaabiriza obukwakkulizo oba okwongeza ku bwammemba.';
 }

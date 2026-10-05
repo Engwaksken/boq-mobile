@@ -9,6 +9,121 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get orgExpenses => 'Expenses & receipts';
+
+  @override
+  String get orgInvitations => 'Team invitations';
+
+  @override
+  String get orgAddExpense => 'Record expense';
+
+  @override
+  String get orgEditExpense => 'Edit expense';
+
+  @override
+  String get orgSave => 'Save';
+
+  @override
+  String get orgProject => 'Assigned project';
+
+  @override
+  String get orgPurchaseDate => 'Purchase date';
+
+  @override
+  String get orgSupplier => 'Supplier';
+
+  @override
+  String get orgDescription => 'Description';
+
+  @override
+  String get orgQuantity => 'Quantity';
+
+  @override
+  String get orgUnit => 'Unit';
+
+  @override
+  String get orgRate => 'Rate';
+
+  @override
+  String get orgPaymentMethod => 'Payment method';
+
+  @override
+  String get orgPlanned => 'Planned purchase';
+
+  @override
+  String get orgExplanation => 'Reason for unplanned purchase';
+
+  @override
+  String get orgRequired => 'Enter a valid value.';
+
+  @override
+  String get orgNoProjects =>
+      'No assigned projects are available. Ask your administrator for a project assignment.';
+
+  @override
+  String get orgEmpty => 'No records found.';
+
+  @override
+  String get orgPrevious => 'Previous';
+
+  @override
+  String get orgNext => 'Next';
+
+  @override
+  String get orgReceipts => 'Receipts';
+
+  @override
+  String get orgAddReceipt => 'Attach receipt (PDF or image, up to 20 MB)';
+
+  @override
+  String get orgInvite => 'Invite team member';
+
+  @override
+  String get orgAccept => 'Accept invitation';
+
+  @override
+  String get orgToken => 'Invitation token';
+
+  @override
+  String get orgRole => 'Role';
+
+  @override
+  String get orgExpiry => 'Expires at';
+
+  @override
+  String get orgEdit => 'Edit';
+
+  @override
+  String get orgRevoke => 'Revoke';
+
+  @override
+  String get orgRevokeConfirm =>
+      'Revoke this invitation? It can no longer be accepted.';
+
+  @override
+  String get orgPending => 'Pending';
+
+  @override
+  String get orgAccepted => 'Accepted';
+
+  @override
+  String get orgRevoked => 'Revoked';
+
+  @override
+  String get orgExpired => 'Expired';
+
+  @override
+  String get orgTokenHelp =>
+      'Share this token securely with the invited email address. It is shown only once.';
+
+  @override
+  String get orgCopy => 'Copy token';
+
+  @override
+  String get orgAcceptSuccess =>
+      'Invitation accepted. Your organisation access has been updated.';
+
+  @override
   String get appTitle => 'BOQ Works';
 
   @override
@@ -407,4 +522,133 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get topSuppliers => 'Top Suppliers';
+
+  @override
+  String get oneTimeSubtitle => 'For occasional BOQ preparation';
+
+  @override
+  String get oneTimeBadge => 'One-Time';
+
+  @override
+  String get buyOneTimeAccess => 'Buy One-Time Access';
+
+  @override
+  String get selectPlan => 'Select plan';
+
+  @override
+  String validityHours(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: '$hours hours',
+      one: '1 hour',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String validityDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days days',
+      one: '1 day',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String maxProjectsLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count projects',
+      one: '1 project',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String maxBoqsLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count BOQs',
+      one: '1 BOQ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String maxAiCreditsLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count AI credits',
+      one: '1 AI credit',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get featureHardwareFactoryPrices =>
+      'Current Hardware & Factory prices';
+
+  @override
+  String get featureLimitedAiCredits => 'Limited AI credits';
+
+  @override
+  String get featurePdfExcelExport => 'PDF & Excel export';
+
+  @override
+  String get featureCompanyBranding => 'Company branding';
+
+  @override
+  String get noRecurringPayment => 'No recurring payment';
+
+  @override
+  String get renewsAutomatically => 'Renews automatically';
+
+  @override
+  String get confirmPurchaseTitle => 'Confirm purchase';
+
+  @override
+  String confirmPurchaseMessage(String planName) {
+    return 'Create a pending subscription for $planName? Your plan becomes active only after payment is confirmed.';
+  }
+
+  @override
+  String get cancel => 'Cancel';
+
+  @override
+  String get continueAction => 'Continue';
+
+  @override
+  String get buyAnotherOneTimeAccess => 'Buy Another One-Time Access';
+
+  @override
+  String get renewAccess => 'Renew Access';
+
+  @override
+  String get upgradeToSubscription => 'Upgrade to a Subscription';
+
+  @override
+  String get errorOneTimeProjectLimit =>
+      'You have reached the project limit of your One-Time Access. Buy another One-Time Access or upgrade to a subscription.';
+
+  @override
+  String get errorOneTimeBoqLimit =>
+      'You have reached the BOQ limit of your One-Time Access. Buy another One-Time Access or upgrade to a subscription.';
+
+  @override
+  String get errorAiCreditsExhausted =>
+      'Your AI credits are exhausted. Buy another One-Time Access or upgrade to a subscription.';
+
+  @override
+  String get errorOcrLimitReached =>
+      'You have reached the OCR page limit of your One-Time Access. Buy another One-Time Access or upgrade to a subscription.';
+
+  @override
+  String get errorOneTimeAccessExpired =>
+      'Your One-Time Access has expired. Renew access or upgrade to a subscription.';
 }

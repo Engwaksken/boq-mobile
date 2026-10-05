@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import 'api_client.dart';
+import 'l10n/app_localizations.dart';
 
 /// Turns any error into a short message a user can act on. Raw exception text
 /// (stack traces, SQL, framework or platform errors) is never shown.
@@ -59,4 +60,22 @@ class AppErrorMessages {
       'The server returned an unexpected response. Please try again.';
   static const file = 'The file could not be saved or opened on this device.';
   static const generic = 'Something went wrong. Please try again.';
+}
+
+/// Maps a one-time-access server error code to a localized message, or null.
+String? planLimitErrorMessage(AppLocalizations l10n, String? errorCode) {
+  switch (errorCode) {
+    case 'ONE_TIME_PROJECT_LIMIT_REACHED':
+      return l10n.errorOneTimeProjectLimit;
+    case 'ONE_TIME_BOQ_LIMIT_REACHED':
+      return l10n.errorOneTimeBoqLimit;
+    case 'AI_CREDITS_EXHAUSTED':
+      return l10n.errorAiCreditsExhausted;
+    case 'OCR_LIMIT_REACHED':
+      return l10n.errorOcrLimitReached;
+    case 'ONE_TIME_ACCESS_EXPIRED':
+      return l10n.errorOneTimeAccessExpired;
+    default:
+      return null;
+  }
 }

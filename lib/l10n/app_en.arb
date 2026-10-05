@@ -1,4 +1,41 @@
 {
+  "orgExpenses": "Expenses & receipts",
+  "orgInvitations": "Team invitations",
+  "orgAddExpense": "Record expense",
+  "orgEditExpense": "Edit expense",
+  "orgSave": "Save",
+  "orgProject": "Assigned project",
+  "orgPurchaseDate": "Purchase date",
+  "orgSupplier": "Supplier",
+  "orgDescription": "Description",
+  "orgQuantity": "Quantity",
+  "orgUnit": "Unit",
+  "orgRate": "Rate",
+  "orgPaymentMethod": "Payment method",
+  "orgPlanned": "Planned purchase",
+  "orgExplanation": "Reason for unplanned purchase",
+  "orgRequired": "Enter a valid value.",
+  "orgNoProjects": "No assigned projects are available. Ask your administrator for a project assignment.",
+  "orgEmpty": "No records found.",
+  "orgPrevious": "Previous",
+  "orgNext": "Next",
+  "orgReceipts": "Receipts",
+  "orgAddReceipt": "Attach receipt (PDF or image, up to 20 MB)",
+  "orgInvite": "Invite team member",
+  "orgAccept": "Accept invitation",
+  "orgToken": "Invitation token",
+  "orgRole": "Role",
+  "orgExpiry": "Expires at",
+  "orgEdit": "Edit",
+  "orgRevoke": "Revoke",
+  "orgRevokeConfirm": "Revoke this invitation? It can no longer be accepted.",
+  "orgPending": "Pending",
+  "orgAccepted": "Accepted",
+  "orgRevoked": "Revoked",
+  "orgExpired": "Expired",
+  "orgTokenHelp": "Share this token securely with the invited email address. It is shown only once.",
+  "orgCopy": "Copy token",
+  "orgAcceptSuccess": "Invitation accepted. Your organisation access has been updated.",
   "appTitle": "BOQ Works",
   "home": "Home",
   "dashboard": "Dashboard",
@@ -127,5 +164,62 @@
   "selectedCount": "selected",
   "locationHistory": "Location History",
   "recentLocations": "Recent Locations",
-  "topSuppliers": "Top Suppliers"
+  "topSuppliers": "Top Suppliers",
+  "oneTimeSubtitle": "For occasional BOQ preparation",
+  "oneTimeBadge": "One-Time",
+  "buyOneTimeAccess": "Buy One-Time Access",
+  "selectPlan": "Select plan",
+  "validityHours": "{hours, plural, =1{1 hour} other{{hours} hours}}",
+  "@validityHours": {
+    "placeholders": {
+      "hours": {"type": "int"}
+    }
+  },
+  "validityDays": "{days, plural, =1{1 day} other{{days} days}}",
+  "@validityDays": {
+    "placeholders": {
+      "days": {"type": "int"}
+    }
+  },
+  "maxProjectsLabel": "{count, plural, =1{1 project} other{{count} projects}}",
+  "@maxProjectsLabel": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "maxBoqsLabel": "{count, plural, =1{1 BOQ} other{{count} BOQs}}",
+  "@maxBoqsLabel": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "maxAiCreditsLabel": "{count, plural, =1{1 AI credit} other{{count} AI credits}}",
+  "@maxAiCreditsLabel": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "featureHardwareFactoryPrices": "Current Hardware & Factory prices",
+  "featureLimitedAiCredits": "Limited AI credits",
+  "featurePdfExcelExport": "PDF & Excel export",
+  "featureCompanyBranding": "Company branding",
+  "noRecurringPayment": "No recurring payment",
+  "renewsAutomatically": "Renews automatically",
+  "confirmPurchaseTitle": "Confirm purchase",
+  "confirmPurchaseMessage": "Create a pending subscription for {planName}? Your plan becomes active only after payment is confirmed.",
+  "@confirmPurchaseMessage": {
+    "placeholders": {
+      "planName": {"type": "String"}
+    }
+  },
+  "cancel": "Cancel",
+  "continueAction": "Continue",
+  "buyAnotherOneTimeAccess": "Buy Another One-Time Access",
+  "renewAccess": "Renew Access",
+  "upgradeToSubscription": "Upgrade to a Subscription",
+  "errorOneTimeProjectLimit": "You have reached the project limit of your One-Time Access. Buy another One-Time Access or upgrade to a subscription.",
+  "errorOneTimeBoqLimit": "You have reached the BOQ limit of your One-Time Access. Buy another One-Time Access or upgrade to a subscription.",
+  "errorAiCreditsExhausted": "Your AI credits are exhausted. Buy another One-Time Access or upgrade to a subscription.",
+  "errorOcrLimitReached": "You have reached the OCR page limit of your One-Time Access. Buy another One-Time Access or upgrade to a subscription.",
+  "errorOneTimeAccessExpired": "Your One-Time Access has expired. Renew access or upgrade to a subscription."
 }

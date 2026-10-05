@@ -98,6 +98,228 @@ abstract class AppLocalizations {
     Locale('lg'),
   ];
 
+  /// No description provided for @orgExpenses.
+  ///
+  /// In en, this message translates to:
+  /// **'Expenses & receipts'**
+  String get orgExpenses;
+
+  /// No description provided for @orgInvitations.
+  ///
+  /// In en, this message translates to:
+  /// **'Team invitations'**
+  String get orgInvitations;
+
+  /// No description provided for @orgAddExpense.
+  ///
+  /// In en, this message translates to:
+  /// **'Record expense'**
+  String get orgAddExpense;
+
+  /// No description provided for @orgEditExpense.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit expense'**
+  String get orgEditExpense;
+
+  /// No description provided for @orgSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get orgSave;
+
+  /// No description provided for @orgProject.
+  ///
+  /// In en, this message translates to:
+  /// **'Assigned project'**
+  String get orgProject;
+
+  /// No description provided for @orgPurchaseDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Purchase date'**
+  String get orgPurchaseDate;
+
+  /// No description provided for @orgSupplier.
+  ///
+  /// In en, this message translates to:
+  /// **'Supplier'**
+  String get orgSupplier;
+
+  /// No description provided for @orgDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Description'**
+  String get orgDescription;
+
+  /// No description provided for @orgQuantity.
+  ///
+  /// In en, this message translates to:
+  /// **'Quantity'**
+  String get orgQuantity;
+
+  /// No description provided for @orgUnit.
+  ///
+  /// In en, this message translates to:
+  /// **'Unit'**
+  String get orgUnit;
+
+  /// No description provided for @orgRate.
+  ///
+  /// In en, this message translates to:
+  /// **'Rate'**
+  String get orgRate;
+
+  /// No description provided for @orgPaymentMethod.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment method'**
+  String get orgPaymentMethod;
+
+  /// No description provided for @orgPlanned.
+  ///
+  /// In en, this message translates to:
+  /// **'Planned purchase'**
+  String get orgPlanned;
+
+  /// No description provided for @orgExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'Reason for unplanned purchase'**
+  String get orgExplanation;
+
+  /// No description provided for @orgRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid value.'**
+  String get orgRequired;
+
+  /// No description provided for @orgNoProjects.
+  ///
+  /// In en, this message translates to:
+  /// **'No assigned projects are available. Ask your administrator for a project assignment.'**
+  String get orgNoProjects;
+
+  /// No description provided for @orgEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No records found.'**
+  String get orgEmpty;
+
+  /// No description provided for @orgPrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous'**
+  String get orgPrevious;
+
+  /// No description provided for @orgNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get orgNext;
+
+  /// No description provided for @orgReceipts.
+  ///
+  /// In en, this message translates to:
+  /// **'Receipts'**
+  String get orgReceipts;
+
+  /// No description provided for @orgAddReceipt.
+  ///
+  /// In en, this message translates to:
+  /// **'Attach receipt (PDF or image, up to 20 MB)'**
+  String get orgAddReceipt;
+
+  /// No description provided for @orgInvite.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite team member'**
+  String get orgInvite;
+
+  /// No description provided for @orgAccept.
+  ///
+  /// In en, this message translates to:
+  /// **'Accept invitation'**
+  String get orgAccept;
+
+  /// No description provided for @orgToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Invitation token'**
+  String get orgToken;
+
+  /// No description provided for @orgRole.
+  ///
+  /// In en, this message translates to:
+  /// **'Role'**
+  String get orgRole;
+
+  /// No description provided for @orgExpiry.
+  ///
+  /// In en, this message translates to:
+  /// **'Expires at'**
+  String get orgExpiry;
+
+  /// No description provided for @orgEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get orgEdit;
+
+  /// No description provided for @orgRevoke.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke'**
+  String get orgRevoke;
+
+  /// No description provided for @orgRevokeConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke this invitation? It can no longer be accepted.'**
+  String get orgRevokeConfirm;
+
+  /// No description provided for @orgPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get orgPending;
+
+  /// No description provided for @orgAccepted.
+  ///
+  /// In en, this message translates to:
+  /// **'Accepted'**
+  String get orgAccepted;
+
+  /// No description provided for @orgRevoked.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoked'**
+  String get orgRevoked;
+
+  /// No description provided for @orgExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Expired'**
+  String get orgExpired;
+
+  /// No description provided for @orgTokenHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Share this token securely with the invited email address. It is shown only once.'**
+  String get orgTokenHelp;
+
+  /// No description provided for @orgCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy token'**
+  String get orgCopy;
+
+  /// No description provided for @orgAcceptSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Invitation accepted. Your organisation access has been updated.'**
+  String get orgAcceptSuccess;
+
   /// No description provided for @appTitle.
   ///
   /// In en, this message translates to:
@@ -871,6 +1093,168 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Top Suppliers'**
   String get topSuppliers;
+
+  /// No description provided for @oneTimeSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'For occasional BOQ preparation'**
+  String get oneTimeSubtitle;
+
+  /// No description provided for @oneTimeBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'One-Time'**
+  String get oneTimeBadge;
+
+  /// No description provided for @buyOneTimeAccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Buy One-Time Access'**
+  String get buyOneTimeAccess;
+
+  /// No description provided for @selectPlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Select plan'**
+  String get selectPlan;
+
+  /// No description provided for @validityHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours, plural, =1{1 hour} other{{hours} hours}}'**
+  String validityHours(int hours);
+
+  /// No description provided for @validityDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{days, plural, =1{1 day} other{{days} days}}'**
+  String validityDays(int days);
+
+  /// No description provided for @maxProjectsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 project} other{{count} projects}}'**
+  String maxProjectsLabel(int count);
+
+  /// No description provided for @maxBoqsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 BOQ} other{{count} BOQs}}'**
+  String maxBoqsLabel(int count);
+
+  /// No description provided for @maxAiCreditsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 AI credit} other{{count} AI credits}}'**
+  String maxAiCreditsLabel(int count);
+
+  /// No description provided for @featureHardwareFactoryPrices.
+  ///
+  /// In en, this message translates to:
+  /// **'Current Hardware & Factory prices'**
+  String get featureHardwareFactoryPrices;
+
+  /// No description provided for @featureLimitedAiCredits.
+  ///
+  /// In en, this message translates to:
+  /// **'Limited AI credits'**
+  String get featureLimitedAiCredits;
+
+  /// No description provided for @featurePdfExcelExport.
+  ///
+  /// In en, this message translates to:
+  /// **'PDF & Excel export'**
+  String get featurePdfExcelExport;
+
+  /// No description provided for @featureCompanyBranding.
+  ///
+  /// In en, this message translates to:
+  /// **'Company branding'**
+  String get featureCompanyBranding;
+
+  /// No description provided for @noRecurringPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'No recurring payment'**
+  String get noRecurringPayment;
+
+  /// No description provided for @renewsAutomatically.
+  ///
+  /// In en, this message translates to:
+  /// **'Renews automatically'**
+  String get renewsAutomatically;
+
+  /// No description provided for @confirmPurchaseTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm purchase'**
+  String get confirmPurchaseTitle;
+
+  /// No description provided for @confirmPurchaseMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Create a pending subscription for {planName}? Your plan becomes active only after payment is confirmed.'**
+  String confirmPurchaseMessage(String planName);
+
+  /// No description provided for @cancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get cancel;
+
+  /// No description provided for @continueAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get continueAction;
+
+  /// No description provided for @buyAnotherOneTimeAccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Buy Another One-Time Access'**
+  String get buyAnotherOneTimeAccess;
+
+  /// No description provided for @renewAccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Renew Access'**
+  String get renewAccess;
+
+  /// No description provided for @upgradeToSubscription.
+  ///
+  /// In en, this message translates to:
+  /// **'Upgrade to a Subscription'**
+  String get upgradeToSubscription;
+
+  /// No description provided for @errorOneTimeProjectLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'You have reached the project limit of your One-Time Access. Buy another One-Time Access or upgrade to a subscription.'**
+  String get errorOneTimeProjectLimit;
+
+  /// No description provided for @errorOneTimeBoqLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'You have reached the BOQ limit of your One-Time Access. Buy another One-Time Access or upgrade to a subscription.'**
+  String get errorOneTimeBoqLimit;
+
+  /// No description provided for @errorAiCreditsExhausted.
+  ///
+  /// In en, this message translates to:
+  /// **'Your AI credits are exhausted. Buy another One-Time Access or upgrade to a subscription.'**
+  String get errorAiCreditsExhausted;
+
+  /// No description provided for @errorOcrLimitReached.
+  ///
+  /// In en, this message translates to:
+  /// **'You have reached the OCR page limit of your One-Time Access. Buy another One-Time Access or upgrade to a subscription.'**
+  String get errorOcrLimitReached;
+
+  /// No description provided for @errorOneTimeAccessExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Your One-Time Access has expired. Renew access or upgrade to a subscription.'**
+  String get errorOneTimeAccessExpired;
 }
 
 class _AppLocalizationsDelegate
