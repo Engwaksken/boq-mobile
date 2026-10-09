@@ -561,7 +561,8 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                               );
                           if (changed == true) reload();
                         },
-                        footer: boq.status == 'uploaded'
+                        footer:
+                            boq.status == 'uploaded' && api.can('boq.edit')
                             ? FilledButton.icon(
                                 style: FilledButton.styleFrom(
                                   minimumSize: const Size.fromHeight(

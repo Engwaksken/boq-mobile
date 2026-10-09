@@ -24,10 +24,16 @@ class _AccountPageState extends State<AccountPage> {
   late Future<Map<String, dynamic>> _subscription;
   UserProfile? _user;
 
+  /// Invited members must not see the account owner's billing (plans,
+  /// subscriptions, top-ups); only roles with `subscriptions.view` may.
+  bool get _canViewBilling => widget.api.can('subscriptions.view');
+
   @override
   void initState() {
     super.initState();
-    _subscription = widget.api.currentSubscription();
+    _subscription = _canViewBilling
+        ? widget.api.currentSubscription()
+        : Future<Map<String, dynamic>>.value(const <String, dynamic>{});
     _loadUser();
   }
 
@@ -301,8 +307,10 @@ class _AccountPageState extends State<AccountPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _profileHeader(context),
-                const SizedBox(height: AppSpacing.lg),
-                _subscriptionCard(context),
+                if (_canViewBilling) ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  _subscriptionCard(context),
+                ],
                 const SizedBox(height: AppSpacing.sectionGap),
                 const SectionHeader(title: 'Settings'),
                 Card(
@@ -351,17 +359,22 @@ class _AccountPageState extends State<AccountPage> {
                         title: widget.l10n.profile,
                         onTap: _openProfile,
                       ),
-                      const Divider(height: 1, indent: 68),
-                      _settingsTile(
-                        icon: Icons.business_outlined,
-                        title: 'Company Profile',
-                        subtitle: 'Logo and details used on your BOQ PDFs',
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => CompanyProfilePage(api: widget.api),
+                      // Only organisation admins and personal accounts may
+                      // edit the company identity used on BOQ exports.
+                      if (widget.api.canManageCompanyProfile) ...[
+                        const Divider(height: 1, indent: 68),
+                        _settingsTile(
+                          icon: Icons.business_outlined,
+                          title: 'Company Profile',
+                          subtitle: 'Logo and details used on your BOQ PDFs',
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) =>
+                                  CompanyProfilePage(api: widget.api),
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),

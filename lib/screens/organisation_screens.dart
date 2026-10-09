@@ -279,6 +279,36 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
   List<String> _warnings = [];
   int? _savedExpenseId;
 
+  /// Options offered by the record-expense payment method dropdown.
+  static const _paymentMethods = [
+    'Cash',
+    'Mobile Money',
+    'Bank Transfer',
+    'Cheque',
+    'Card',
+    'Credit',
+    'Other',
+  ];
+
+  /// Maps receipt-extraction values (e.g. "momo", "mobile_money") onto the
+  /// dropdown options. Returns null when the value is not a known option.
+  static String? _normalizePaymentMethod(String raw) {
+    final value = raw.trim().toLowerCase().replaceAll(
+      RegExp(r'[^a-z0-9]+'),
+      '',
+    );
+    return switch (value) {
+      'cash' => 'Cash',
+      'momo' || 'mobilemoney' || 'mobile' || 'airtelmoney' => 'Mobile Money',
+      'bank' || 'banktransfer' || 'transfer' || 'wire' => 'Bank Transfer',
+      'cheque' || 'check' => 'Cheque',
+      'card' || 'creditcard' || 'debitcard' => 'Card',
+      'credit' => 'Credit',
+      'other' => 'Other',
+      _ => null,
+    };
+  }
+
   Future<void> _extract() async {
     setState(() => _busy = true);
     try {
@@ -309,7 +339,11 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
           'currency',
           'payment_method',
         ]) {
-          if (data[key] != null) _fields[key]!.text = '${data[key]}';
+          if (data[key] != null) {
+            _fields[key]!.text = key == 'payment_method'
+                ? (_normalizePaymentMethod('${data[key]}') ?? '${data[key]}')
+                : '${data[key]}';
+          }
         }
         _warnings = (data['warnings'] as List? ?? []).map((w) => '$w').toList();
       });
@@ -530,6 +564,36 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
           }
           return null;
         },
+      ),
+    );
+  }
+
+  /// Payment method dropdown. The selected value is kept in the
+  /// `payment_method` field so the existing payload key is unchanged. A value
+  /// loaded from an existing expense that is not one of the options is added
+  /// as an extra entry so nothing is lost.
+  Widget _paymentMethodField(AppLocalizations l) {
+    final controller = _fields['payment_method']!;
+    final current = controller.text.trim();
+    final options = <String>[
+      ..._paymentMethods,
+      if (current.isNotEmpty && !_paymentMethods.contains(current)) current,
+    ];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: DropdownButtonFormField<String>(
+        key: ValueKey('payment-method-$current'),
+        initialValue: current.isEmpty ? '' : current,
+        isExpanded: true,
+        decoration: InputDecoration(labelText: l.orgPaymentMethod),
+        items: [
+          const DropdownMenuItem<String>(value: '', child: Text('Select...')),
+          for (final method in options)
+            DropdownMenuItem<String>(value: method, child: Text(method)),
+        ],
+        onChanged: _busy || _savedExpenseId != null
+            ? null
+            : (value) => setState(() => controller.text = value ?? ''),
       ),
     );
   }
@@ -858,7 +922,7 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
                     label: Text(l.orgAddItem),
                   ),
                 _field('currency', l.currency, required: true, maxLength: 3),
-                _field('payment_method', l.orgPaymentMethod, maxLength: 100),
+                _paymentMethodField(l),
                 SwitchListTile(
                   title: Text(l.orgPlanned),
                   value: _planned,

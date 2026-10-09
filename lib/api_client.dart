@@ -24,6 +24,23 @@ double _asDouble(dynamic value) =>
 double? _asDoubleOrNull(dynamic value) =>
     value == null ? null : _asDouble(value);
 
+/// A list of non-empty, trimmed strings from an API/JSON value.
+List<String> _stringList(dynamic value) =>
+    (value is List ? value : const <dynamic>[])
+        .map((e) => '$e'.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+/// A list of strings persisted as JSON, tolerating missing/corrupt values.
+List<String> _storedStringList(String? raw) {
+  if (raw == null || raw.trim().isEmpty) return const [];
+  try {
+    return _stringList(jsonDecode(raw));
+  } on FormatException {
+    return const [];
+  }
+}
+
 /// Wraps every request with a timeout and reports expired sessions (HTTP 401).
 class _GuardedClient extends http.BaseClient {
   _GuardedClient(this._inner, this._onUnauthorized);
@@ -90,6 +107,7 @@ class ApiClient {
     String message = 'Your session has expired. Please sign in again.',
   ]) {
     unawaited(_storage.delete(key: _tokenKey));
+    unawaited(_clearAccess());
     _sessionExpired.add(message);
   }
 
@@ -101,11 +119,120 @@ class ApiClient {
   );
 
   static const _tokenKey = 'auth_token';
+  static const _permissionsKey = 'auth_permissions';
+  static const _rolesKey = 'auth_roles';
+  static const _organisationKey = 'auth_has_organisation';
+
   late final http.Client _httpClient;
   final FlutterSecureStorage _storage;
 
+  /// Access control cached for the signed-in user (permissions, role slugs
+  /// and whether the account belongs to an organisation).
+  Set<String> _permissions = <String>{};
+  Set<String> _roles = <String>{};
+  bool _hasOrganisation = false;
+
+  /// True when a permission/role payload has been seen for this session.
+  bool _accessLoaded = false;
+
+  /// Whether the signed-in user holds [permission] (e.g. `boq.edit`).
+  /// Unknown or omitted permissions are treated as not granted.
+  bool can(String permission) => _permissions.contains(permission.trim());
+
+  /// Whether the signed-in user has the role [slug] (e.g. `administrator`).
+  bool hasRole(String slug) => _roles.contains(slug.trim());
+
+  /// A personal account: the user was never attached to an organisation.
+  bool get isPersonalAccount => _accessLoaded && !_hasOrganisation;
+
+  /// Organisation admins and personal accounts may edit the company profile.
+  bool get canManageCompanyProfile =>
+      isPersonalAccount ||
+      hasRole('administrator') ||
+      hasRole('super-admin');
+
   Future<bool> hasSession() async =>
       (await _storage.read(key: _tokenKey)) != null;
+
+  /// Restores the cached permissions/roles and, when the server can be
+  /// reached, refreshes them from `/auth/me`. Returns false only when the
+  /// stored session is missing or the server rejects it (401/403).
+  Future<bool> loadAccess() async {
+    await _loadStoredAccess();
+    try {
+      await profile();
+      return true;
+    } on ApiException catch (error) {
+      if (error.statusCode == 401 || error.statusCode == 403) return false;
+      return true;
+    } on Object {
+      // Offline or unexpected error: keep the cached values.
+      return true;
+    }
+  }
+
+  void _applyAccess({
+    required Iterable<String> permissions,
+    required Iterable<String> roles,
+    required bool hasOrganisation,
+  }) {
+    _permissions = permissions.map((p) => p.trim()).where((p) => p.isNotEmpty).toSet();
+    _roles = roles.map((r) => r.trim()).where((r) => r.isNotEmpty).toSet();
+    _hasOrganisation = hasOrganisation;
+    _accessLoaded = true;
+  }
+
+  /// Reads permissions, role slugs and the organisation flag from an
+  /// auth payload (`data` of login/register/me) and persists them.
+  Future<void> _storeAccessFromData(Map<String, dynamic>? data) async {
+    if (data == null) return;
+    final user = data['user'] is Map<String, dynamic>
+        ? data['user'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    final roles = (user['roles'] is List ? user['roles'] as List : const [])
+        .whereType<Map>()
+        .map((role) => '${role['slug'] ?? ''}');
+    final organisation = user['organisation'];
+    final hasOrganisation =
+        organisation is Map && organisation['id'] != null;
+    _applyAccess(
+      permissions: _stringList(data['permissions']),
+      roles: roles,
+      hasOrganisation: hasOrganisation,
+    );
+    await _persistAccess();
+  }
+
+  Future<void> _persistAccess() async {
+    await _storage.write(
+      key: _permissionsKey,
+      value: jsonEncode(_permissions.toList()),
+    );
+    await _storage.write(key: _rolesKey, value: jsonEncode(_roles.toList()));
+    await _storage.write(
+      key: _organisationKey,
+      value: _hasOrganisation ? 'true' : 'false',
+    );
+  }
+
+  Future<void> _loadStoredAccess() async {
+    final permissions = await _storage.read(key: _permissionsKey);
+    final roles = await _storage.read(key: _rolesKey);
+    final organisation = await _storage.read(key: _organisationKey);
+    _applyAccess(
+      permissions: _storedStringList(permissions),
+      roles: _storedStringList(roles),
+      hasOrganisation: organisation == 'true',
+    );
+  }
+
+  Future<void> _clearAccess() async {
+    _applyAccess(permissions: const [], roles: const [], hasOrganisation: false);
+    _accessLoaded = false;
+    await _storage.delete(key: _permissionsKey);
+    await _storage.delete(key: _rolesKey);
+    await _storage.delete(key: _organisationKey);
+  }
 
   Future<void> login({required String email, required String password}) async {
     final response = await _httpClient.post(
@@ -123,6 +250,7 @@ class ApiClient {
       throw const ApiException('The server did not return an access token.');
     }
     await _storage.write(key: _tokenKey, value: token);
+    await _storeAccessFromData(body['data'] as Map<String, dynamic>?);
   }
 
   Future<void> register({
@@ -160,6 +288,7 @@ class ApiClient {
     }
 
     await _storage.write(key: _tokenKey, value: token);
+    await _storeAccessFromData(body['data'] as Map<String, dynamic>?);
   }
 
   Future<void> forgotPassword({required String email}) async {
@@ -232,7 +361,14 @@ class ApiClient {
     if (response.statusCode != 200) {
       throw _apiError(response, body);
     }
-    return UserProfile.fromJson(body['data']['user'] as Map<String, dynamic>);
+    final data = body['data'];
+    final map = data is Map<String, dynamic>
+        ? data
+        : const <String, dynamic>{};
+    if (map['user'] is Map<String, dynamic>) {
+      await _storeAccessFromData(map);
+    }
+    return UserProfile.fromJson(map['user'] as Map<String, dynamic>);
   }
 
   Future<Map<String, dynamic>> currentSubscription() async {
@@ -1177,6 +1313,7 @@ class ApiClient {
       );
     }
     await _storage.delete(key: _tokenKey);
+    await _clearAccess();
   }
 
   Future<List<NotificationItem>> getNotifications({

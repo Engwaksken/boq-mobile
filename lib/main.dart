@@ -235,8 +235,15 @@ class _SessionGateState extends State<SessionGate> {
   @override
   void initState() {
     super.initState();
-    _session = widget.api.hasSession();
+    _session = _restoreSession();
     _expiredSubscription = widget.api.sessionExpired.listen(_onSessionExpired);
+  }
+
+  /// Restores the token and the user's permissions/roles before the home
+  /// screen renders, so gated navigation is correct from the first frame.
+  Future<bool> _restoreSession() async {
+    if (!await widget.api.hasSession()) return false;
+    return widget.api.loadAccess();
   }
 
   @override
@@ -257,7 +264,7 @@ class _SessionGateState extends State<SessionGate> {
 
   void _refresh() {
     setState(() {
-      _session = widget.api.hasSession();
+      _session = _restoreSession();
     });
   }
 

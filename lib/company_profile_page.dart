@@ -32,6 +32,9 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
   bool _saving = false;
   String? _loadError;
 
+  /// Editing is limited to organisation admins and personal accounts.
+  bool get _canEdit => widget.api.canManageCompanyProfile;
+
   static const _labels = {
     'company_name': (
       'Company Name *',
@@ -314,24 +317,34 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
                                     spacing: AppSpacing.sm,
                                     runSpacing: AppSpacing.sm,
                                     children: [
-                                      OutlinedButton.icon(
-                                        onPressed: _pickLogo,
-                                        icon: const Icon(Icons.upload),
-                                        label: const Text('Choose logo'),
-                                      ),
-                                      if (_logoImage() != null)
-                                        TextButton.icon(
-                                          style: TextButton.styleFrom(
-                                            foregroundColor: scheme.error,
+                                      if (_canEdit) ...[
+                                        OutlinedButton.icon(
+                                          onPressed: _pickLogo,
+                                          icon: const Icon(Icons.upload),
+                                          label: const Text('Choose logo'),
+                                        ),
+                                        if (_logoImage() != null)
+                                          TextButton.icon(
+                                            style: TextButton.styleFrom(
+                                              foregroundColor: scheme.error,
+                                            ),
+                                            onPressed: () => setState(() {
+                                              _newLogoPath = null;
+                                              _removeLogo = true;
+                                            }),
+                                            icon: const Icon(
+                                              Icons.delete_outline,
+                                            ),
+                                            label: const Text('Remove'),
                                           ),
-                                          onPressed: () => setState(() {
-                                            _newLogoPath = null;
-                                            _removeLogo = true;
-                                          }),
-                                          icon: const Icon(
-                                            Icons.delete_outline,
-                                          ),
-                                          label: const Text('Remove'),
+                                      ] else
+                                        Text(
+                                          'The logo is managed by your '
+                                          'organisation administrator.',
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: scheme.onSurfaceVariant,
+                                              ),
                                         ),
                                     ],
                                   ),
@@ -343,12 +356,19 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
                         const SizedBox(height: AppSpacing.lg),
                         ..._formSections(),
                         const SizedBox(height: AppSpacing.sm),
-                        LoadingButton(
-                          label: 'Save Company Profile',
-                          icon: Icons.save_outlined,
-                          loading: _saving,
-                          onPressed: _save,
-                        ),
+                        if (_canEdit)
+                          LoadingButton(
+                            label: 'Save Company Profile',
+                            icon: Icons.save_outlined,
+                            loading: _saving,
+                            onPressed: _save,
+                          )
+                        else
+                          const InfoBanner(
+                            message:
+                                'This company profile is managed by your '
+                                'organisation administrator.',
+                          ),
                         const SizedBox(height: AppSpacing.md),
                         Text(
                           'BOQs keep the company details they were first exported with, even if you change this profile later.',
@@ -370,6 +390,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
     final (label, hint, type) = _labels[key]!;
     return TextFormField(
       controller: _controllers[key],
+      enabled: _canEdit,
       keyboardType: type,
       maxLines: key == 'description' ? 4 : 1,
       decoration: InputDecoration(
@@ -411,7 +432,9 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
         for (final entry in _countries.entries)
           DropdownMenuItem(value: entry.key, child: Text(entry.value)),
       ],
-      onChanged: (value) => _controllers['country']!.text = value ?? '',
+      onChanged: _canEdit
+          ? (value) => _controllers['country']!.text = value ?? ''
+          : null,
     );
   }
 

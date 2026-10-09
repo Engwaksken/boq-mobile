@@ -874,4 +874,58 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'record-expense payment method dropdown saves the selected value',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(900, 2400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      Map<String, dynamic>? saved;
+      final api = _api((r) async {
+        if (r.method == 'POST') {
+          saved = jsonDecode(r.body) as Map<String, dynamic>;
+          return _json({
+            'data': {'id': 4, 'total': '25.00'},
+          }, 201);
+        }
+        return _json({
+          'data': [
+            {'id': 8, 'name': 'Assigned project', 'currency': 'USD'},
+          ],
+        });
+      });
+      await tester.pumpWidget(_app(ExpenseFormPage(api: api)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(DropdownButtonFormField<int>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Assigned project').last);
+      await tester.pumpAndSettle();
+
+      Future<void> fill(String label, String value) async {
+        final finder = find.widgetWithText(TextFormField, label);
+        await tester.ensureVisible(finder);
+        await tester.enterText(finder, value);
+      }
+
+      await fill('Description', 'Cement');
+      await fill('Quantity', '2');
+      await fill('Unit', 'bags');
+      await fill('Rate', '12.5');
+
+      final dropdown = find.byType(DropdownButtonFormField<String>);
+      await tester.ensureVisible(dropdown);
+      await tester.tap(dropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mobile Money').last);
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Save'));
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      expect(saved!['payment_method'], 'Mobile Money');
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

@@ -18,11 +18,18 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
+/// A bottom-navigation destination. [topSuppliers] adds the Top Suppliers
+/// drawer entry directly beneath it.
+typedef _HomeDestination = ({
+  IconData icon,
+  IconData selectedIcon,
+  String label,
+  Widget page,
+  bool topSuppliers,
+});
+
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
-
-  /// Position of Get Prices in the destinations below.
-  static const _getPricesIndex = 2;
 
   @override
   Widget build(BuildContext context) {
@@ -30,27 +37,57 @@ class _HomeScreenState extends State<HomeScreen> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    final pages = <Widget>[
-      DashboardPage(l10n: l10n, api: widget.api),
-      ProjectsPage(l10n: l10n, api: widget.api),
-      HardwarePricesPage(l10n: l10n, api: widget.api),
-      ImportPage(l10n: l10n, api: widget.api),
-      AccountPage(
-        l10n: l10n,
-        api: widget.api,
-        locale: widget.locale,
-        onLocaleChanged: widget.onLocaleChanged,
-        onSignedOut: widget.onSignedOut,
+    final destinations = <_HomeDestination>[
+      (
+        icon: Icons.space_dashboard_outlined,
+        selectedIcon: Icons.space_dashboard,
+        label: l10n.dashboard,
+        page: DashboardPage(l10n: l10n, api: widget.api),
+        topSuppliers: false,
+      ),
+      (
+        icon: Icons.account_tree_outlined,
+        selectedIcon: Icons.account_tree,
+        label: l10n.projects,
+        page: ProjectsPage(l10n: l10n, api: widget.api),
+        topSuppliers: false,
+      ),
+      // Prices and Top Suppliers require hardware-prices.view.
+      if (widget.api.can('hardware-prices.view'))
+        (
+          icon: Icons.price_check_outlined,
+          selectedIcon: Icons.price_check,
+          label: l10n.getPrices,
+          page: HardwarePricesPage(l10n: l10n, api: widget.api),
+          topSuppliers: true,
+        ),
+      // Importing/creating BOQs requires boq.edit (finance stays read-only).
+      if (widget.api.can('boq.edit'))
+        (
+          icon: Icons.document_scanner_outlined,
+          selectedIcon: Icons.document_scanner,
+          label: l10n.importBoq,
+          page: ImportPage(l10n: l10n, api: widget.api),
+          topSuppliers: false,
+        ),
+      (
+        icon: Icons.person_outline,
+        selectedIcon: Icons.person,
+        label: l10n.account,
+        page: AccountPage(
+          l10n: l10n,
+          api: widget.api,
+          locale: widget.locale,
+          onLocaleChanged: widget.onLocaleChanged,
+          onSignedOut: widget.onSignedOut,
+        ),
+        topSuppliers: false,
       ),
     ];
 
-    final destinations = [
-      (Icons.space_dashboard_outlined, Icons.space_dashboard, l10n.dashboard),
-      (Icons.account_tree_outlined, Icons.account_tree, l10n.projects),
-      (Icons.price_check_outlined, Icons.price_check, l10n.getPrices),
-      (Icons.document_scanner_outlined, Icons.document_scanner, l10n.importBoq),
-      (Icons.person_outline, Icons.person, l10n.account),
-    ];
+    final selectedIndex = _selectedIndex.clamp(0, destinations.length - 1);
+    // Only roles that may see the account owner's billing get the plan entry.
+    final canViewBilling = widget.api.can('subscriptions.view');
 
     Widget drawerTile({
       required IconData icon,
@@ -84,7 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text(destinations[_selectedIndex].$3)),
+      appBar: AppBar(title: Text(destinations[selectedIndex].label)),
 
       drawer: Drawer(
         child: SafeArea(
@@ -131,11 +168,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
               for (var index = 0; index < destinations.length; index++) ...[
                 drawerTile(
-                  selected: _selectedIndex == index,
-                  icon: _selectedIndex == index
-                      ? destinations[index].$2
-                      : destinations[index].$1,
-                  label: destinations[index].$3,
+                  selected: selectedIndex == index,
+                  icon: selectedIndex == index
+                      ? destinations[index].selectedIcon
+                      : destinations[index].icon,
+                  label: destinations[index].label,
                   onTap: () {
                     setState(() => _selectedIndex = index);
 
@@ -143,7 +180,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                 ),
                 // Top Suppliers sits under Get Prices (same permission).
-                if (index == _getPricesIndex)
+                if (destinations[index].topSuppliers)
                   drawerTile(
                     icon: Icons.emoji_events_outlined,
                     label: l10n.topSuppliers,
@@ -179,19 +216,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Divider(),
               ),
 
-              drawerTile(
-                icon: Icons.workspace_premium_outlined,
-                label: l10n.managePlan,
-                onTap: () {
-                  Navigator.of(context).pop();
+              if (canViewBilling)
+                drawerTile(
+                  icon: Icons.workspace_premium_outlined,
+                  label: l10n.managePlan,
+                  onTap: () {
+                    Navigator.of(context).pop();
 
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => PlansPage(api: widget.api),
-                    ),
-                  );
-                },
-              ),
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => PlansPage(api: widget.api),
+                      ),
+                    );
+                  },
+                ),
               drawerTile(
                 icon: Icons.payments_outlined,
                 label: l10n.orgExpenses,
@@ -246,7 +284,10 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
 
       body: SafeArea(
-        child: IndexedStack(index: _selectedIndex, children: pages),
+        child: IndexedStack(
+          index: selectedIndex,
+          children: [for (final destination in destinations) destination.page],
+        ),
       ),
 
       bottomNavigationBar: DecoratedBox(
@@ -254,17 +295,17 @@ class _HomeScreenState extends State<HomeScreen> {
           border: Border(top: BorderSide(color: scheme.outlineVariant)),
         ),
         child: NavigationBar(
-          selectedIndex: _selectedIndex,
+          selectedIndex: selectedIndex,
           onDestinationSelected: (index) {
             setState(() => _selectedIndex = index);
           },
           destinations: [
             for (final item in destinations)
               NavigationDestination(
-                icon: Icon(item.$1),
-                selectedIcon: Icon(item.$2),
-                label: item.$3,
-                tooltip: item.$3,
+                icon: Icon(item.icon),
+                selectedIcon: Icon(item.selectedIcon),
+                label: item.label,
+                tooltip: item.label,
               ),
           ],
         ),

@@ -156,22 +156,26 @@ class _BoqsPageState extends State<BoqsPage> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('BOQs')),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'boqs-import',
-        onPressed: () async {
-          await Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => Scaffold(
-                appBar: AppBar(title: Text(widget.l10n.importBoq)),
-                body: ImportPage(l10n: widget.l10n, api: widget.api),
-              ),
-            ),
-          );
-          _load();
-        },
-        icon: const Icon(Icons.upload_file_outlined),
-        label: Text(widget.l10n.importBoq),
-      ),
+      // Importing is an edit action; finance and other read-only roles do
+      // not get the entry point.
+      floatingActionButton: widget.api.can('boq.edit')
+          ? FloatingActionButton.extended(
+              heroTag: 'boqs-import',
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => Scaffold(
+                      appBar: AppBar(title: Text(widget.l10n.importBoq)),
+                      body: ImportPage(l10n: widget.l10n, api: widget.api),
+                    ),
+                  ),
+                );
+                _load();
+              },
+              icon: const Icon(Icons.upload_file_outlined),
+              label: Text(widget.l10n.importBoq),
+            )
+          : null,
       body: Column(
         children: [
           Padding(
