@@ -40,7 +40,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get orgAssignmentRevokeConfirm =>
-      'Revoke this project assignment? The member will lose access to this project.';
+      'Remove this project assignment? The member will lose access to this project.';
 
   @override
   String get orgNoAssignmentOptions =>
@@ -173,11 +173,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get orgEdit => 'Edit';
 
   @override
-  String get orgRevoke => 'Revoke';
+  String get orgRevoke => 'Remove';
 
   @override
   String get orgRevokeConfirm =>
-      'Revoke this invitation? It can no longer be accepted.';
+      'Remove this invitation? It can no longer be accepted.';
 
   @override
   String get orgPending => 'Pending';
@@ -186,7 +186,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get orgAccepted => 'Accepted';
 
   @override
-  String get orgRevoked => 'Revoked';
+  String get orgRevoked => 'Removed';
 
   @override
   String get orgExpired => 'Expired';

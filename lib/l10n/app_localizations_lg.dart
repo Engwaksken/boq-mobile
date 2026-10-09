@@ -40,7 +40,7 @@ class AppLocalizationsLg extends AppLocalizations {
 
   @override
   String get orgAssignmentRevokeConfirm =>
-      'Osazaamu okugaba pulojekiti eno? Omukozi ajja kufiirwa obuyinza ku pulojekiti eno.';
+      'Ogyawo okugaba pulojekiti eno? Omukozi ajja kufiirwa obuyinza ku pulojekiti eno.';
 
   @override
   String get orgNoAssignmentOptions =>
@@ -175,11 +175,11 @@ class AppLocalizationsLg extends AppLocalizations {
   String get orgEdit => 'Kyusa';
 
   @override
-  String get orgRevoke => 'Sazaamu';
+  String get orgRevoke => 'Gyawo';
 
   @override
   String get orgRevokeConfirm =>
-      'Osazaamu okuyitibwa kuno? Tekujja kuddamu kukkirizibwa.';
+      'Ogyawo okuyitibwa kuno? Tekujja kuddamu kukkirizibwa.';
 
   @override
   String get orgPending => 'Kulindirira';
@@ -188,7 +188,7 @@ class AppLocalizationsLg extends AppLocalizations {
   String get orgAccepted => 'Kukkiriziddwa';
 
   @override
-  String get orgRevoked => 'Kusaziddwamu';
+  String get orgRevoked => 'Kugiddwawo';
 
   @override
   String get orgExpired => 'Kuweddeko';

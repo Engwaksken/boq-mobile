@@ -161,7 +161,7 @@ abstract class AppLocalizations {
   /// No description provided for @orgAssignmentRevokeConfirm.
   ///
   /// In en, this message translates to:
-  /// **'Revoke this project assignment? The member will lose access to this project.'**
+  /// **'Remove this project assignment? The member will lose access to this project.'**
   String get orgAssignmentRevokeConfirm;
 
   /// No description provided for @orgNoAssignmentOptions.
@@ -419,13 +419,13 @@ abstract class AppLocalizations {
   /// No description provided for @orgRevoke.
   ///
   /// In en, this message translates to:
-  /// **'Revoke'**
+  /// **'Remove'**
   String get orgRevoke;
 
   /// No description provided for @orgRevokeConfirm.
   ///
   /// In en, this message translates to:
-  /// **'Revoke this invitation? It can no longer be accepted.'**
+  /// **'Remove this invitation? It can no longer be accepted.'**
   String get orgRevokeConfirm;
 
   /// No description provided for @orgPending.
@@ -443,7 +443,7 @@ abstract class AppLocalizations {
   /// No description provided for @orgRevoked.
   ///
   /// In en, this message translates to:
-  /// **'Revoked'**
+  /// **'Removed'**
   String get orgRevoked;
 
   /// No description provided for @orgExpired.

@@ -132,10 +132,10 @@ void main() {
     });
     await tester.pumpWidget(_app(ProjectAssignmentsPage(api: api)));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Revoke'));
+    await tester.tap(find.text('Remove'));
     await tester.pumpAndSettle();
     expect(revoked, isFalse);
-    await tester.tap(find.widgetWithText(FilledButton, 'Revoke'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
     await tester.pumpAndSettle();
     expect(revoked, isTrue);
     expect(find.text('No records found.'), findsOneWidget);
@@ -493,14 +493,14 @@ void main() {
       });
       await tester.pumpWidget(_app(InvitationsPage(api: api)));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Revoke'));
+      await tester.tap(find.text('Remove'));
       await tester.pumpAndSettle();
       expect(revoked, isFalse);
-      await tester.tap(find.widgetWithText(FilledButton, 'Revoke'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
       await tester.pumpAndSettle();
       expect(revoked, isTrue);
-      expect(find.textContaining('Revoked ·'), findsOneWidget);
-      expect(find.text('Revoke'), findsNothing);
+      expect(find.textContaining('Removed ·'), findsOneWidget);
+      expect(find.text('Remove'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );
