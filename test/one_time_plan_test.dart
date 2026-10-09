@@ -77,7 +77,7 @@ Map<String, dynamic> _oneTimePlan({
   int? maxAiCredits = 10,
   int? maxOcrPages = 5,
   Object? autoRenewal = false,
-  List<String> features = const ['PDF & Excel export'],
+  List<Object?> features = const ['PDF & Excel export'],
 }) => {
   'id': id,
   'name': name,
@@ -141,6 +141,27 @@ void main() {
     expect(find.text('14 days'), findsOneWidget);
     expect(find.text('Renews automatically'), findsOneWidget);
     expect(find.text('No recurring payment'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('plan features given as objects show their names', (tester) async {
+    final api = _api(
+      plans: [
+        _oneTimePlan(
+          name: 'Object Features',
+          features: const [
+            {'id': 1, 'name': 'Advanced Reports', 'code': 'reports.advanced'},
+            {'id': 2, 'name': 'PDF Export', 'code': 'export.pdf'},
+          ],
+        ),
+      ],
+    );
+    await tester.pumpWidget(_app(api));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Advanced Reports'), findsOneWidget);
+    expect(find.text('PDF Export'), findsOneWidget);
+    expect(find.textContaining('{'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

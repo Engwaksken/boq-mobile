@@ -369,10 +369,35 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Company Profile is read-only for a non-admin member', (
+  testWidgets('AccountPage shows Company Profile for an organisation owner', (
     tester,
   ) async {
     final api = _accessApi(
+      permissions: ['projects.view', 'boq.edit', 'subscriptions.view'],
+      roles: ['user'],
+      hasOrganisation: true,
+    );
+    await api.loadAccess();
+    await tester.pumpWidget(
+      _app(
+        AccountPage(
+          l10n: AppLocalizationsEn(),
+          api: api,
+          locale: const Locale('en'),
+          onLocaleChanged: (_) {},
+          onSignedOut: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Company Profile'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Company Profile is read-only for a non-admin member', (
+    tester,
+  ) async {    final api = _accessApi(
       permissions: ['projects.view'],
       roles: ['procurement-officer'],
       hasOrganisation: true,

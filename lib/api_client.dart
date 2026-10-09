@@ -145,9 +145,13 @@ class ApiClient {
   /// A personal account: the user was never attached to an organisation.
   bool get isPersonalAccount => _accessLoaded && !_hasOrganisation;
 
-  /// Organisation admins and personal accounts may edit the company profile.
+  /// Organisation owners/admins and personal accounts may edit the company
+  /// profile. The customer/owner role (`user`) is included because organisations
+  /// are created with that role; invited operational roles (project-manager,
+  /// procurement-officer, finance) are excluded.
   bool get canManageCompanyProfile =>
       isPersonalAccount ||
+      hasRole('user') ||
       hasRole('administrator') ||
       hasRole('super-admin');
 

@@ -549,7 +549,10 @@ class _PlansPageState extends State<PlansPage> {
         (plan['features'] ?? plan['included_features']) as List<dynamic>? ??
         const [];
     for (final raw in rawFeatures) {
-      final feature = '$raw'.trim();
+      final feature = (raw is Map
+              ? '${raw['name'] ?? raw['code'] ?? ''}'
+              : '$raw')
+          .trim();
       if (feature.isEmpty) continue;
       if (feature.toLowerCase().contains('credit')) continue;
       if (seen.add(feature.toLowerCase())) checks.add(feature);
