@@ -80,6 +80,14 @@ class _ResourceList extends StatelessWidget {
                   child: Text(l.orgEmpty),
                 ),
               ...data.items.map(tile),
+              for (final total in data.totals)
+                Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Text(
+                    '${total['currency']} ${total['amount']}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -115,9 +123,25 @@ class ExpensesPage extends StatefulWidget {
 
 class _ExpensesPageState extends State<ExpensesPage> {
   late Future<ResourcePage> _future = widget.api.expenses()..ignore();
+  late final Future<List<Map<String, dynamic>>> _projects =
+      widget.api.expenseProjects()..ignore();
+  final _search = TextEditingController();
+  String _query = '';
+  int? _projectId;
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
   Future<void> _reload([int page = 1]) {
     setState(() {
-      _future = widget.api.expenses(page: page)..ignore();
+      _future = widget.api.expenses(
+        page: page,
+        search: _query,
+        projectId: _projectId,
+      )..ignore();
     });
     return _orgWait(_future);
   }
@@ -143,20 +167,84 @@ class _ExpensesPageState extends State<ExpensesPage> {
         onPressed: () => _open(null),
         child: const Icon(Icons.add),
       ),
-      body: _ResourceList(
-        future: _future,
-        reload: _reload,
-        tile: (e) => Card(
-          child: ListTile(
-            title: Text('${e['description']}'),
-            subtitle: Text(
-              '${_orgDate(e['purchase_date'])} · ${e['supplier'] ?? ''}\n${e['currency']} ${e['total']}',
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                TextField(
+                  controller: _search,
+                  maxLength: 255,
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    labelText: l.orgSearchExpenses,
+                    suffixIcon: IconButton(
+                      tooltip: l.orgSearchExpenses,
+                      icon: const Icon(Icons.search),
+                      onPressed: () {
+                        _query = _search.text.trim();
+                        _reload();
+                      },
+                    ),
+                  ),
+                  onSubmitted: (v) {
+                    _query = v.trim();
+                    _reload();
+                  },
+                ),
+                FutureBuilder<List<Map<String, dynamic>>>(
+                  future: _projects,
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+                    return DropdownButtonFormField<int>(
+                      decoration: InputDecoration(labelText: l.orgProject),
+                      isExpanded: true,
+                      items: [
+                        DropdownMenuItem<int>(
+                          value: null,
+                          child: Text(l.orgAllProjects),
+                        ),
+                        ...snapshot.data!.map(
+                          (p) => DropdownMenuItem(
+                            value: _orgId(p['id']),
+                            child: Text(
+                              '${p['name']}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        _projectId = v;
+                        _reload();
+                      },
+                    );
+                  },
+                ),
+              ],
             ),
-            isThreeLine: true,
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _open(e),
           ),
-        ),
+          Expanded(
+            child: _ResourceList(
+              future: _future,
+              reload: _reload,
+              tile: (e) => Card(
+                child: ListTile(
+                  title: Text('${e['description']}'),
+                  subtitle: Text(
+                    '${_orgDate(e['purchase_date'])} · ${e['supplier'] ?? ''}\n${e['currency']} ${e['total']}',
+                  ),
+                  isThreeLine: true,
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => _open(e),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -179,11 +267,65 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
   bool _planned = true;
   bool _busy = false;
 
+  final _additionalItems = <Map<String, TextEditingController>>[];
+  final _additionalItemLinks = <int?>[];
+  int? _boq;
+  List<BoqListItem> _approvedBoqs = [];
+  List<BoqItemSummary> _boqItems = [];
+  int? _firstBoqItem;
+  bool _loadingBoqs = false;
+  bool _loadingBoqItems = false;
+  PlatformFile? _receipt;
+  List<String> _warnings = [];
+  int? _savedExpenseId;
+
+  Future<void> _extract() async {
+    setState(() => _busy = true);
+    try {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
+        withData: true,
+      );
+      if (picked == null || !mounted) return;
+      final file = picked.files.single;
+      if (file.bytes == null) {
+        throw const ApiException('Unable to read this file.');
+      }
+      final data = await widget.api.extractExpenseReceipt(
+        file.bytes!,
+        file.name,
+      );
+      if (!mounted) return;
+      setState(() {
+        _receipt = file;
+        for (final key in [
+          'supplier',
+          'purchase_date',
+          'description',
+          'quantity',
+          'unit',
+          'rate',
+          'currency',
+          'payment_method',
+        ]) {
+          if (data[key] != null) _fields[key]!.text = '${data[key]}';
+        }
+        _warnings = (data['warnings'] as List? ?? []).map((w) => '$w').toList();
+      });
+    } on Object catch (e) {
+      if (mounted) _orgError(context, e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     final e = widget.expense;
     _project = e == null ? null : _orgId(e['project_id']);
+    _loadingBoqs = e != null;
     _planned = e?['is_planned'] == null ? true : e!['is_planned'] == true;
     for (final key in [
       'purchase_date',
@@ -205,6 +347,11 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
                     : '')}',
       );
     }
+    if (_project != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _loadBoqs(_project!);
+      });
+    }
   }
 
   @override
@@ -212,21 +359,134 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
     for (final c in _fields.values) {
       c.dispose();
     }
+    for (final item in _additionalItems) {
+      for (final controller in item.values) {
+        controller.dispose();
+      }
+    }
     super.dispose();
+  }
+
+  /// Clears the linked BOQ and every line's BOQ item link.
+  void _resetBoq() {
+    _boq = null;
+    _approvedBoqs = [];
+    _boqItems = [];
+    _firstBoqItem = null;
+    for (var i = 0; i < _additionalItemLinks.length; i++) {
+      _additionalItemLinks[i] = null;
+    }
+  }
+
+  /// Loads the project's approved BOQs and auto-links a lone one.
+  Future<void> _loadBoqs(int projectId) async {
+    setState(() {
+      _resetBoq();
+      _loadingBoqs = true;
+      _loadingBoqItems = false;
+    });
+    try {
+      final page = await widget.api.boqs(
+        projectId: projectId,
+        status: 'approved',
+        perPage: 100,
+      );
+      if (!mounted || _project != projectId) return;
+      setState(() {
+        _approvedBoqs = page.items;
+        _loadingBoqs = false;
+      });
+      if (_approvedBoqs.length == 1) {
+        await _selectBoq(_approvedBoqs.single.id);
+      }
+    } on Object {
+      if (!mounted || _project != projectId) return;
+      setState(() {
+        _approvedBoqs = [];
+        _loadingBoqs = false;
+      });
+    }
+  }
+
+  /// Loads the approved items of [boqId]; null clears every link.
+  Future<void> _selectBoq(int? boqId) async {
+    setState(() {
+      _boq = boqId;
+      _boqItems = [];
+      _firstBoqItem = null;
+      for (var i = 0; i < _additionalItemLinks.length; i++) {
+        _additionalItemLinks[i] = null;
+      }
+      _loadingBoqItems = boqId != null;
+    });
+    if (boqId == null) return;
+    try {
+      final items = await widget.api.boqItems(
+        boqId,
+        status: 'approved',
+        perPage: 100,
+      );
+      if (!mounted || _boq != boqId) return;
+      setState(() {
+        _boqItems = items;
+        _loadingBoqItems = false;
+      });
+    } on Object {
+      if (!mounted || _boq != boqId) return;
+      setState(() {
+        _boqItems = [];
+        _loadingBoqItems = false;
+      });
+    }
   }
 
   Future<void> _save() async {
     if (!_form.currentState!.validate()) return;
     setState(() => _busy = true);
     try {
-      await widget.api.saveExpense({
-        if (widget.expense == null) 'project_id': _project,
-        for (final entry in _fields.entries)
-          if (entry.key != 'explanation' || !_planned)
-            entry.key: entry.value.text.trim(),
-        'currency': _fields['currency']!.text.trim().toUpperCase(),
-        'is_planned': _planned,
-      }, id: widget.expense == null ? null : _orgId(widget.expense!['id']));
+      if (_savedExpenseId == null) {
+        final payload = <String, dynamic>{
+          if (widget.expense == null) 'project_id': _project,
+          for (final entry in _fields.entries)
+            if (entry.key != 'explanation' || !_planned)
+              entry.key: entry.value.text.trim(),
+          'currency': _fields['currency']!.text.trim().toUpperCase(),
+          'is_planned': _planned,
+          if (_boq != null) 'boq_id': _boq,
+        };
+        if (widget.expense == null && _additionalItems.isNotEmpty) {
+          payload['items'] = <Map<String, dynamic>>[
+            {
+              for (final key in ['description', 'quantity', 'unit', 'rate'])
+                key: _fields[key]!.text.trim(),
+              if (_firstBoqItem != null) 'boq_item_id': _firstBoqItem,
+            },
+            for (final item in _additionalItems)
+              {
+                for (final entry in item.entries)
+                  entry.key: entry.value.text.trim(),
+                if (_additionalItemLinks[_additionalItems.indexOf(item)] !=
+                    null)
+                  'boq_item_id':
+                      _additionalItemLinks[_additionalItems.indexOf(item)],
+              },
+          ];
+        } else if (_firstBoqItem != null) {
+          payload['boq_item_id'] = _firstBoqItem;
+        }
+        final saved = await widget.api.saveExpense(
+          payload,
+          id: widget.expense == null ? null : _orgId(widget.expense!['id']),
+        );
+        _savedExpenseId = _orgId(saved['id']);
+      }
+      if (_receipt != null) {
+        await widget.api.uploadExpenseReceipt(
+          _savedExpenseId!,
+          _receipt!.bytes!,
+          _receipt!.name,
+        );
+      }
       if (mounted) Navigator.of(context).pop();
     } on Object catch (e) {
       if (mounted) _orgError(context, e);
@@ -247,7 +507,7 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
       padding: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
         controller: _fields[key],
-        enabled: !_busy,
+        enabled: !_busy && _savedExpenseId == null,
         decoration: InputDecoration(labelText: label),
         keyboardType: number
             ? const TextInputType.numberWithOptions(decimal: true)
@@ -270,6 +530,165 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
           }
           return null;
         },
+      ),
+    );
+  }
+
+  /// Optional approved BOQ selector for the chosen project.
+  Widget _boqSection(AppLocalizations l) {
+    if (_project == null) return const SizedBox.shrink();
+    if (_loadingBoqs) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 8, bottom: 8),
+        child: LinearProgressIndicator(),
+      );
+    }
+    if (_approvedBoqs.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 8, bottom: 8),
+        child: Text(l.orgNoApprovedBoq),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 16),
+      child: DropdownButtonFormField<int>(
+        key: ValueKey('expense-boq-$_boq-${_approvedBoqs.length}'),
+        initialValue: _boq,
+        isExpanded: true,
+        hint: Text(l.orgNoBoqLink),
+        decoration: InputDecoration(labelText: l.orgApprovedBoq),
+        items: [
+          DropdownMenuItem<int>(value: null, child: Text(l.orgNoBoqLink)),
+          ..._approvedBoqs.map(
+            (boq) => DropdownMenuItem<int>(
+              value: boq.id,
+              child: Text(
+                boq.name.isEmpty ? 'BOQ #${boq.id}' : boq.name,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ],
+        onChanged: _busy || _savedExpenseId != null
+            ? null
+            : (id) => _selectBoq(id),
+      ),
+    );
+  }
+
+  /// Links one expense line to an approved item of the selected BOQ.
+  Widget _lineBoqPicker(
+    AppLocalizations l,
+    int? value,
+    ValueChanged<int?> onChanged,
+    String tag,
+  ) {
+    if (_loadingBoqItems) {
+      return const Padding(
+        padding: EdgeInsets.only(bottom: 16),
+        child: LinearProgressIndicator(),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: DropdownButtonFormField<int>(
+        key: ValueKey('boq-item-$tag-$value-${_boqItems.length}'),
+        initialValue: value,
+        isExpanded: true,
+        hint: Text(l.orgNoBoqItem),
+        decoration: InputDecoration(labelText: l.orgBoqItem),
+        items: [
+          DropdownMenuItem<int>(value: null, child: Text(l.orgNoBoqItem)),
+          ..._boqItems.map(
+            (item) => DropdownMenuItem<int>(
+              value: item.id,
+              child: Text(
+                item.code.isEmpty
+                    ? item.description
+                    : '${item.code} · ${item.description}',
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ],
+        onChanged: _busy || _savedExpenseId != null ? null : onChanged,
+      ),
+    );
+  }
+
+  Widget _additionalLineCard(
+    AppLocalizations l,
+    Map<String, TextEditingController> item,
+  ) {
+    final index = _additionalItems.indexOf(item);
+    final link = index >= 0 && index < _additionalItemLinks.length
+        ? _additionalItemLinks[index]
+        : null;
+    return Card(
+      key: ObjectKey(item),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            for (final entry in item.entries)
+              TextFormField(
+                controller: entry.value,
+                enabled: !_busy && _savedExpenseId == null,
+                decoration: InputDecoration(
+                  labelText: {
+                    'description': l.orgDescription,
+                    'quantity': l.orgQuantity,
+                    'unit': l.orgUnit,
+                    'rate': l.orgRate,
+                  }[entry.key],
+                ),
+                keyboardType: entry.key == 'quantity' || entry.key == 'rate'
+                    ? const TextInputType.numberWithOptions(decimal: true)
+                    : TextInputType.text,
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) {
+                    return l.orgRequired;
+                  }
+                  if (entry.key == 'quantity' || entry.key == 'rate') {
+                    final n = double.tryParse(v);
+                    if (n == null ||
+                        !n.isFinite ||
+                        (entry.key == 'quantity' ? n <= 0 : n < 0)) {
+                      return l.orgRequired;
+                    }
+                  }
+                  return null;
+                },
+              ),
+            if (_boq != null)
+              _lineBoqPicker(l, link, (id) {
+                final at = _additionalItems.indexOf(item);
+                if (at < 0 || at >= _additionalItemLinks.length) return;
+                setState(() => _additionalItemLinks[at] = id);
+              }, 'line-${identityHashCode(item)}'),
+            TextButton.icon(
+              onPressed: _busy || _savedExpenseId != null
+                  ? null
+                  : () {
+                      final at = _additionalItems.indexOf(item);
+                      setState(() {
+                        _additionalItems.removeAt(at);
+                        if (at >= 0 && at < _additionalItemLinks.length) {
+                          _additionalItemLinks.removeAt(at);
+                        }
+                      });
+                      // Dispose after the removed fields leave the widget tree.
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        for (final c in item.values) {
+                          c.dispose();
+                        }
+                      });
+                    },
+              icon: const Icon(Icons.remove_circle_outline),
+              label: Text(l.orgRemoveItem),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -299,7 +718,14 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          final projects = snapshot.data!;
+          final projects = [...snapshot.data!];
+          if (widget.expense != null &&
+              !projects.any((p) => _orgId(p['id']) == _project)) {
+            projects.add({
+              'id': _project,
+              'name': '${l.orgProject} #$_project',
+            });
+          }
           if (projects.isEmpty) {
             return Center(
               child: Padding(
@@ -313,6 +739,21 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                if (widget.expense == null) ...[
+                  OutlinedButton.icon(
+                    onPressed: _busy || _savedExpenseId != null
+                        ? null
+                        : _extract,
+                    icon: const Icon(Icons.document_scanner_outlined),
+                    label: Text(l.orgExtractReceipt),
+                  ),
+                  if (_receipt != null) ...[
+                    Text(_receipt!.name),
+                    Text(l.orgReviewExtraction),
+                    for (final warning in _warnings) Text(warning),
+                  ],
+                  const SizedBox(height: 16),
+                ],
                 DropdownButtonFormField<int>(
                   initialValue: _project,
                   isExpanded: true,
@@ -328,15 +769,20 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
                         ),
                       )
                       .toList(),
-                  onChanged: _busy || widget.expense != null
+                  onChanged:
+                      _busy || _savedExpenseId != null || widget.expense != null
                       ? null
-                      : (id) => setState(() {
-                          _project = id;
-                          _fields['currency']!.text =
-                              '${projects.firstWhere((p) => _orgId(p['id']) == id)['currency'] ?? 'UGX'}';
-                        }),
+                      : (id) {
+                          setState(() {
+                            _project = id;
+                            _fields['currency']!.text =
+                                '${projects.firstWhere((p) => _orgId(p['id']) == id)['currency'] ?? 'UGX'}';
+                          });
+                          if (id != null) _loadBoqs(id);
+                        },
                   validator: (id) => id == null ? l.orgRequired : null,
                 ),
+                _boqSection(l),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _fields['purchase_date'],
@@ -345,7 +791,9 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
                     labelText: l.orgPurchaseDate,
                     suffixIcon: const Icon(Icons.calendar_today),
                   ),
-                  onTap: _busy
+                  validator: (v) =>
+                      DateTime.tryParse(v ?? '') == null ? l.orgRequired : null,
+                  onTap: _busy || _savedExpenseId != null
                       ? null
                       : () async {
                           final date = await showDatePicker(
@@ -376,12 +824,47 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
                 _field('quantity', l.orgQuantity, required: true, number: true),
                 _field('unit', l.orgUnit, required: true, maxLength: 50),
                 _field('rate', l.orgRate, required: true, number: true),
+                if (_boq != null)
+                  _lineBoqPicker(
+                    l,
+                    _firstBoqItem,
+                    (id) => setState(() => _firstBoqItem = id),
+                    'first',
+                  ),
+                for (final item in _additionalItems)
+                  _additionalLineCard(l, item),
+                if (widget.expense == null)
+                  TextButton.icon(
+                    onPressed:
+                        _busy ||
+                            _savedExpenseId != null ||
+                            _additionalItems.length >= 99
+                        ? null
+                        : () => setState(() {
+                            _additionalItems.add({
+                              for (final key in [
+                                'description',
+                                'quantity',
+                                'unit',
+                                'rate',
+                              ])
+                                key: TextEditingController(
+                                  text: key == 'quantity' ? '1' : '',
+                                ),
+                            });
+                            _additionalItemLinks.add(null);
+                          }),
+                    icon: const Icon(Icons.add),
+                    label: Text(l.orgAddItem),
+                  ),
                 _field('currency', l.currency, required: true, maxLength: 3),
                 _field('payment_method', l.orgPaymentMethod, maxLength: 100),
                 SwitchListTile(
                   title: Text(l.orgPlanned),
                   value: _planned,
-                  onChanged: _busy ? null : (v) => setState(() => _planned = v),
+                  onChanged: _busy || _savedExpenseId != null
+                      ? null
+                      : (v) => setState(() => _planned = v),
                 ),
                 if (!_planned)
                   _field(
@@ -398,7 +881,11 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : Text(l.orgSave),
+                      : Text(
+                          _savedExpenseId != null && _receipt != null
+                              ? l.orgRetryReceipt
+                              : l.orgSave,
+                        ),
                 ),
               ],
             ),
@@ -507,6 +994,16 @@ class _ExpenseDetailPageState extends State<ExpenseDetailPage> {
               Text('${l.orgPurchaseDate}: ${_orgDate(e['purchase_date'])}'),
               Text('${l.orgSupplier}: ${e['supplier'] ?? ''}'),
               Text('${e['quantity']} ${e['unit']} × ${e['rate']}'),
+              if ((e['items'] as List? ?? []).length > 1)
+                for (final item
+                    in (e['items'] as List).cast<Map<String, dynamic>>())
+                  ListTile(
+                    title: Text('${item['description']}'),
+                    subtitle: Text(
+                      '${item['quantity']} ${item['unit']} × ${item['rate']}',
+                    ),
+                    trailing: Text('${e['currency']} ${item['total']}'),
+                  ),
               Text('${l.orgPaymentMethod}: ${e['payment_method'] ?? ''}'),
               if (e['is_planned'] != true)
                 Text('${l.orgExplanation}: ${e['explanation'] ?? ''}'),
@@ -821,6 +1318,25 @@ class _InvitationFormPageState extends State<InvitationFormPage> {
                       Clipboard.setData(ClipboardData(text: _token!)),
                   icon: const Icon(Icons.copy),
                   label: Text(l.orgCopy),
+                ),
+                TextButton.icon(
+                  onPressed: () async {
+                    try {
+                      final box = context.findRenderObject() as RenderBox?;
+                      await SharePlus.instance.share(
+                        ShareParams(
+                          text: _token!,
+                          sharePositionOrigin: box == null
+                              ? null
+                              : box.localToGlobal(Offset.zero) & box.size,
+                        ),
+                      );
+                    } on Object catch (e) {
+                      if (context.mounted) _orgError(context, e);
+                    }
+                  },
+                  icon: const Icon(Icons.share),
+                  label: Text(l.orgShareToken),
                 ),
               ],
             )

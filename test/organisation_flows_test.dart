@@ -5,6 +5,7 @@ import 'package:boq_mobile/api_client.dart';
 import 'package:boq_mobile/l10n/app_localizations.dart';
 import 'package:boq_mobile/main.dart';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -23,6 +24,30 @@ class _Storage extends FlutterSecureStorage {
   }) async => 'session-token';
 }
 
+class _ReceiptPicker extends FilePicker {
+  @override
+  Future<FilePickerResult?> pickFiles({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    bool allowCompression = false,
+    int compressionQuality = 0,
+    bool allowMultiple = false,
+    bool withData = false,
+    bool withReadStream = false,
+    bool lockParentWindow = false,
+    bool readSequential = false,
+  }) async => FilePickerResult([
+    PlatformFile(
+      name: 'receipt.pdf',
+      size: 8,
+      bytes: Uint8List.fromList(utf8.encode('%PDF-1.4')),
+    ),
+  ]);
+}
+
 http.Response _json(Object body, [int status = 200]) => http.Response(
   jsonEncode(body),
   status,
@@ -37,6 +62,306 @@ Widget _app(Widget child) => MaterialApp(
 );
 
 void main() {
+  testWidgets('FAQ editing sends publication and ordering fields using PUT', (
+    tester,
+  ) async {
+    Map<String, dynamic>? saved;
+    final api = _api((r) async {
+      expect(r.method, 'PUT');
+      expect(r.url.path, endsWith('/admin/faqs/5'));
+      saved = jsonDecode(r.body) as Map<String, dynamic>;
+      return _json({
+        'data': {'id': 5},
+      });
+    });
+    await tester.pumpWidget(
+      _app(
+        FaqFormPage(
+          api: api,
+          faq: {
+            'id': 5,
+            'question': 'Old question',
+            'answer': 'Old answer',
+            'sort_order': 2,
+            'is_active': true,
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Question'),
+      'Updated question',
+    );
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(saved, {
+      'question': 'Updated question',
+      'answer': 'Old answer',
+      'sort_order': 2,
+      'is_active': false,
+    });
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('assignment revocation confirms then refreshes the list', (
+    tester,
+  ) async {
+    var revoked = false;
+    final api = _api((r) async {
+      if (r.method == 'DELETE') {
+        revoked = true;
+        return http.Response('', 204);
+      }
+      return _json({
+        'data': revoked
+            ? []
+            : [
+                {
+                  'id': 1,
+                  'project_id': 8,
+                  'user_id': 12,
+                  'role': 'finance',
+                  'project': {'name': 'Site A'},
+                  'user': {'name': 'Alex', 'email': 'alex@example.test'},
+                },
+              ],
+        'meta': {'current_page': 1, 'last_page': 1},
+      });
+    });
+    await tester.pumpWidget(_app(ProjectAssignmentsPage(api: api)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Revoke'));
+    await tester.pumpAndSettle();
+    expect(revoked, isFalse);
+    await tester.tap(find.widgetWithText(FilledButton, 'Revoke'));
+    await tester.pumpAndSettle();
+    expect(revoked, isTrue);
+    expect(find.text('No records found.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'receipt review saves multiple items and attachment retry never duplicates an expense',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(900, 2400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      FilePicker.platform = _ReceiptPicker();
+      var creates = 0;
+      var uploads = 0;
+      Map<String, dynamic>? saved;
+      final api = _api((r) async {
+        if (r.url.path.endsWith('/extract')) {
+          return _json({
+            'data': {
+              'description': 'Cement',
+              'quantity': 2,
+              'unit': 'bags',
+              'rate': 12.5,
+              'purchase_date': '2026-10-01',
+              'currency': 'USD',
+              'warnings': ['Check supplier'],
+            },
+          });
+        }
+        if (r.url.path.endsWith('/receipts')) {
+          uploads++;
+          return uploads == 1
+              ? _json({'message': 'Unavailable'}, 503)
+              : _json({
+                  'data': {'id': 7},
+                }, 201);
+        }
+        if (r.method == 'POST') {
+          creates++;
+          saved = jsonDecode(r.body) as Map<String, dynamic>;
+          return _json({
+            'data': {'id': 4},
+          }, 201);
+        }
+        return _json({
+          'data': [
+            {'id': 8, 'name': 'Assigned project', 'currency': 'USD'},
+          ],
+        });
+      });
+      await tester.pumpWidget(_app(ExpenseFormPage(api: api)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Read receipt (PDF or image, up to 10 MB)'));
+      await tester.pumpAndSettle();
+      expect(find.text('Check supplier'), findsOneWidget);
+      expect(creates, 0);
+      await tester.tap(find.byType(DropdownButtonFormField<int>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Assigned project').last);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Add expense item'));
+      await tester.tap(find.text('Add expense item'));
+      await tester.pumpAndSettle();
+      for (final pair in [
+        ('Description', 'Sand'),
+        ('Quantity', '3'),
+        ('Unit', 'loads'),
+        ('Rate', '20'),
+      ]) {
+        final field = find.widgetWithText(TextFormField, pair.$1).last;
+        await tester.ensureVisible(field);
+        await tester.enterText(field, pair.$2);
+      }
+      await tester.ensureVisible(find.text('Save'));
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(creates, 1);
+      expect(uploads, 1);
+      expect((saved!['items'] as List).length, 2);
+      expect(saved!['items'][1]['description'], 'Sand');
+      expect(saved!.containsKey('total'), isFalse);
+      await tester.ensureVisible(
+        find.text('Expense saved. Retry attaching receipt'),
+      );
+      await tester.tap(find.text('Expense saved. Retry attaching receipt'));
+      await tester.pumpAndSettle();
+      expect(creates, 1);
+      expect(uploads, 2);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  test(
+    'assignment writes use scoped IDs and accept an empty 204 response',
+    () async {
+      final requests = <http.Request>[];
+      final api = _api((r) async {
+        requests.add(r);
+        return r.method == 'DELETE'
+            ? http.Response('', 204)
+            : _json({
+                'data': {'id': 1},
+              }, 201);
+      });
+      await api.saveProjectAssignment(8, 12, 'finance');
+      await api.revokeProjectAssignment(1);
+      expect(jsonDecode(requests.first.body), {
+        'project_id': 8,
+        'user_id': 12,
+        'role': 'finance',
+      });
+      expect(requests.last.url.path, endsWith('/project-assignments/1'));
+    },
+  );
+
+  test(
+    'receipt extraction enforces its own limit and sends authenticated multipart',
+    () async {
+      var sent = 0;
+      final api = _api((r) async {
+        sent++;
+        expect(r.url.path, endsWith('/expenses/extract'));
+        expect(r.headers['authorization'], 'Bearer session-token');
+        expect(r.body, contains('name="file"'));
+        return _json({
+          'data': {
+            'description': 'Cement',
+            'warnings': ['Check rate'],
+          },
+        });
+      });
+      await expectLater(
+        api.extractExpenseReceipt(
+          Uint8List(10 * 1024 * 1024 + 1),
+          'receipt.pdf',
+        ),
+        throwsA(isA<ApiException>()),
+      );
+      expect(sent, 0);
+      final data = await api.extractExpenseReceipt(
+        Uint8List.fromList(utf8.encode('%PDF-1.4')),
+        'receipt.pdf',
+      );
+      expect(data['warnings'], ['Check rate']);
+    },
+  );
+
+  testWidgets('FAQ search resets pagination and expands answers', (
+    tester,
+  ) async {
+    final queries = <Map<String, String>>[];
+    final api = _api((r) async {
+      queries.add(r.url.queryParameters);
+      return _json({
+        'data': [
+          {
+            'id': 1,
+            'question': 'How to attach receipts?',
+            'answer': 'Open the expense.',
+          },
+        ],
+        'meta': {
+          'current_page': int.parse(r.url.queryParameters['page']!),
+          'last_page': 2,
+        },
+      });
+    });
+    await tester.pumpWidget(_app(FaqsPage(api: api)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('How to attach receipts?'));
+    await tester.pumpAndSettle();
+    expect(find.text('Open the expense.'), findsOneWidget);
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'receipt & PDF');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(queries.last, {'page': '1', 'search': 'receipt & PDF'});
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'assignment form submits selected server project, member and role',
+    (tester) async {
+      Map<String, dynamic>? saved;
+      final api = _api((r) async {
+        if (r.method == 'POST') {
+          saved = jsonDecode(r.body) as Map<String, dynamic>;
+          return _json({
+            'data': {'id': 1},
+          }, 201);
+        }
+        return _json({
+          'data': {
+            'projects': [
+              {'id': 8, 'name': 'Site A'},
+            ],
+            'members': [
+              {'id': 12, 'name': 'Alex', 'email': 'alex@example.test'},
+            ],
+            'roles': ['finance'],
+          },
+        });
+      });
+      await tester.pumpWidget(_app(ProjectAssignmentFormPage(api: api)));
+      await tester.pumpAndSettle();
+      for (final pair in [
+        (find.byType(DropdownButtonFormField<int>).at(0), 'Site A'),
+        (
+          find.byType(DropdownButtonFormField<int>).at(1),
+          'Alex (alex@example.test)',
+        ),
+        (find.byType(DropdownButtonFormField<String>), 'finance'),
+      ]) {
+        await tester.tap(pair.$1);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(pair.$2).last);
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(saved, {'project_id': 8, 'user_id': 12, 'role': 'finance'});
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   test(
     'project lookup follows pagination without dropping assigned projects',
     () async {
@@ -418,6 +743,134 @@ void main() {
         ),
         findsOneWidget,
       );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'expense links a project to an approved BOQ and its approved items',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(900, 2600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      Map<String, dynamic>? saved;
+      final boqQueries = <Map<String, String>>[];
+      final itemQueries = <Map<String, String>>[];
+      final api = _api((r) async {
+        if (r.method == 'POST') {
+          saved = jsonDecode(r.body) as Map<String, dynamic>;
+          return _json({
+            'data': {'id': 4, 'total': '25.00'},
+          }, 201);
+        }
+        if (r.url.path.endsWith('/boqs/5/items')) {
+          itemQueries.add(r.url.queryParameters);
+          return _json({
+            'data': {
+              'data': [
+                {
+                  'id': 21,
+                  'description': 'Cement',
+                  'unit': 'bags',
+                  'quantity': 10,
+                },
+                {
+                  'id': 22,
+                  'description': 'Sand',
+                  'unit': 'loads',
+                  'quantity': 5,
+                },
+              ],
+              'last_page': 1,
+            },
+          });
+        }
+        if (r.url.path.endsWith('/boqs')) {
+          boqQueries.add(r.url.queryParameters);
+          return _json({
+            'success': true,
+            'data': {
+              'data': [
+                {
+                  'id': 5,
+                  'name': 'Main BOQ',
+                  'code': 'BOQ-1',
+                  'status': 'approved',
+                  'project_id': 8,
+                },
+              ],
+              'last_page': 1,
+            },
+          });
+        }
+        return _json({
+          'data': [
+            {'id': 8, 'name': 'Site A', 'currency': 'USD'},
+          ],
+        });
+      });
+      await tester.pumpWidget(_app(ExpenseFormPage(api: api)));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.widgetWithText(DropdownButtonFormField<int>, 'Assigned project'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Site A').last);
+      await tester.pumpAndSettle();
+
+      // Both lookups must be scoped to approved records of the project.
+      expect(boqQueries, isNotEmpty);
+      expect(boqQueries.first['project_id'], '8');
+      expect(boqQueries.first['status'], 'approved');
+      expect(itemQueries, isNotEmpty);
+      expect(itemQueries.first['status'], 'approved');
+      // A lone approved BOQ is linked automatically.
+      expect(find.text('Main BOQ'), findsOneWidget);
+
+      Future<void> fill(String label, String value, {bool last = false}) async {
+        var finder = find.widgetWithText(TextFormField, label);
+        if (last) finder = finder.last;
+        await tester.ensureVisible(finder);
+        await tester.enterText(finder, value);
+      }
+
+      await fill('Description', 'Cement bags');
+      await fill('Quantity', '2');
+      await fill('Unit', 'bags');
+      await fill('Rate', '12.5');
+
+      Future<void> linkBoqItem(String item, {bool last = false}) async {
+        var finder = find.widgetWithText(
+          DropdownButtonFormField<int>,
+          'BOQ item',
+        );
+        if (last) finder = finder.last;
+        await tester.ensureVisible(finder);
+        await tester.tap(finder);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(item).last);
+        await tester.pumpAndSettle();
+      }
+
+      await linkBoqItem('Cement');
+      await tester.ensureVisible(find.text('Add expense item'));
+      await tester.tap(find.text('Add expense item'));
+      await tester.pumpAndSettle();
+      await fill('Description', 'Sand', last: true);
+      await fill('Quantity', '3', last: true);
+      await fill('Unit', 'loads', last: true);
+      await fill('Rate', '20', last: true);
+      await linkBoqItem('Sand', last: true);
+
+      await tester.ensureVisible(find.text('Save'));
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(saved, isNotNull);
+      expect(saved!['boq_id'], 5);
+      final items = saved!['items'] as List;
+      expect(items, hasLength(2));
+      expect(items[0]['boq_item_id'], 21);
+      expect(items[1]['boq_item_id'], 22);
       expect(tester.takeException(), isNull);
     },
   );

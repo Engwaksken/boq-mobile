@@ -41,6 +41,7 @@ part 'screens/boq_review_locations.dart';
 part 'screens/proxy_subscriptions_page.dart';
 part 'screens/supplier_ratings_screens.dart';
 part 'screens/organisation_screens.dart';
+part 'screens/team_support_screens.dart';
 
 /// Service for handling biometric authentication operations.
 class BiometricService {

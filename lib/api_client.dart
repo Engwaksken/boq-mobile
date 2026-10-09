@@ -39,6 +39,7 @@ class _GuardedClient extends http.BaseClient {
     return path.endsWith('/process') ||
             path.endsWith('/price-all') ||
             path.endsWith('/pricing-batches') ||
+            path.endsWith('/expenses/extract') ||
             path.contains('/pricing-jobs')
         ? _longTimeout
         : _timeout;
@@ -1213,6 +1214,7 @@ class ApiClient {
   Future<({List<BoqListItem> items, int lastPage})> boqs({
     String? search,
     int? projectId,
+    String? status,
     int page = 1,
     int perPage = 25,
   }) async {
@@ -1224,6 +1226,8 @@ class ApiClient {
           if (search != null && search.trim().isNotEmpty)
             'search': search.trim(),
           if (projectId != null) 'project_id': '$projectId',
+          if (status != null && status.trim().isNotEmpty)
+            'status': status.trim(),
         },
       ),
       headers: await _headers(),

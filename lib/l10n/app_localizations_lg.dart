@@ -9,6 +9,86 @@ class AppLocalizationsLg extends AppLocalizations {
   AppLocalizationsLg([String locale = 'lg']) : super(locale);
 
   @override
+  String get orgManageFaqs => 'Ddukanya ebibuuzo (omuddukanya omukulu)';
+
+  @override
+  String get orgQuestion => 'Ekibuuzo';
+
+  @override
+  String get orgAnswer => 'Ekyokuddamu';
+
+  @override
+  String get orgSortOrder => 'Ensengeka';
+
+  @override
+  String get orgFaqActive => 'Kifulumiziddwa';
+
+  @override
+  String get orgSearchExpenses => 'Noonya ennyonnyola oba omuguzi w\'ebintu';
+
+  @override
+  String get orgAllProjects => 'Pulojekiti zonna';
+
+  @override
+  String get orgAssignments => 'Okugaba pulojekiti';
+
+  @override
+  String get orgAssign => 'Wa omukozi pulojekiti';
+
+  @override
+  String get orgMember => 'Omukozi';
+
+  @override
+  String get orgAssignmentRevokeConfirm =>
+      'Osazaamu okugaba pulojekiti eno? Omukozi ajja kufiirwa obuyinza ku pulojekiti eno.';
+
+  @override
+  String get orgNoAssignmentOptions =>
+      'Pulojekiti n\'omukozi w\'ekitongole byetaagibwa okugaba obuyinza.';
+
+  @override
+  String get orgFaqs => 'Ebibuuzo ebibuuzibwa ennyo';
+
+  @override
+  String get orgSearchFaqs => 'Noonya ebibuuzo n\'ebyokuddamu';
+
+  @override
+  String get orgExtractReceipt =>
+      'Soma lisiiti (PDF oba ekifaananyi, okutuuka ku MB 10)';
+
+  @override
+  String get orgReviewExtraction => 'Kebera ebisomeddwa nga tonnatereka.';
+
+  @override
+  String get orgRetryReceipt =>
+      'Ensaasaanya eterekeddwa. Ddamu okuteekako lisiiti';
+
+  @override
+  String get orgAddItem => 'Yongerako ekintu ekiguliddwa';
+
+  @override
+  String get orgRemoveItem => 'Ggyawo ekintu';
+
+  @override
+  String get orgApprovedBoq => 'BOQ ekkiriziddwa';
+
+  @override
+  String get orgNoBoqLink => 'Tekigattiddwa ku BOQ';
+
+  @override
+  String get orgNoApprovedBoq =>
+      'Pulojekiti eno terina BOQ ekkiriziddwa. Ensaasaanya ejja kuwandiikibwa nga tegigattiddwa ku BOQ.';
+
+  @override
+  String get orgBoqItem => 'Ekintu kya BOQ';
+
+  @override
+  String get orgNoBoqItem => 'Tekigattiddwa ku kintu kya BOQ';
+
+  @override
+  String get orgShareToken => 'Gabana akabonero';
+
+  @override
   String get orgExpenses => 'Ensaasaanya ne lisiiti';
 
   @override

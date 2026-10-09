@@ -4,12 +4,14 @@ part of 'api_client.dart';
 class ResourcePage {
   ResourcePage.fromJson(Map<String, dynamic> json)
     : items = (json['data'] as List).cast<Map<String, dynamic>>(),
-      page = _asInt(json['meta']?['current_page']),
-      lastPage = _asInt(json['meta']?['last_page']);
+      page = _asInt(json['meta']?['current_page']).clamp(1, 100000),
+      lastPage = _asInt(json['meta']?['last_page']).clamp(1, 100000),
+      totals = (json['totals'] as List? ?? []).cast<Map<String, dynamic>>();
 
   final List<Map<String, dynamic>> items;
   final int page;
   final int lastPage;
+  final List<Map<String, dynamic>> totals;
   bool get hasNext => page < lastPage;
 }
 
@@ -31,6 +33,7 @@ extension OrganisationApi on ApiClient {
     final response = await http.Response.fromStream(
       await _httpClient.send(request),
     );
+    if (response.statusCode == 204) return {};
     final body = _decode(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw _apiError(response, body);
@@ -38,8 +41,15 @@ extension OrganisationApi on ApiClient {
     return body;
   }
 
-  Future<ResourcePage> expenses({int page = 1}) async => ResourcePage.fromJson(
-    await _resourceRequest('GET', 'expenses?page=$page'),
+  Future<ResourcePage> expenses({
+    int page = 1,
+    String search = '',
+    int? projectId,
+  }) async => ResourcePage.fromJson(
+    await _resourceRequest(
+      'GET',
+      'expenses?page=$page&search=${Uri.encodeQueryComponent(search.trim())}${projectId == null ? '' : '&project_id=$projectId'}',
+    ),
   );
 
   Future<List<Map<String, dynamic>>> expenseProjects() async {
@@ -136,5 +146,77 @@ extension OrganisationApi on ApiClient {
     await _resourceRequest('POST', 'invitations/accept', {
       'token': token.trim(),
     });
+  }
+
+  Future<Map<String, dynamic>> extractExpenseReceipt(
+    Uint8List bytes,
+    String fileName,
+  ) async {
+    if (bytes.isEmpty || bytes.length > 10 * 1024 * 1024) {
+      throw const ApiException('Choose a receipt no larger than 10 MB.');
+    }
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('${ApiClient.baseUrl}/expenses/extract'),
+    );
+    request.headers.addAll(await _headers());
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: ApiClient.standardUploadName(fileName),
+      ),
+    );
+    final response = await http.Response.fromStream(
+      await _httpClient.send(request),
+    );
+    final body = _decode(response);
+    if (response.statusCode != 200) throw _apiError(response, body);
+    return body['data'] as Map<String, dynamic>;
+  }
+
+  Future<ResourcePage> projectAssignments({int page = 1}) async =>
+      ResourcePage.fromJson(
+        await _resourceRequest('GET', 'project-assignments?page=$page'),
+      );
+
+  Future<Map<String, dynamic>> assignmentOptions() async =>
+      (await _resourceRequest('GET', 'project-assignments/options'))['data']
+          as Map<String, dynamic>;
+
+  Future<void> saveProjectAssignment(
+    int projectId,
+    int userId,
+    String role,
+  ) async {
+    await _resourceRequest('POST', 'project-assignments', {
+      'project_id': projectId,
+      'user_id': userId,
+      'role': role,
+    });
+  }
+
+  Future<void> revokeProjectAssignment(int id) async {
+    await _resourceRequest('DELETE', 'project-assignments/$id');
+  }
+
+  Future<ResourcePage> faqs({int page = 1, String search = ''}) async =>
+      ResourcePage.fromJson(
+        await _resourceRequest(
+          'GET',
+          'faqs?page=$page&search=${Uri.encodeQueryComponent(search.trim())}',
+        ),
+      );
+
+  Future<ResourcePage> adminFaqs({int page = 1}) async => ResourcePage.fromJson(
+    await _resourceRequest('GET', 'admin/faqs?page=$page'),
+  );
+
+  Future<void> saveFaq(Map<String, dynamic> data, {int? id}) async {
+    await _resourceRequest(
+      id == null ? 'POST' : 'PUT',
+      id == null ? 'admin/faqs' : 'admin/faqs/$id',
+      data,
+    );
   }
 }

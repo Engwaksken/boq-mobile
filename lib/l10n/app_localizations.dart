@@ -98,6 +98,156 @@ abstract class AppLocalizations {
     Locale('lg'),
   ];
 
+  /// No description provided for @orgManageFaqs.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage FAQs (super admin)'**
+  String get orgManageFaqs;
+
+  /// No description provided for @orgQuestion.
+  ///
+  /// In en, this message translates to:
+  /// **'Question'**
+  String get orgQuestion;
+
+  /// No description provided for @orgAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'Answer'**
+  String get orgAnswer;
+
+  /// No description provided for @orgSortOrder.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort order'**
+  String get orgSortOrder;
+
+  /// No description provided for @orgFaqActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Published'**
+  String get orgFaqActive;
+
+  /// No description provided for @orgSearchExpenses.
+  ///
+  /// In en, this message translates to:
+  /// **'Search description or supplier'**
+  String get orgSearchExpenses;
+
+  /// No description provided for @orgAllProjects.
+  ///
+  /// In en, this message translates to:
+  /// **'All projects'**
+  String get orgAllProjects;
+
+  /// No description provided for @orgAssignments.
+  ///
+  /// In en, this message translates to:
+  /// **'Project assignments'**
+  String get orgAssignments;
+
+  /// No description provided for @orgAssign.
+  ///
+  /// In en, this message translates to:
+  /// **'Assign team member'**
+  String get orgAssign;
+
+  /// No description provided for @orgMember.
+  ///
+  /// In en, this message translates to:
+  /// **'Team member'**
+  String get orgMember;
+
+  /// No description provided for @orgAssignmentRevokeConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke this project assignment? The member will lose access to this project.'**
+  String get orgAssignmentRevokeConfirm;
+
+  /// No description provided for @orgNoAssignmentOptions.
+  ///
+  /// In en, this message translates to:
+  /// **'A project and an organisation member are needed before assigning access.'**
+  String get orgNoAssignmentOptions;
+
+  /// No description provided for @orgFaqs.
+  ///
+  /// In en, this message translates to:
+  /// **'Frequently asked questions'**
+  String get orgFaqs;
+
+  /// No description provided for @orgSearchFaqs.
+  ///
+  /// In en, this message translates to:
+  /// **'Search questions and answers'**
+  String get orgSearchFaqs;
+
+  /// No description provided for @orgExtractReceipt.
+  ///
+  /// In en, this message translates to:
+  /// **'Read receipt (PDF or image, up to 10 MB)'**
+  String get orgExtractReceipt;
+
+  /// No description provided for @orgReviewExtraction.
+  ///
+  /// In en, this message translates to:
+  /// **'Review the extracted details before saving.'**
+  String get orgReviewExtraction;
+
+  /// No description provided for @orgRetryReceipt.
+  ///
+  /// In en, this message translates to:
+  /// **'Expense saved. Retry attaching receipt'**
+  String get orgRetryReceipt;
+
+  /// No description provided for @orgAddItem.
+  ///
+  /// In en, this message translates to:
+  /// **'Add expense item'**
+  String get orgAddItem;
+
+  /// No description provided for @orgRemoveItem.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove item'**
+  String get orgRemoveItem;
+
+  /// No description provided for @orgApprovedBoq.
+  ///
+  /// In en, this message translates to:
+  /// **'Approved BOQ'**
+  String get orgApprovedBoq;
+
+  /// No description provided for @orgNoBoqLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Not linked to a BOQ'**
+  String get orgNoBoqLink;
+
+  /// No description provided for @orgNoApprovedBoq.
+  ///
+  /// In en, this message translates to:
+  /// **'This project has no approved BOQ. The expense will be recorded without a BOQ link.'**
+  String get orgNoApprovedBoq;
+
+  /// No description provided for @orgBoqItem.
+  ///
+  /// In en, this message translates to:
+  /// **'BOQ item'**
+  String get orgBoqItem;
+
+  /// No description provided for @orgNoBoqItem.
+  ///
+  /// In en, this message translates to:
+  /// **'Not linked to a BOQ item'**
+  String get orgNoBoqItem;
+
+  /// No description provided for @orgShareToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Share token'**
+  String get orgShareToken;
+
   /// No description provided for @orgExpenses.
   ///
   /// In en, this message translates to:

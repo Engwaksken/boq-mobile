@@ -216,6 +216,30 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 },
               ),
+              drawerTile(
+                icon: Icons.assignment_ind_outlined,
+                label: l10n.orgAssignments,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ProjectAssignmentsPage(api: widget.api),
+                    ),
+                  );
+                },
+              ),
+              drawerTile(
+                icon: Icons.help_outline,
+                label: l10n.orgFaqs,
+                onTap: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => FaqsPage(api: widget.api),
+                    ),
+                  );
+                },
+              ),
             ],
           ),
         ),

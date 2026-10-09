@@ -9,6 +9,85 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get orgManageFaqs => 'Manage FAQs (super admin)';
+
+  @override
+  String get orgQuestion => 'Question';
+
+  @override
+  String get orgAnswer => 'Answer';
+
+  @override
+  String get orgSortOrder => 'Sort order';
+
+  @override
+  String get orgFaqActive => 'Published';
+
+  @override
+  String get orgSearchExpenses => 'Search description or supplier';
+
+  @override
+  String get orgAllProjects => 'All projects';
+
+  @override
+  String get orgAssignments => 'Project assignments';
+
+  @override
+  String get orgAssign => 'Assign team member';
+
+  @override
+  String get orgMember => 'Team member';
+
+  @override
+  String get orgAssignmentRevokeConfirm =>
+      'Revoke this project assignment? The member will lose access to this project.';
+
+  @override
+  String get orgNoAssignmentOptions =>
+      'A project and an organisation member are needed before assigning access.';
+
+  @override
+  String get orgFaqs => 'Frequently asked questions';
+
+  @override
+  String get orgSearchFaqs => 'Search questions and answers';
+
+  @override
+  String get orgExtractReceipt => 'Read receipt (PDF or image, up to 10 MB)';
+
+  @override
+  String get orgReviewExtraction =>
+      'Review the extracted details before saving.';
+
+  @override
+  String get orgRetryReceipt => 'Expense saved. Retry attaching receipt';
+
+  @override
+  String get orgAddItem => 'Add expense item';
+
+  @override
+  String get orgRemoveItem => 'Remove item';
+
+  @override
+  String get orgApprovedBoq => 'Approved BOQ';
+
+  @override
+  String get orgNoBoqLink => 'Not linked to a BOQ';
+
+  @override
+  String get orgNoApprovedBoq =>
+      'This project has no approved BOQ. The expense will be recorded without a BOQ link.';
+
+  @override
+  String get orgBoqItem => 'BOQ item';
+
+  @override
+  String get orgNoBoqItem => 'Not linked to a BOQ item';
+
+  @override
+  String get orgShareToken => 'Share token';
+
+  @override
   String get orgExpenses => 'Expenses & receipts';
 
   @override

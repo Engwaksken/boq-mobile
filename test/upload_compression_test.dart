@@ -28,7 +28,8 @@ void main() {
   });
 
   test('CSV files are gzipped and unpack to the same text', () async {
-    final csv = 'Description,Unit,Quantity,Rate\n${'Excavation,m3,10,1500\n' * 2000}';
+    final csv =
+        'Description,Unit,Quantity,Rate\n${'Excavation,m3,10,1500\n' * 2000}';
     final bytes = Uint8List.fromList(utf8.encode(csv));
 
     final prepared = await prepareUpload(name: 'boq.csv', bytes: bytes);
