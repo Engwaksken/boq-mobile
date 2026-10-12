@@ -133,8 +133,7 @@ class _LoginPageState extends State<LoginPage> {
     } catch (_) {
       if (mounted) {
         setState(
-          () => _error =
-              'Unable to sign in. Check your connection and try again.',
+          () => _error = AppLocalizations.of(context)!.authSignInNetworkError,
         );
       }
     } finally {
@@ -200,7 +199,7 @@ class _LoginPageState extends State<LoginPage> {
                         validator: (value) {
                           final email = value?.trim() ?? '';
                           if (email.isEmpty || !email.contains('@')) {
-                            return l10n.email;
+                            return l10n.commonInvalidEmail;
                           }
                           return null;
                         },
@@ -220,8 +219,8 @@ class _LoginPageState extends State<LoginPage> {
                           prefixIcon: const Icon(Icons.lock_outline),
                           suffixIcon: IconButton(
                             tooltip: _obscurePassword
-                                ? 'Show password'
-                                : 'Hide password',
+                                ? l10n.authShowPassword
+                                : l10n.authHidePassword,
                             onPressed: () {
                               setState(
                                 () => _obscurePassword = !_obscurePassword,
@@ -236,7 +235,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         validator: (value) {
                           if (value == null || value.isEmpty) {
-                            return l10n.password;
+                            return l10n.authPasswordRequired;
                           }
                           return null;
                         },
@@ -384,7 +383,7 @@ class _SignUpPageState extends State<SignUpPage> {
 
     if (!_acceptTerms) {
       setState(
-        () => _error = 'Please accept the Terms of Use and Privacy Policy.',
+        () => _error = AppLocalizations.of(context)!.authAcceptTermsRequired,
       );
       return;
     }
@@ -408,7 +407,9 @@ class _SignUpPageState extends State<SignUpPage> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Account created successfully.')),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.authAccountCreated),
+        ),
       );
 
       widget.onSignedIn();
@@ -420,8 +421,9 @@ class _SignUpPageState extends State<SignUpPage> {
     } catch (_) {
       if (mounted) {
         setState(
-          () => _error =
-              'Unable to create your account. Check your connection and try again.',
+          () => _error = AppLocalizations.of(
+            context,
+          )!.authRegisterNetworkError,
         );
       }
     } finally {
@@ -500,7 +502,7 @@ class _SignUpPageState extends State<SignUpPage> {
                       validator: (value) {
                         final email = value?.trim() ?? '';
                         if (email.isEmpty || !email.contains('@')) {
-                          return l10n.email;
+                          return l10n.commonInvalidEmail;
                         }
                         return null;
                       },
@@ -517,8 +519,8 @@ class _SignUpPageState extends State<SignUpPage> {
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
                           tooltip: _obscurePassword
-                              ? 'Show password'
-                              : 'Hide password',
+                              ? l10n.authShowPassword
+                              : l10n.authHidePassword,
                           onPressed: () {
                             setState(
                               () => _obscurePassword = !_obscurePassword,
@@ -552,8 +554,8 @@ class _SignUpPageState extends State<SignUpPage> {
                         prefixIcon: const Icon(Icons.lock_outline),
                         suffixIcon: IconButton(
                           tooltip: _obscureConfirmation
-                              ? 'Show password'
-                              : 'Hide password',
+                              ? l10n.authShowPassword
+                              : l10n.authHidePassword,
                           onPressed: () {
                             setState(
                               () =>
@@ -587,9 +589,9 @@ class _SignUpPageState extends State<SignUpPage> {
                       title: Wrap(
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          const Text('I agree to the '),
+                          Text(l10n.authAgreePrefix),
                           Text(l10n.termsOfUse, style: linkStyle),
-                          const Text(' and '),
+                          Text(l10n.authAgreeAnd),
                           Text(l10n.privacyPolicy, style: linkStyle),
                           const Text('.'),
                         ],
@@ -670,8 +672,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
     } catch (_) {
       if (mounted) {
         setState(
-          () => _error =
-              'Unable to send the reset link. Check your connection and try again.',
+          () => _error = AppLocalizations.of(context)!.authResetNetworkError,
         );
       }
     } finally {
@@ -732,7 +733,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                           validator: (value) {
                             final email = value?.trim() ?? '';
                             if (email.isEmpty || !email.contains('@')) {
-                              return l10n.email;
+                              return l10n.commonInvalidEmail;
                             }
                             return null;
                           },

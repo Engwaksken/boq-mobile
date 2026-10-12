@@ -1,7 +1,7 @@
 part of '../main.dart';
 
 String _orgDate(dynamic value) => '${value ?? ''}'.split('T').first;
-int _orgId(dynamic value) => int.parse('$value');
+int _orgId(dynamic value) => jsonInt(value);
 
 void _orgError(BuildContext context, Object error) {
   ScaffoldMessenger.of(
@@ -84,7 +84,8 @@ class _ResourceList extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.all(8),
                   child: Text(
-                    '${total['currency']} ${total['amount']}',
+                    '${jsonString(total['currency'])} '
+                    '${jsonString(total['amount'])}',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
@@ -233,9 +234,11 @@ class _ExpensesPageState extends State<ExpensesPage> {
               reload: _reload,
               tile: (e) => Card(
                 child: ListTile(
-                  title: Text('${e['description']}'),
+                  title: Text(jsonString(e['description'])),
                   subtitle: Text(
-                    '${_orgDate(e['purchase_date'])} · ${e['supplier'] ?? ''}\n${e['currency']} ${e['total']}',
+                    '${_orgDate(e['purchase_date'])} · '
+                    '${jsonString(e['supplier'])}\n'
+                    '${jsonString(e['currency'])} ${jsonString(e['total'])}',
                   ),
                   isThreeLine: true,
                   trailing: const Icon(Icons.chevron_right),
@@ -320,7 +323,7 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
       if (picked == null || !mounted) return;
       final file = picked.files.single;
       if (file.bytes == null) {
-        throw const ApiException('Unable to read this file.');
+        throw ApiException(context.tr.orgFileUnreadable);
       }
       final data = await widget.api.extractExpenseReceipt(
         file.bytes!,
@@ -345,7 +348,7 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
                 : '${data[key]}';
           }
         }
-        _warnings = (data['warnings'] as List? ?? []).map((w) => '$w').toList();
+        _warnings = jsonList(data['warnings']).map((w) => '$w').toList();
       });
     } on Object catch (e) {
       if (mounted) _orgError(context, e);
@@ -358,9 +361,9 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
   void initState() {
     super.initState();
     final e = widget.expense;
-    _project = e == null ? null : _orgId(e['project_id']);
+    _project = e == null ? null : jsonIntOrNull(e['project_id']);
     _loadingBoqs = e != null;
-    _planned = e?['is_planned'] == null ? true : e!['is_planned'] == true;
+    _planned = jsonBool(e?['is_planned'], true);
     for (final key in [
       'purchase_date',
       'supplier',
@@ -587,9 +590,25 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
         isExpanded: true,
         decoration: InputDecoration(labelText: l.orgPaymentMethod),
         items: [
-          const DropdownMenuItem<String>(value: '', child: Text('Select...')),
+          DropdownMenuItem<String>(value: '', child: Text(l.orgSelect)),
+          // Values stay as stored by the API; only the labels are translated.
           for (final method in options)
-            DropdownMenuItem<String>(value: method, child: Text(method)),
+            DropdownMenuItem<String>(
+              value: method,
+              child: Text(
+                switch (method) {
+                  'Cash' => l.orgPayCash,
+                  'Mobile Money' => l.orgPayMobileMoney,
+                  'Bank Transfer' => l.orgPayBankTransfer,
+                  'Cheque' => l.orgPayCheque,
+                  'Card' => l.orgPayCard,
+                  'Credit' => l.orgPayCredit,
+                  'Other' => l.orgPayOther,
+                  _ => method,
+                },
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
         ],
         onChanged: _busy || _savedExpenseId != null
             ? null
@@ -627,7 +646,7 @@ class _ExpenseFormPageState extends State<ExpenseFormPage> {
             (boq) => DropdownMenuItem<int>(
               value: boq.id,
               child: Text(
-                boq.name.isEmpty ? 'BOQ #${boq.id}' : boq.name,
+                boq.name.isEmpty ? l.orgBoqNumber(boq.id) : boq.name,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -982,10 +1001,10 @@ class _ExpenseDetailPageState extends State<ExpenseDetailPage> {
         allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'webp'],
         withData: true,
       );
-      if (picked == null) return;
+      if (picked == null || !mounted) return;
       final file = picked.files.single;
       if (file.bytes == null) {
-        throw const ApiException('Unable to read this file.');
+        throw ApiException(context.tr.orgFileUnreadable);
       }
       await widget.api.uploadExpenseReceipt(widget.id, file.bytes!, file.name);
       if (mounted) _reload();
@@ -1006,8 +1025,15 @@ class _ExpenseDetailPageState extends State<ExpenseDetailPage> {
       final box = context.findRenderObject() as RenderBox?;
       await SharePlus.instance.share(
         ShareParams(
-          files: [XFile.fromData(bytes, mimeType: '${receipt['mime_type']}')],
-          fileNameOverrides: ['${receipt['original_filename']}'],
+          files: [
+            XFile.fromData(
+              bytes,
+              mimeType: jsonStringOrNull(receipt['mime_type']),
+            ),
+          ],
+          fileNameOverrides: [
+            jsonString(receipt['original_filename'], 'receipt'),
+          ],
           sharePositionOrigin: box == null
               ? null
               : box.localToGlobal(Offset.zero) & box.size,
@@ -1047,30 +1073,39 @@ class _ExpenseDetailPageState extends State<ExpenseDetailPage> {
             padding: const EdgeInsets.all(16),
             children: [
               Text(
-                '${e['description']}',
+                jsonString(e['description']),
                 style: Theme.of(context).textTheme.titleLarge,
               ),
               const SizedBox(height: 16),
               Text(
-                '${e['currency']} ${e['total']}',
+                '${jsonString(e['currency'])} ${jsonString(e['total'])}',
                 style: Theme.of(context).textTheme.headlineSmall,
               ),
               Text('${l.orgPurchaseDate}: ${_orgDate(e['purchase_date'])}'),
-              Text('${l.orgSupplier}: ${e['supplier'] ?? ''}'),
-              Text('${e['quantity']} ${e['unit']} × ${e['rate']}'),
-              if ((e['items'] as List? ?? []).length > 1)
-                for (final item
-                    in (e['items'] as List).cast<Map<String, dynamic>>())
+              Text('${l.orgSupplier}: ${jsonString(e['supplier'])}'),
+              Text(
+                '${jsonString(e['quantity'])} ${jsonString(e['unit'])} × '
+                '${jsonString(e['rate'])}',
+              ),
+              if (jsonList(e['items']).length > 1)
+                for (final item in jsonMaps(e['items']))
                   ListTile(
-                    title: Text('${item['description']}'),
+                    title: Text(jsonString(item['description'])),
                     subtitle: Text(
-                      '${item['quantity']} ${item['unit']} × ${item['rate']}',
+                      '${jsonString(item['quantity'])} '
+                      '${jsonString(item['unit'])} × '
+                      '${jsonString(item['rate'])}',
                     ),
-                    trailing: Text('${e['currency']} ${item['total']}'),
+                    trailing: Text(
+                      '${jsonString(e['currency'])} '
+                      '${jsonString(item['total'])}',
+                    ),
                   ),
-              Text('${l.orgPaymentMethod}: ${e['payment_method'] ?? ''}'),
-              if (e['is_planned'] != true)
-                Text('${l.orgExplanation}: ${e['explanation'] ?? ''}'),
+              Text(
+                '${l.orgPaymentMethod}: ${jsonString(e['payment_method'])}',
+              ),
+              if (!jsonBool(e['is_planned']))
+                Text('${l.orgExplanation}: ${jsonString(e['explanation'])}'),
               TextButton.icon(
                 onPressed: _busy
                     ? null
@@ -1091,11 +1126,9 @@ class _ExpenseDetailPageState extends State<ExpenseDetailPage> {
                 l.orgReceipts,
                 style: Theme.of(context).textTheme.titleMedium,
               ),
-              for (final receipt
-                  in (e['receipts'] as List? ?? [])
-                      .cast<Map<String, dynamic>>())
+              for (final receipt in jsonMaps(e['receipts']))
                 ListTile(
-                  title: Text('${receipt['original_filename']}'),
+                  title: Text(jsonString(receipt['original_filename'])),
                   trailing: const Icon(Icons.download),
                   onTap: _busy ? null : () => _download(receipt),
                 ),
@@ -1238,7 +1271,7 @@ class _InvitationsPageState extends State<InvitationsPage> {
                   child: Column(
                     children: [
                       ListTile(
-                        title: Text('${i['email']}'),
+                        title: Text(jsonString(i['email'])),
                         subtitle: Text(
                           '${_status(i, l)} · ${l.orgExpiry}: ${_orgDate(i['expires_at'])}',
                         ),
@@ -1288,8 +1321,10 @@ class _InvitationTokenDialogState extends State<_InvitationTokenDialog> {
     final l = AppLocalizations.of(context)!;
     return AlertDialog(
       title: Text(l.orgAccept),
+      scrollable: true,
       content: TextField(
         controller: _controller,
+        autofocus: true,
         decoration: InputDecoration(labelText: l.orgToken),
       ),
       actions: [
@@ -1446,7 +1481,10 @@ class _InvitationFormPageState extends State<InvitationFormPage> {
                               .map(
                                 (r) => DropdownMenuItem(
                                   value: _orgId(r['id']),
-                                  child: Text('${r['name']}'),
+                                  child: Text(
+                                    jsonString(r['name']),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
                               )
                               .toList(),

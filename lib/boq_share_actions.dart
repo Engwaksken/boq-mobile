@@ -7,17 +7,20 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'api_client.dart';
 import 'app_errors.dart';
+import 'l10n/app_localizations.dart';
 import 'theme/app_theme.dart';
 import 'widgets/widgets.dart';
 
 enum BoqShareAction { preview, download, email, whatsapp, device }
 
-const _shareOptions = [
-  (BoqShareAction.preview, Icons.visibility_outlined, 'Preview PDF'),
-  (BoqShareAction.download, Icons.download_outlined, 'Download PDF'),
-  (BoqShareAction.email, Icons.email_outlined, 'Share by Email'),
-  (BoqShareAction.whatsapp, Icons.chat_outlined, 'Share on WhatsApp'),
-  (BoqShareAction.device, Icons.share_outlined, 'Share PDF to other apps'),
+List<(BoqShareAction, IconData, String)> _shareOptions(
+  AppLocalizations l10n,
+) => [
+  (BoqShareAction.preview, Icons.visibility_outlined, l10n.sharePreviewPdf),
+  (BoqShareAction.download, Icons.download_outlined, l10n.shareDownloadPdf),
+  (BoqShareAction.email, Icons.email_outlined, l10n.shareByEmail),
+  (BoqShareAction.whatsapp, Icons.chat_outlined, l10n.shareOnWhatsapp),
+  (BoqShareAction.device, Icons.share_outlined, l10n.shareToOtherApps),
 ];
 
 /// App-bar menu with every way to get a BOQ out of the app. The PDF is built
@@ -36,16 +39,17 @@ class BoqShareMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return PopupMenuButton<BoqShareAction>(
       icon: const Icon(Icons.picture_as_pdf_outlined),
-      tooltip: 'PDF & sharing',
+      tooltip: l10n.sharePdfAndSharing,
       onSelected: (action) => BoqShareActions(
         api: api,
         boqId: boqId,
         title: title,
       ).run(context, action),
       itemBuilder: (context) => [
-        for (final (action, icon, label) in _shareOptions)
+        for (final (action, icon, label) in _shareOptions(l10n))
           PopupMenuItem(
             value: action,
             child: Row(
@@ -79,6 +83,7 @@ Future<void> showBoqShareSheet(
     showDragHandle: true,
     builder: (sheetContext) {
       final theme = Theme.of(sheetContext);
+      final l10n = AppLocalizations.of(sheetContext)!;
       return SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(
@@ -101,7 +106,10 @@ Future<void> showBoqShareSheet(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('PDF & sharing', style: theme.textTheme.titleMedium),
+                    Text(
+                      l10n.sharePdfAndSharing,
+                      style: theme.textTheme.titleMedium,
+                    ),
                     const SizedBox(height: AppSpacing.xxs),
                     Text(
                       title,
@@ -112,7 +120,7 @@ Future<void> showBoqShareSheet(
                   ],
                 ),
               ),
-              for (final (action, icon, label) in _shareOptions)
+              for (final (action, icon, label) in _shareOptions(l10n))
                 ListTile(
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppRadii.sm),
@@ -148,29 +156,28 @@ class BoqShareActions {
   final String title;
 
   Future<void> run(BuildContext context, BoqShareAction action) async {
+    final l10n = AppLocalizations.of(context)!;
     switch (action) {
       case BoqShareAction.preview:
-        await _guard(context, 'Opening preview...', () async {
+        await _guard(context, l10n.shareOpeningPreview, () async {
           final link = await api.boqShareLink(boqId);
           final opened = await launchUrl(
             Uri.parse(link.url),
             mode: LaunchMode.inAppBrowserView,
           );
           if (!opened) {
-            throw const ApiException(
-              'The preview could not be opened on this device.',
-            );
+            throw ApiException(l10n.sharePreviewFailed);
           }
         });
       case BoqShareAction.download:
-        await _guard(context, 'Downloading PDF...', () async {
+        await _guard(context, l10n.shareDownloading, () async {
           final file = await _savePdf(permanent: true);
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Saved ${file.uri.pathSegments.last}'),
+                content: Text(l10n.shareSaved(file.uri.pathSegments.last)),
                 action: SnackBarAction(
-                  label: 'Open / Save to',
+                  label: l10n.shareOpenSaveTo,
                   onPressed: () => SharePlus.instance.share(
                     ShareParams(
                       files: [XFile(file.path, mimeType: 'application/pdf')],
@@ -182,9 +189,9 @@ class BoqShareActions {
           }
         });
       case BoqShareAction.email:
-        await _emailDialog(context);
+        await _emailDialog(context, l10n);
       case BoqShareAction.whatsapp:
-        await _guard(context, 'Preparing WhatsApp message...', () async {
+        await _guard(context, l10n.sharePreparingWhatsapp, () async {
           final link = await api.boqShareLink(boqId);
           final opened = await launchUrl(
             Uri.parse(link.whatsappUrl),
@@ -198,7 +205,7 @@ class BoqShareActions {
           }
         });
       case BoqShareAction.device:
-        await _guard(context, 'Preparing PDF...', () async {
+        await _guard(context, l10n.sharePreparingPdf, () async {
           final link = await api.boqShareLink(boqId);
           final file = await _savePdf(
             permanent: false,
@@ -225,9 +232,12 @@ class BoqShareActions {
     return file;
   }
 
-  Future<void> _emailDialog(BuildContext context) async {
+  Future<void> _emailDialog(
+    BuildContext context,
+    AppLocalizations l10n,
+  ) async {
     final email = TextEditingController();
-    final subject = TextEditingController(text: 'BOQ – $title');
+    final subject = TextEditingController(text: l10n.shareEmailSubject(title));
     final message = TextEditingController();
     final formKey = GlobalKey<FormState>();
     var sending = false;
@@ -237,7 +247,7 @@ class BoqShareActions {
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
           icon: const Icon(Icons.email_outlined),
-          title: const Text('Share by Email'),
+          title: Text(l10n.shareByEmail),
           content: Form(
             key: formKey,
             child: SingleChildScrollView(
@@ -248,10 +258,10 @@ class BoqShareActions {
                     controller: email,
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.email],
-                    decoration: const InputDecoration(
-                      labelText: 'Recipient email',
+                    decoration: InputDecoration(
+                      labelText: l10n.shareRecipientEmail,
                       hintText: 'name@example.com',
-                      prefixIcon: Icon(Icons.alternate_email),
+                      prefixIcon: const Icon(Icons.alternate_email),
                     ),
                     validator: (value) =>
                         value != null &&
@@ -259,14 +269,14 @@ class BoqShareActions {
                               r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
                             ).hasMatch(value.trim())
                         ? null
-                        : 'Enter a valid email address.',
+                        : l10n.commonInvalidEmail,
                   ),
                   const SizedBox(height: AppSpacing.md),
                   TextFormField(
                     controller: subject,
-                    decoration: const InputDecoration(
-                      labelText: 'Subject',
-                      prefixIcon: Icon(Icons.subject),
+                    decoration: InputDecoration(
+                      labelText: l10n.shareSubject,
+                      prefixIcon: const Icon(Icons.subject),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.md),
@@ -274,15 +284,15 @@ class BoqShareActions {
                     controller: message,
                     minLines: 3,
                     maxLines: 6,
-                    decoration: const InputDecoration(
-                      labelText: 'Message (optional)',
-                      hintText: 'Add a short note for the recipient...',
+                    decoration: InputDecoration(
+                      labelText: l10n.shareMessageOptional,
+                      hintText: l10n.shareMessageHint,
                       alignLabelWithHint: true,
                     ),
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  const InfoBanner(
-                    message: 'The BOQ PDF is attached automatically.',
+                  InfoBanner(
+                    message: l10n.sharePdfAttached,
                     tone: BannerTone.info,
                     icon: Icons.attach_file,
                   ),
@@ -295,7 +305,7 @@ class BoqShareActions {
               onPressed: sending
                   ? null
                   : () => Navigator.of(dialogContext).pop(),
-              child: const Text('Cancel'),
+              child: Text(l10n.cancel),
             ),
             FilledButton.icon(
               onPressed: sending
@@ -319,7 +329,9 @@ class BoqShareActions {
                           ).showSnackBar(SnackBar(content: Text(result)));
                         }
                       } on Object catch (error) {
-                        setDialogState(() => sending = false);
+                        if (dialogContext.mounted) {
+                          setDialogState(() => sending = false);
+                        }
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text(friendlyError(error))),
@@ -334,7 +346,7 @@ class BoqShareActions {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.send),
-              label: const Text('Send'),
+              label: Text(l10n.shareSend),
             ),
           ],
         ),

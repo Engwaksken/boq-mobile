@@ -55,8 +55,8 @@ class _ImportPageState extends State<ImportPage> {
     } on Object {
       _showMessage(
         source == ImageSource.camera
-            ? 'The camera could not be opened. Allow camera access in Settings and try again.'
-            : 'Your photos could not be opened. Allow photo access in Settings and try again.',
+            ? widget.l10n.importCameraDenied
+            : widget.l10n.importPhotosDenied,
       );
       return;
     }
@@ -95,7 +95,7 @@ class _ImportPageState extends State<ImportPage> {
       try {
         selected = await FilePicker.platform.pickFiles(withData: kIsWeb);
       } on Object {
-        _showMessage('Files could not be opened on this device. Try again.');
+        _showMessage(widget.l10n.commonFilesUnavailable);
         return;
       }
     }
@@ -103,19 +103,17 @@ class _ImportPageState extends State<ImportPage> {
     final file = selected.files.single;
     final extension = (file.extension ?? '').toLowerCase();
     if (extension.isNotEmpty && !_extensions.contains(extension)) {
-      _showMessage(
-        'This file type is not supported. Upload Excel, CSV, PDF or a photo.',
-      );
+      _showMessage(widget.l10n.importUnsupportedType);
       return;
     }
     if (file.size > 20 * 1024 * 1024) {
-      _showMessage('The file is larger than 20 MB. Choose a smaller file.');
+      _showMessage(widget.l10n.importTooLarge);
       return;
     }
     final bytes = file.bytes;
     final path = kIsWeb ? null : file.path;
     if (bytes == null && path == null) {
-      _showMessage('The file could not be read. Choose it again.');
+      _showMessage(widget.l10n.commonFileUnreadable);
       return;
     }
     await _runUpload(file.name, () async {
@@ -127,7 +125,7 @@ class _ImportPageState extends State<ImportPage> {
       );
       if (prepared.compressed) {
         _showMessage(
-          'Compressed ${describeCompression(prepared)}, uploading...',
+          widget.l10n.importCompressing(describeCompression(prepared)),
         );
       }
       final preparedPath = prepared.path;
@@ -149,6 +147,7 @@ class _ImportPageState extends State<ImportPage> {
     String displayName,
     Future<BoqSummary> Function() upload,
   ) async {
+    if (!mounted) return;
     setState(() => _uploading = true);
     try {
       final boq = await upload();
@@ -170,7 +169,9 @@ class _ImportPageState extends State<ImportPage> {
     try {
       final imported = await widget.api.processBoq(boq.id);
       if (!mounted) return;
-      if (imported > 0) _showMessage('Imported $imported BOQ items');
+      if (imported > 0) {
+        _showMessage(widget.l10n.importItemsImported(imported));
+      }
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) =>
@@ -179,7 +180,9 @@ class _ImportPageState extends State<ImportPage> {
       );
     } on Object catch (error) {
       if (!mounted) return;
-      _showMessage('${friendlyError(error)} (open the project to retry)');
+      _showMessage(
+        widget.l10n.importOpenProjectToRetry(friendlyError(error)),
+      );
       if (projectId == null) return;
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
@@ -229,7 +232,7 @@ class _ImportPageState extends State<ImportPage> {
               ),
               const SizedBox(height: AppSpacing.sectionGap),
               SectionCard(
-                title: 'Choose project',
+                title: l10n.importChooseProject,
                 icon: Icons.looks_one_outlined,
                 children: [
                   FutureBuilder<List<ProjectSummary>>(
@@ -258,8 +261,7 @@ class _ImportPageState extends State<ImportPage> {
                           compact: true,
                           icon: Icons.folder_open_outlined,
                           title: l10n.noProjects,
-                          message:
-                              'Create a project first, then import its BOQ.',
+                          message: l10n.importCreateProjectFirst,
                         );
                       }
                       final selected = projects.any((p) => p.id == _projectId)
@@ -298,7 +300,7 @@ class _ImportPageState extends State<ImportPage> {
               ),
               const SizedBox(height: AppSpacing.lg),
               SectionCard(
-                title: 'Add your BOQ',
+                title: l10n.importAddBoq,
                 icon: Icons.looks_two_outlined,
                 spacing: AppSpacing.md,
                 children: [
@@ -318,8 +320,8 @@ class _ImportPageState extends State<ImportPage> {
                   ),
                   _ImportOptionCard(
                     icon: Icons.photo_library_outlined,
-                    title: 'Choose photo',
-                    subtitle: 'Pick a BOQ photo from your gallery',
+                    title: l10n.importChoosePhoto,
+                    subtitle: l10n.importChoosePhotoSubtitle,
                     tone: StatusTone.info,
                     onTap: canUpload
                         ? () => _pickImage(ImageSource.gallery)
@@ -330,7 +332,7 @@ class _ImportPageState extends State<ImportPage> {
               if (_uploading) ...[
                 const SizedBox(height: AppSpacing.lg),
                 Semantics(
-                  label: 'Uploading',
+                  label: l10n.importUploading,
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(AppRadii.pill),
                     child: const LinearProgressIndicator(minHeight: 6),

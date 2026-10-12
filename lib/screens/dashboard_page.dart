@@ -1,42 +1,56 @@
 part of '../main.dart';
 
-class DashboardPage extends StatelessWidget {
+class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key, required this.l10n, required this.api});
 
   final AppLocalizations l10n;
   final ApiClient api;
 
   @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends State<DashboardPage> {
+  // Fetched once and on Retry / pull-to-refresh, not on every rebuild.
+  late Future<DashboardSummary> _summary = widget.api.dashboard();
+
+  AppLocalizations get l10n => widget.l10n;
+  ApiClient get api => widget.api;
+
+  Future<void> _reload() async {
+    final future = api.dashboard();
+    setState(() => _summary = future);
+    try {
+      await future;
+    } on Object {
+      // Shown by the FutureBuilder.
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // The summary is fetched on every build (as before); rebuilding this
-    // builder is how Retry and pull-to-refresh request it again.
-    return StatefulBuilder(
-      builder: (context, rebuild) => FutureBuilder<DashboardSummary>(
-        future: api.dashboard(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const _DashboardSkeleton();
-          }
+    return FutureBuilder<DashboardSummary>(
+      future: _summary,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const _DashboardSkeleton();
+        }
 
-          if (snapshot.hasError) {
-            return ErrorState(
-              error: snapshot.error,
-              onRetry: () => rebuild(() {}),
-            );
-          }
+        if (snapshot.hasError) {
+          return ErrorState(error: snapshot.error, onRetry: _reload);
+        }
 
-          final summary = snapshot.data;
+        final summary = snapshot.data;
 
-          if (summary == null) {
-            return const SizedBox.shrink();
-          }
+        if (summary == null) {
+          return const SizedBox.shrink();
+        }
 
-          return RefreshIndicator(
-            onRefresh: () async => rebuild(() {}),
-            child: _buildContent(context, summary),
-          );
-        },
-      ),
+        return RefreshIndicator(
+          onRefresh: _reload,
+          child: _buildContent(context, summary),
+        );
+      },
     );
   }
 
@@ -73,6 +87,7 @@ class DashboardPage extends StatelessWidget {
               PageHeader(
                 title: l10n.goodMorning,
                 subtitle: l10n.overview,
+                leading: const BrandMark(size: 44),
                 trailing: IconButton.filledTonal(
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(
@@ -149,7 +164,7 @@ class DashboardPage extends StatelessWidget {
                   child: EmptyState(
                     compact: true,
                     icon: Icons.folder_open_outlined,
-                    title: 'No recent projects yet',
+                    title: l10n.dashNoRecentProjects,
                     message: l10n.noProjects,
                   ),
                 ),

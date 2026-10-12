@@ -43,6 +43,7 @@ class BoqDetailPage extends StatefulWidget {
 }
 
 class _BoqDetailPageState extends State<BoqDetailPage> {
+  AppLocalizations get _l10n => AppLocalizations.of(context)!;
   Future<BoqDetail>? _boqDetail;
   Locale? _locale;
   late String _title = widget.title;
@@ -73,8 +74,12 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
     if (!saved || !mounted) return;
     _changed = true;
     await _reload();
-    final fresh = await _boqDetail;
-    if (mounted && fresh != null) setState(() => _title = fresh.name);
+    try {
+      final fresh = await _boqDetail;
+      if (mounted && fresh != null) setState(() => _title = fresh.name);
+    } on Object {
+      // The FutureBuilder shows the error; keep the current title.
+    }
   }
 
   Future<void> _delete() async {
@@ -128,7 +133,7 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
           onPressed: () =>
               showBoqShareSheet(context, widget.api, widget.boqId, _title),
           icon: const Icon(Icons.share_outlined),
-          label: const Text('Share BOQ'),
+          label: Text(l10n.boqShareBoq),
         ),
         body: FutureBuilder<BoqDetail>(
           future: _boqDetail,
@@ -168,7 +173,7 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
                                 }
                               },
                               icon: const Icon(Icons.upload_file_outlined),
-                              label: const Text('Upload estimated prices'),
+                              label: Text(l10n.boqUploadEstimates),
                             ),
                             TextButton.icon(
                               onPressed: () => shareBoqEstimatesTemplate(
@@ -178,7 +183,7 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
                                 _title,
                               ),
                               icon: const Icon(Icons.download_outlined),
-                              label: const Text('Template'),
+                              label: Text(l10n.boqTemplate),
                             ),
                           ],
                         ),
@@ -223,7 +228,7 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
                       if (boq.code.isNotEmpty) ...[
                         const SizedBox(height: AppSpacing.xxs),
                         Text(
-                          'Code: ${boq.code}',
+                          l10n.boqCodeValue(boq.code),
                           style: theme.textTheme.bodySmall,
                         ),
                       ],
@@ -270,12 +275,12 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
 
   Widget _buildSummaries(BoqDetail boq) {
     if (boq.summaries.isEmpty) {
-      return const Card(
+      return Card(
         child: EmptyState(
           compact: true,
           icon: Icons.summarize_outlined,
-          title: 'No summaries yet',
-          message: 'Totals appear here once the BOQ items have been priced.',
+          title: _l10n.boqNoSummaries,
+          message: _l10n.boqNoSummariesMessage,
         ),
       );
     }
@@ -290,31 +295,34 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         HighlightCard(
-          label: 'Grand Total',
+          label: _l10n.boqGrandTotal,
           value: money(grandSummary.grandTotal),
           icon: Icons.account_balance_wallet_outlined,
         ),
         const SizedBox(height: AppSpacing.lg),
         SectionCard(
-          title: 'Summary',
+          title: _l10n.boqSummary,
           icon: Icons.summarize_outlined,
           children: [
-            KeyValueRow(label: 'Subtotal', value: money(grandSummary.subtotal)),
-            KeyValueRow(label: 'VAT (18%)', value: money(grandSummary.vat)),
             KeyValueRow(
-              label: 'Contingency (5%)',
+              label: _l10n.boqSubtotal,
+              value: money(grandSummary.subtotal),
+            ),
+            KeyValueRow(label: _l10n.boqVat18, value: money(grandSummary.vat)),
+            KeyValueRow(
+              label: _l10n.boqContingency5,
               value: money(grandSummary.contingency),
             ),
             const Divider(height: AppSpacing.lg),
             KeyValueRow(
-              label: 'Grand Total',
+              label: _l10n.boqGrandTotal,
               value: money(grandSummary.grandTotal),
               emphasize: true,
             ),
             if (boq.summaries.length > 1) ...[
               const SizedBox(height: AppSpacing.lg),
               SectionHeader(
-                title: 'Breakdown',
+                title: _l10n.boqBreakdown,
                 padding: const EdgeInsets.only(bottom: AppSpacing.sm),
               ),
               ...boq.summaries
@@ -360,7 +368,9 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
                 ),
               ),
               StatusBadge(
-                label: '${summary.metadata?['item_count'] ?? 0} items',
+                label: _l10n.boqItemsCount(
+                  jsonInt(summary.metadata?['item_count']),
+                ),
               ),
             ],
           ),
@@ -368,12 +378,17 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
           Row(
             children: [
               Expanded(
-                child: _miniSummary('Subtotal', money.format(summary.subtotal)),
+                child: _miniSummary(
+                  _l10n.boqSubtotal,
+                  money.format(summary.subtotal),
+                ),
               ),
-              Expanded(child: _miniSummary('VAT', money.format(summary.vat))),
+              Expanded(
+                child: _miniSummary(_l10n.boqVat, money.format(summary.vat)),
+              ),
               Expanded(
                 child: _miniSummary(
-                  'Total',
+                  _l10n.boqTotal,
                   money.format(summary.grandTotal),
                   isTotal: true,
                 ),
@@ -388,35 +403,37 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
   Widget _buildMetadataSection(BoqDetail boq) {
     final theme = Theme.of(context);
     final metadata = boq.metadata;
+    final sheets = jsonMaps(metadata['import_sheets']);
+    final translationSources = jsonMapOrNull(metadata['translation_sources']);
     return SectionCard(
-      title: 'Import Metadata',
+      title: _l10n.boqImportMetadata,
       icon: Icons.info_outline,
       children: [
-        if (metadata['import_sheets'] != null) ...[
+        if (sheets.isNotEmpty) ...[
           KeyValueRow(
-            label: 'Sheets',
-            value: '${(metadata['import_sheets'] as List).length}',
+            label: _l10n.boqSheets,
+            value: '${sheets.length}',
             icon: Icons.table_chart_outlined,
           ),
           const SizedBox(height: AppSpacing.xs),
-          ...(metadata['import_sheets'] as List).map<Widget>((sheet) {
+          ...sheets.map<Widget>((sheet) {
             return Padding(
               padding: const EdgeInsets.only(
                 left: AppSpacing.xxl + 2,
                 bottom: AppSpacing.xs,
               ),
               child: Text(
-                '• ${sheet['sheet_name']} (${sheet['rows_processed']} rows)',
+                '• ${_l10n.boqSheetRows(jsonString(sheet['sheet_name']), jsonInt(sheet['rows_processed']))}',
                 style: theme.textTheme.bodySmall,
               ),
             );
           }),
           const SizedBox(height: AppSpacing.sm),
         ],
-        if (metadata['translation_sources'] != null)
+        if (translationSources != null)
           KeyValueRow(
-            label: 'Translations',
-            value: (metadata['translation_sources'] as Map).keys.join(', '),
+            label: _l10n.boqTranslations,
+            value: translationSources.keys.join(', '),
             icon: Icons.translate,
           ),
       ],
@@ -425,7 +442,7 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
 
   Widget _buildHierarchy(BoqDetail boq) {
     return SectionCard(
-      title: 'BOQ Structure',
+      title: _l10n.boqStructure,
       icon: Icons.account_tree_outlined,
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.sm,
@@ -435,10 +452,10 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
       ),
       children: [
         if (boq.facilities.isEmpty)
-          const EmptyState(
+          EmptyState(
             icon: Icons.account_tree_outlined,
-            title: 'No hierarchy data available',
-            message: 'Process the BOQ to generate structure.',
+            title: _l10n.boqNoHierarchy,
+            message: _l10n.boqNoHierarchyMessage,
             compact: true,
           )
         else
@@ -564,18 +581,23 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
         size: 36,
       ),
       title: item.description,
-      subtitle: item.code.isNotEmpty ? 'Code: ${item.code}' : null,
+      subtitle: item.code.isNotEmpty ? _l10n.boqCodeValue(item.code) : null,
       footer: Row(
         children: [
-          Expanded(child: _miniSummary('Qty', '${item.quantity} ${item.unit}')),
           Expanded(
-            child: _miniSummary('Rate', _displayBoqAmount(item.currentRate)),
+            child: _miniSummary(_l10n.boqQty, '${item.quantity} ${item.unit}'),
+          ),
+          Expanded(
+            child: _miniSummary(
+              _l10n.boqRate,
+              _displayBoqAmount(item.currentRate),
+            ),
           ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text('Amount', style: theme.textTheme.labelSmall),
+                Text(_l10n.boqAmount, style: theme.textTheme.labelSmall),
                 const SizedBox(height: AppSpacing.xxs),
                 Text(
                   item.amount,
@@ -663,7 +685,13 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
         children: [
           Icon(icon, size: 14, color: theme.colorScheme.onSurfaceVariant),
           const SizedBox(width: AppSpacing.xs + 2),
-          Text(label, style: theme.textTheme.labelMedium),
+          Flexible(
+            child: Text(
+              label,
+              style: theme.textTheme.labelMedium,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );
@@ -693,6 +721,7 @@ class BoqItemDetailPage extends StatefulWidget {
 }
 
 class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
+  AppLocalizations get _l10n => AppLocalizations.of(context)!;
   Future<BoqItemDetail>? _itemDetail;
 
   @override
@@ -713,8 +742,9 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = _l10n;
     return Scaffold(
-      appBar: AppBar(title: const Text('BOQ Item Details')),
+      appBar: AppBar(title: Text(l10n.boqItemDetails)),
       body: FutureBuilder<BoqItemDetail>(
         future: _itemDetail,
         builder: (context, snapshot) {
@@ -744,7 +774,7 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
                       _buildHeader(item),
                       const SizedBox(height: AppSpacing.lg),
                       HighlightCard(
-                        label: 'Amount',
+                        label: l10n.boqAmount,
                         value: _displayBoqAmount(
                           item.amount,
                           currency: item.currency,
@@ -754,42 +784,48 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
                       ),
                       const SizedBox(height: AppSpacing.lg),
                       SectionCard(
-                        title: 'Quantity & amount',
+                        title: l10n.boqQuantityAmount,
                         icon: Icons.straighten_outlined,
                         children: [
                           _detailRow(
-                            'Quantity',
+                            l10n.boqQuantity,
                             '${item.quantity} ${item.unit}',
                           ),
-                          _detailRow('Amount', item.amount),
+                          _detailRow(l10n.boqAmount, item.amount),
                         ],
                       ),
                       if (hasPricing) ...[
                         const SizedBox(height: AppSpacing.lg),
                         SectionCard(
-                          title: 'Pricing',
+                          title: l10n.boqPricing,
                           icon: Icons.sell_outlined,
                           children: [
                             if (item.originalRate != null)
                               _detailRow(
-                                'Original Rate',
+                                l10n.boqOriginalRate,
                                 '${item.originalRate}',
                               ),
                             if (item.aiSuggestedRate != null)
                               _detailRow(
-                                'AI Suggested Rate',
-                                '${item.aiSuggestedRate} (confidence: ${item.aiConfidence?.toStringAsFixed(0)}%)',
+                                l10n.boqAiSuggestedRate,
+                                l10n.boqAiRateValue(
+                                  '${item.aiSuggestedRate}',
+                                  item.aiConfidence?.toStringAsFixed(0) ?? '—',
+                                ),
                               ),
                             if (item.approvedRate != null)
                               _detailRow(
-                                'Approved Rate',
+                                l10n.boqApprovedRate,
                                 '${item.approvedRate}',
                               ),
                             if (item.pricingSource != null)
-                              _detailRow('Pricing Source', item.pricingSource!),
+                              _detailRow(
+                                l10n.boqPricingSource,
+                                item.pricingSource!,
+                              ),
                             if (item.pricingDate != null)
                               _detailRow(
-                                'Pricing Date',
+                                l10n.boqPricingDate,
                                 displayDate(item.pricingDate),
                               ),
                           ],
@@ -797,28 +833,31 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
                       ],
                       const SizedBox(height: AppSpacing.lg),
                       SectionCard(
-                        title: 'Classification',
+                        title: l10n.boqClassification,
                         icon: Icons.category_outlined,
                         children: [
                           _detailRow(
-                            'Status',
-                            (item.status ?? 'pending').capitalize(),
+                            l10n.status,
+                            item.status?.capitalize() ?? l10n.statusPending,
                           ),
                           if (item.workCategory != null)
-                            _detailRow('Work Category', item.workCategory!),
+                            _detailRow(
+                              l10n.boqWorkCategory,
+                              item.workCategory!,
+                            ),
                           if (item.materialCategory != null)
                             _detailRow(
-                              'Material Category',
+                              l10n.boqMaterialCategory,
                               item.materialCategory!,
                             ),
                           if (item.location != null)
-                            _detailRow('Location', item.location!),
+                            _detailRow(l10n.location, item.location!),
                         ],
                       ),
                       if (item.notes != null && item.notes!.isNotEmpty) ...[
                         const SizedBox(height: AppSpacing.lg),
                         SectionCard(
-                          title: 'Notes',
+                          title: l10n.boqNotes,
                           icon: Icons.sticky_note_2_outlined,
                           children: [Text(item.notes!)],
                         ),
@@ -826,7 +865,7 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
                       if (item.translations.isNotEmpty) ...[
                         const SizedBox(height: AppSpacing.lg),
                         SectionCard(
-                          title: 'Translations',
+                          title: l10n.boqTranslations,
                           icon: Icons.translate,
                           children: item.translations
                               .map((t) => _translationTile(t))
@@ -862,7 +901,7 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
                   if (item.code.isNotEmpty) ...[
                     const SizedBox(height: AppSpacing.xxs),
                     Text(
-                      'Code: ${item.code}',
+                      _l10n.boqCodeValue(item.code),
                       style: theme.textTheme.bodySmall,
                     ),
                   ],
@@ -922,7 +961,10 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  'Provider: ${t.provider ?? 'unknown'}  |  Confidence: ${t.confidence?.toStringAsFixed(0) ?? 'N/A'}%',
+                  _l10n.boqTranslationMeta(
+                    t.provider ?? _l10n.boqUnknown,
+                    t.confidence?.toStringAsFixed(0) ?? 'N/A',
+                  ),
                   style: theme.textTheme.bodySmall,
                 ),
               ],
@@ -930,7 +972,7 @@ class _BoqItemDetailPageState extends State<BoqItemDetailPage> {
           ),
           const SizedBox(width: AppSpacing.sm),
           StatusBadge(
-            label: (t.status ?? 'pending').capitalize(),
+            label: t.status?.capitalize() ?? _l10n.statusPending,
             tone: t.status == 'accepted'
                 ? StatusTone.success
                 : StatusTone.warning,

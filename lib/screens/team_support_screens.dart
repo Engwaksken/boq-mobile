@@ -79,9 +79,11 @@ class _ProjectAssignmentsPageState extends State<ProjectAssignmentsPage> {
                 child: Column(
                   children: [
                     ListTile(
-                      title: Text('${a['project']?['name'] ?? ''}'),
+                      title: Text(jsonString(jsonMap(a['project'])['name'])),
                       subtitle: Text(
-                        '${a['user']?['name'] ?? ''} · ${a['user']?['email'] ?? ''}\n${a['role']}',
+                        '${jsonString(jsonMap(a['user'])['name'])} · '
+                        '${jsonString(jsonMap(a['user'])['email'])}\n'
+                        '${jsonString(a['role'])}',
                       ),
                       isThreeLine: true,
                     ),
@@ -126,13 +128,9 @@ class _ProjectAssignmentFormPageState extends State<ProjectAssignmentFormPage> {
   final _form = GlobalKey<FormState>();
   late Future<Map<String, dynamic>> _options = widget.api.assignmentOptions()
     ..ignore();
-  late int? _project = widget.assignment == null
-      ? null
-      : _orgId(widget.assignment!['project_id']);
-  late int? _member = widget.assignment == null
-      ? null
-      : _orgId(widget.assignment!['user_id']);
-  late String? _role = widget.assignment?['role'] as String?;
+  late int? _project = jsonIntOrNull(widget.assignment?['project_id']);
+  late int? _member = jsonIntOrNull(widget.assignment?['user_id']);
+  late String? _role = jsonStringOrNull(widget.assignment?['role']);
   bool _busy = false;
 
   Future<void> _save() async {
@@ -166,11 +164,12 @@ class _ProjectAssignmentFormPageState extends State<ProjectAssignmentFormPage> {
               });
             });
           }
-          final projects = (snapshot.data!['projects'] as List)
-              .cast<Map<String, dynamic>>();
-          final members = (snapshot.data!['members'] as List)
-              .cast<Map<String, dynamic>>();
-          final roles = (snapshot.data!['roles'] as List).cast<String>();
+          final options = snapshot.data ?? const <String, dynamic>{};
+          final projects = jsonMaps(options['projects']);
+          final members = jsonMaps(options['members']);
+          final roles = jsonList(
+            options['roles'],
+          ).map(jsonString).where((r) => r.isNotEmpty).toSet().toList();
           if (projects.isEmpty || members.isEmpty || roles.isEmpty) {
             return Center(
               child: Padding(
@@ -195,7 +194,7 @@ class _ProjectAssignmentFormPageState extends State<ProjectAssignmentFormPage> {
                         (p) => DropdownMenuItem(
                           value: _orgId(p['id']),
                           child: Text(
-                            '${p['name']}',
+                            jsonString(p['name']),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -218,7 +217,8 @@ class _ProjectAssignmentFormPageState extends State<ProjectAssignmentFormPage> {
                         (m) => DropdownMenuItem(
                           value: _orgId(m['id']),
                           child: Text(
-                            '${m['name']} (${m['email']})',
+                            '${jsonString(m['name'])} '
+                            '(${jsonString(m['email'])})',
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -235,7 +235,12 @@ class _ProjectAssignmentFormPageState extends State<ProjectAssignmentFormPage> {
                   isExpanded: true,
                   decoration: InputDecoration(labelText: l.orgRole),
                   items: roles
-                      .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                      .map(
+                        (r) => DropdownMenuItem(
+                          value: r,
+                          child: Text(r, overflow: TextOverflow.ellipsis),
+                        ),
+                      )
                       .toList(),
                   onChanged: _busy ? null : (v) => _role = v,
                   validator: (v) => v == null ? l.orgRequired : null,
@@ -332,10 +337,10 @@ class _FaqsPageState extends State<FaqsPage> {
               tile: (faq) => Card(
                 child: ExpansionTile(
                   key: ValueKey(faq['id']),
-                  title: Text('${faq['question']}'),
+                  title: Text(jsonString(faq['question'])),
                   childrenPadding: const EdgeInsets.all(16),
                   expandedCrossAxisAlignment: CrossAxisAlignment.start,
-                  children: [SelectableText('${faq['answer']}')],
+                  children: [SelectableText(jsonString(faq['answer']))],
                 ),
               ),
             ),
@@ -401,10 +406,12 @@ class _FaqAdminPageState extends State<FaqAdminPage> {
                   reload: _reload,
                   tile: (faq) => Card(
                     child: ListTile(
-                      title: Text('${faq['question']}'),
-                      subtitle: Text('${l.orgSortOrder}: ${faq['sort_order']}'),
+                      title: Text(jsonString(faq['question'])),
+                      subtitle: Text(
+                        '${l.orgSortOrder}: ${jsonInt(faq['sort_order'])}',
+                      ),
                       leading: Icon(
-                        faq['is_active'] == true
+                        jsonBool(faq['is_active'])
                             ? Icons.visibility
                             : Icons.visibility_off,
                       ),
@@ -433,15 +440,15 @@ class FaqFormPage extends StatefulWidget {
 class _FaqFormPageState extends State<FaqFormPage> {
   final _form = GlobalKey<FormState>();
   late final _question = TextEditingController(
-    text: '${widget.faq?['question'] ?? ''}',
+    text: jsonString(widget.faq?['question']),
   );
   late final _answer = TextEditingController(
-    text: '${widget.faq?['answer'] ?? ''}',
+    text: jsonString(widget.faq?['answer']),
   );
   late final _order = TextEditingController(
-    text: '${widget.faq?['sort_order'] ?? 0}',
+    text: '${jsonInt(widget.faq?['sort_order'])}',
   );
-  late bool _active = widget.faq?['is_active'] != false;
+  late bool _active = jsonBool(widget.faq?['is_active'], true);
   bool _busy = false;
 
   @override
@@ -459,7 +466,7 @@ class _FaqFormPageState extends State<FaqFormPage> {
       await widget.api.saveFaq({
         'question': _question.text.trim(),
         'answer': _answer.text.trim(),
-        'sort_order': int.parse(_order.text.trim()),
+        'sort_order': int.tryParse(_order.text.trim()) ?? 0,
         'is_active': _active,
       }, id: widget.faq == null ? null : _orgId(widget.faq!['id']));
       if (mounted) Navigator.pop(context, true);

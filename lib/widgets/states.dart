@@ -253,7 +253,7 @@ class _SkeletonListState extends State<SkeletonList>
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: 'Loading',
+      label: AppLocalizations.of(context)?.commonLoading ?? 'Loading',
       child: FadeTransition(
         opacity: Tween<double>(begin: 0.45, end: 1).animate(_controller),
         child: ListView.separated(

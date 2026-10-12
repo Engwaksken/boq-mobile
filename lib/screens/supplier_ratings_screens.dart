@@ -3,23 +3,22 @@ part of '../main.dart';
 // Top Suppliers: rankings of hardware shops and factories by user ratings,
 // the charts, one supplier's performance, rating a supplier and "My ratings".
 
-const _ratingPeriods = <(String, String)>[
-  ('week', 'This week'),
-  ('month', 'This month'),
-  ('year', 'This year'),
-  ('all', 'All time'),
-];
+const _ratingPeriods = <String>['week', 'month', 'year', 'all'];
 
-String _ratingPeriodLabel(String period) => _ratingPeriods
-    .firstWhere((p) => p.$1 == period, orElse: () => _ratingPeriods[1])
-    .$2;
+String _ratingPeriodLabel(AppLocalizations l, String period) =>
+    switch (period) {
+      'week' => l.ratingThisWeek,
+      'year' => l.ratingThisYear,
+      'all' => l.ratingAllTime,
+      _ => l.ratingThisMonth,
+    };
 
-String _supplierTypeLabel(String type) =>
-    type == 'factory' ? 'Factory' : 'Hardware';
+String _supplierTypeLabel(AppLocalizations l, String type) =>
+    type == 'factory' ? l.hwFactory : l.ratingHardware;
 
 String _stars(double? value) => value == null ? '—' : value.toStringAsFixed(1);
 
-String _ratingsCount(int count) => count == 1 ? '1 rating' : '$count ratings';
+String _ratingsCount(AppLocalizations l, int count) => l.ratingCount(count);
 
 /// Star colour (readable on light and dark surfaces).
 const _starColor = Color(0xFFF59E0B);
@@ -128,19 +127,19 @@ class _TopSuppliersPageState extends State<TopSuppliersPage> {
       length: 3,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Top Suppliers'),
-          bottom: const TabBar(
+          title: Text(context.tr.topSuppliers),
+          bottom: TabBar(
             tabs: [
-              Tab(text: 'Rankings'),
-              Tab(text: 'Charts'),
-              Tab(text: 'My ratings'),
+              Tab(text: context.tr.ratingRankings),
+              Tab(text: context.tr.ratingCharts),
+              Tab(text: context.tr.ratingMyRatings),
             ],
           ),
         ),
         floatingActionButton: FloatingActionButton.extended(
           onPressed: () => _rate(),
           icon: const Icon(Icons.star_rate_outlined),
-          label: const Text('Rate a Supplier'),
+          label: Text(context.tr.ratingRateSupplier),
         ),
         body: TabBarView(
           children: [
@@ -208,14 +207,13 @@ class _TopSuppliersPageState extends State<TopSuppliersPage> {
         children: [
           Expanded(
             child: Text(
-              'Ratings of hardware suppliers and factories by users. Rate the '
-              'ones you buy from to reward good prices and service.',
+              context.tr.ratingRankingsIntro,
               style: theme.textTheme.bodySmall,
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
           FilterChip(
-            label: const Text('Lowest rated'),
+            label: Text(context.tr.ratingLowestRated),
             selected: _lowest,
             onSelected: (value) {
               _lowest = value;
@@ -226,7 +224,9 @@ class _TopSuppliersPageState extends State<TopSuppliersPage> {
       ),
       const SizedBox(height: AppSpacing.md),
       _LeaderboardCard(
-        title: _lowest ? 'Hardware needing improvement' : 'Top 10 Hardware',
+        title: _lowest
+            ? context.tr.ratingHardwareNeedsImprovement
+            : context.tr.ratingTopHardware,
         icon: Icons.storefront_outlined,
         board: data.hardware,
         onTap: _open,
@@ -234,39 +234,36 @@ class _TopSuppliersPageState extends State<TopSuppliersPage> {
       ),
       const SizedBox(height: AppSpacing.sectionGap),
       _LeaderboardCard(
-        title: _lowest ? 'Factories needing improvement' : 'Top 10 Factories',
+        title: _lowest
+            ? context.tr.ratingFactoriesNeedImprovement
+            : context.tr.ratingTopFactories,
         icon: Icons.factory_outlined,
         board: data.factories,
         onTap: _open,
         onRate: () => _rate(),
       ),
       const SizedBox(height: AppSpacing.md),
-      Text(
-        'Rankings use a weighted score: a supplier needs several good ratings '
-        'to rank above one with many, so a single 5-star rating does not top '
-        'the list.',
-        style: theme.textTheme.bodySmall,
-      ),
+      Text(context.tr.ratingWeightedNote, style: theme.textTheme.bodySmall),
     ];
   }
 
   List<Widget> _charts(_RatingsOverview data) {
     final summary = data.summary;
     final scheme = Theme.of(context).colorScheme;
-    final prefix = _lowest ? 'Lowest rated' : 'Top';
+    final l = context.tr;
     return [
       Row(
         children: [
           Expanded(
             child: StatCard(
-              label: 'Ratings',
+              label: l.ratingRatings,
               value: '${summary.total}',
               icon: Icons.reviews_outlined,
             ),
           ),
           Expanded(
             child: StatCard(
-              label: 'Average rating',
+              label: l.ratingAverage,
               value: _stars(summary.average),
               icon: Icons.star_outline,
               tone: StatusTone.warning,
@@ -274,7 +271,7 @@ class _TopSuppliersPageState extends State<TopSuppliersPage> {
           ),
           Expanded(
             child: StatCard(
-              label: 'Suppliers rated',
+              label: l.ratingSuppliersRated,
               value: '${summary.suppliers}',
               icon: Icons.storefront_outlined,
               tone: StatusTone.info,
@@ -284,7 +281,9 @@ class _TopSuppliersPageState extends State<TopSuppliersPage> {
       ),
       const SizedBox(height: AppSpacing.md),
       SectionCard(
-        title: '$prefix hardware · average rating',
+        title: _lowest
+            ? l.ratingLowestHardwareChart
+            : l.ratingTopHardwareChart,
         icon: Icons.bar_chart,
         children: [
           _AverageBarChart(entries: data.hardware.items, color: scheme.primary),
@@ -292,7 +291,9 @@ class _TopSuppliersPageState extends State<TopSuppliersPage> {
       ),
       const SizedBox(height: AppSpacing.md),
       SectionCard(
-        title: '$prefix factories · average rating',
+        title: _lowest
+            ? l.ratingLowestFactoriesChart
+            : l.ratingTopFactoriesChart,
         icon: Icons.bar_chart,
         children: [
           _AverageBarChart(entries: data.factories.items, color: _factoryColor),
@@ -300,13 +301,13 @@ class _TopSuppliersPageState extends State<TopSuppliersPage> {
       ),
       const SizedBox(height: AppSpacing.md),
       SectionCard(
-        title: 'Rating distribution',
+        title: l.ratingDistribution,
         icon: Icons.donut_large_outlined,
         children: [_DistributionChart(buckets: summary.distribution)],
       ),
       const SizedBox(height: AppSpacing.md),
       SectionCard(
-        title: 'Ratings by type',
+        title: l.ratingByType,
         icon: Icons.pie_chart_outline,
         children: [
           _TypeChart(hardware: summary.hardware, factories: summary.factories),
@@ -314,29 +315,29 @@ class _TopSuppliersPageState extends State<TopSuppliersPage> {
       ),
       const SizedBox(height: AppSpacing.md),
       SectionCard(
-        title: 'Scores by area',
+        title: l.ratingScoresByArea,
         icon: Icons.insights_outlined,
         children: [
           _CriteriaChart(
             criteria: summary.criteria,
-            emptyMessage: 'No detailed scores in this period yet.',
+            emptyMessage: l.ratingNoScoresPeriod,
           ),
         ],
       ),
       const SizedBox(height: AppSpacing.md),
       SectionCard(
-        title: 'Monthly trend',
+        title: l.ratingMonthlyTrend,
         icon: Icons.show_chart,
         trailing: Text(
-          'Last 12 months',
+          l.ratingLast12Months,
           style: Theme.of(context).textTheme.bodySmall,
         ),
         children: [
           _TrendChart(
             points: summary.trend,
             series: [
-              ('Hardware', scheme.primary, summary.hardwareTrend),
-              ('Factories', _factoryColor, summary.factoryTrend),
+              (l.ratingHardware, scheme.primary, summary.hardwareTrend),
+              (l.ratingFactories, _factoryColor, summary.factoryTrend),
             ],
           ),
         ],
@@ -359,11 +360,9 @@ class _TopSuppliersPageState extends State<TopSuppliersPage> {
         if (ratings.isEmpty) {
           return EmptyState(
             icon: Icons.star_border,
-            title: 'You have not rated any supplier yet.',
-            message:
-                'Rate the hardware shops and factories you buy from. You can '
-                'rate each one again every month.',
-            actionLabel: 'Rate a Supplier',
+            title: context.tr.ratingNoneYet,
+            message: context.tr.ratingNoneYetHelp,
+            actionLabel: context.tr.ratingRateSupplier,
             actionIcon: Icons.star_rate_outlined,
             onAction: () => _rate(),
           );
@@ -380,10 +379,10 @@ class _TopSuppliersPageState extends State<TopSuppliersPage> {
               for (final rating in ratings)
                 ContentWidth(
                   child: ListItemCard(
-                    title: rating.supplier?.name ?? 'Supplier',
+                    title: rating.supplier?.name ?? context.tr.hwSupplier,
                     subtitle: [
                       if (rating.supplier != null)
-                        _supplierTypeLabel(rating.supplier!.type),
+                        _supplierTypeLabel(context.tr, rating.supplier!.type),
                       if ((rating.supplier?.place ?? '').isNotEmpty)
                         rating.supplier!.place,
                       displayDate(rating.ratedAt),
@@ -423,11 +422,11 @@ class _RatingPeriodPicker extends StatelessWidget {
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          for (final (key, label) in _ratingPeriods)
+          for (final key in _ratingPeriods)
             Padding(
               padding: const EdgeInsets.only(right: AppSpacing.sm),
               child: ChoiceChip(
-                label: Text(label),
+                label: Text(_ratingPeriodLabel(context.tr, key)),
                 selected: value == key,
                 onSelected: (_) => onChanged(key),
               ),
@@ -462,7 +461,7 @@ class _LeaderboardCard extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       trailing: Text(
         board.periodLabel.isEmpty
-            ? _ratingPeriodLabel(board.period)
+            ? _ratingPeriodLabel(context.tr, board.period)
             : board.periodLabel,
         style: theme.textTheme.bodySmall,
       ),
@@ -471,9 +470,9 @@ class _LeaderboardCard extends StatelessWidget {
           EmptyState(
             compact: true,
             icon: Icons.star_border,
-            title: 'No ratings in this period yet.',
-            message: 'Be the first to rate one.',
-            actionLabel: 'Rate a Supplier',
+            title: context.tr.ratingNonePeriod,
+            message: context.tr.ratingBeFirst,
+            actionLabel: context.tr.ratingRateSupplier,
             onAction: onRate,
           )
         else
@@ -529,7 +528,7 @@ class _LeaderboardCard extends StatelessWidget {
                           ],
                         ),
                         Text(
-                          _ratingsCount(entry.count),
+                          _ratingsCount(context.tr, entry.count),
                           style: theme.textTheme.bodySmall,
                         ),
                       ],
@@ -560,7 +559,7 @@ class _RankBadge extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final medal = _medals[rank];
     return Semantics(
-      label: 'Rank $rank',
+      label: context.tr.ratingRank(rank),
       child: Container(
         width: 34,
         height: 34,
@@ -594,7 +593,7 @@ class _StarRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final muted = Theme.of(context).colorScheme.outline;
     return Semantics(
-      label: '${value.toStringAsFixed(1)} out of 5 stars',
+      label: context.tr.ratingOutOfFive(value.toStringAsFixed(1)),
       excludeSemantics: true,
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -676,7 +675,7 @@ class _StarPicker extends StatelessWidget {
             visualDensity: VisualDensity.compact,
             padding: const EdgeInsets.all(2),
             constraints: BoxConstraints.tight(Size.square(size + 8)),
-            tooltip: i == 1 ? '1 star' : '$i stars',
+            tooltip: context.tr.ratingStars(i),
             isSelected: (value ?? 0) >= i,
             onPressed: !enabled
                 ? null
@@ -739,7 +738,7 @@ class _AverageBarChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (entries.isEmpty) return _chartEmpty('No ratings in this period yet.');
+    if (entries.isEmpty) return _chartEmpty(context.tr.ratingNonePeriod);
     final scheme = Theme.of(context).colorScheme;
     return SizedBox(
       height: 220,
@@ -784,7 +783,8 @@ class _AverageBarChart extends StatelessWidget {
                 final entry = entries[group.x];
                 return BarTooltipItem(
                   '${entry.supplier.name}\n'
-                  '${_stars(entry.average)} ★ · ${_ratingsCount(entry.count)}',
+                  '${_stars(entry.average)} ★ · '
+                  '${_ratingsCount(context.tr, entry.count)}',
                   TextStyle(
                     color: scheme.onInverseSurface,
                     fontWeight: FontWeight.w600,
@@ -834,7 +834,13 @@ class _CriteriaChart extends StatelessWidget {
   Widget build(BuildContext context) {
     if (criteria.isEmpty) return _chartEmpty(emptyMessage);
     final scheme = Theme.of(context).colorScheme;
-    final entries = criteria.entries;
+    final l = context.tr;
+    final entries = <(String, double?)>[
+      (l.ratingPrice, criteria.price),
+      (l.ratingQuality, criteria.quality),
+      (l.ratingDelivery, criteria.delivery),
+      (l.ratingService, criteria.service),
+    ];
     return SizedBox(
       height: 200,
       child: BarChart(
@@ -1001,10 +1007,10 @@ class _DistributionChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (buckets.every((b) => b.count == 0)) {
-      return _chartEmpty('No ratings in this period yet.');
+      return _chartEmpty(context.tr.ratingNonePeriod);
     }
     return _DonutChart(
-      centerLabel: 'ratings',
+      centerLabel: context.tr.ratingRatingsLower,
       slices: [
         for (final bucket in buckets)
           (
@@ -1027,26 +1033,27 @@ class _TypeChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (hardware.count + factories.count == 0) {
-      return _chartEmpty('No ratings in this period yet.');
+      return _chartEmpty(context.tr.ratingNonePeriod);
     }
     final theme = Theme.of(context);
+    final l = context.tr;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _DonutChart(
-          centerLabel: 'ratings',
+          centerLabel: l.ratingRatingsLower,
           slices: [
-            ('Hardware', hardware.count, theme.colorScheme.primary),
-            ('Factories', factories.count, _factoryColor),
+            (l.ratingHardware, hardware.count, theme.colorScheme.primary),
+            (l.ratingFactories, factories.count, _factoryColor),
           ],
         ),
         const SizedBox(height: AppSpacing.md),
         KeyValueRow(
-          label: 'Hardware average',
+          label: l.ratingHardwareAverage,
           value: '${_stars(hardware.average)} ★',
         ),
         KeyValueRow(
-          label: 'Factory average',
+          label: l.ratingFactoryAverage,
           value: '${_stars(factories.average)} ★',
         ),
       ],
@@ -1068,12 +1075,14 @@ class _TrendChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (points.every((p) => p.count == 0)) {
-      return _chartEmpty('No ratings in the last 12 months.');
+      return _chartEmpty(context.tr.ratingNoneLast12);
     }
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final l = context.tr;
+    // The first line is always the overall average ("All").
     final lines = <(String, Color, List<RatingTrendPoint>)>[
-      ('All', _starColor, points),
+      (l.hwAll, _starColor, points),
       for (final extra in series)
         if (extra.$3.any((p) => p.count > 0)) extra,
     ];
@@ -1131,7 +1140,7 @@ class _TrendChart extends StatelessWidget {
                         return LineTooltipItem(
                           '${spot.barIndex == 0 ? '${point.label}\n' : ''}'
                           '${line.$1}: ${_stars(point.average)} ★ · '
-                          '${_ratingsCount(point.count)}',
+                          '${_ratingsCount(l, point.count)}',
                           TextStyle(
                             color: scheme.onInverseSurface,
                             fontSize: 12,
@@ -1143,7 +1152,7 @@ class _TrendChart extends StatelessWidget {
                 ),
               ),
               lineBarsData: [
-                for (final line in lines)
+                for (final (index, line) in lines.indexed)
                   LineChartBarData(
                     spots: [
                       for (var i = 0; i < line.$3.length; i++)
@@ -1152,10 +1161,10 @@ class _TrendChart extends StatelessWidget {
                             : FlSpot(i.toDouble(), line.$3[i].average!),
                     ],
                     color: line.$2,
-                    barWidth: line.$1 == 'All' ? 3 : 2,
+                    barWidth: index == 0 ? 3 : 2,
                     isCurved: false,
-                    dashArray: line.$1 == 'All' ? null : const [5, 3],
-                    dotData: FlDotData(show: line.$1 == 'All'),
+                    dashArray: index == 0 ? null : const [5, 3],
+                    dotData: FlDotData(show: index == 0),
                   ),
               ],
             ),
@@ -1180,7 +1189,7 @@ class _TrendChart extends StatelessWidget {
           ),
         ],
         const SizedBox(height: AppSpacing.md),
-        Text('Ratings per month', style: theme.textTheme.labelMedium),
+        Text(l.ratingPerMonth, style: theme.textTheme.labelMedium),
         const SizedBox(height: AppSpacing.xs),
         SizedBox(
           height: 110,
@@ -1212,7 +1221,7 @@ class _TrendChart extends StatelessWidget {
                   getTooltipItem: (group, groupIndex, rod, rodIndex) =>
                       BarTooltipItem(
                         '${points[group.x].label}\n'
-                        '${_ratingsCount(points[group.x].count)}',
+                        '${_ratingsCount(l, points[group.x].count)}',
                         TextStyle(
                           color: scheme.onInverseSurface,
                           fontSize: 12,
@@ -1291,10 +1300,15 @@ class _SupplierPerformancePageState extends State<SupplierPerformancePage> {
   Future<void> _openWebsite(String url) async {
     final uri = Uri.tryParse(url.startsWith('http') ? url : 'https://$url');
     if (uri == null) return;
-    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    bool opened;
+    try {
+      opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } on Object {
+      opened = false;
+    }
     if (!opened && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open the website.')),
+        SnackBar(content: Text(context.tr.ratingWebsiteFailed)),
       );
     }
   }
@@ -1350,6 +1364,7 @@ class _SupplierPerformancePageState extends State<SupplierPerformancePage> {
 
   List<Widget> _sections(SupplierPerformance data) {
     final theme = Theme.of(context);
+    final l = context.tr;
     final supplier = data.supplier;
     final average = data.average ?? 0;
     return [
@@ -1370,7 +1385,7 @@ class _SupplierPerformancePageState extends State<SupplierPerformancePage> {
                     ),
                   ),
                   StatusBadge(
-                    label: _supplierTypeLabel(supplier.type),
+                    label: _supplierTypeLabel(l, supplier.type),
                     tone: supplier.isFactory
                         ? StatusTone.info
                         : StatusTone.brand,
@@ -1404,7 +1419,8 @@ class _SupplierPerformancePageState extends State<SupplierPerformancePage> {
                       children: [
                         _StarRow(value: average, size: 22),
                         Text(
-                          'All time · ${_ratingsCount(data.total)}',
+                          '${l.ratingAllTime} · '
+                          '${_ratingsCount(l, data.total)}',
                           style: theme.textTheme.bodySmall,
                         ),
                       ],
@@ -1431,11 +1447,10 @@ class _SupplierPerformancePageState extends State<SupplierPerformancePage> {
                   Expanded(
                     child: Text(
                       data.rank == null
-                          ? 'Not rated in this period'
-                          : 'Rank ${data.rank} of ${data.rankOf ?? data.rank} '
-                                '${supplier.isFactory ? 'factories' : 'hardware shops'}'
-                                ' · ${_stars(data.periodAverage)} ★ from '
-                                '${_ratingsCount(data.periodTotal)}',
+                          ? l.ratingNotRatedPeriod
+                          : '${supplier.isFactory ? l.ratingRankOfFactories(data.rank!, data.rankOf ?? data.rank!) : l.ratingRankOfShops(data.rank!, data.rankOf ?? data.rank!)}'
+                                ' · ${_stars(data.periodAverage)} ★ · '
+                                '${_ratingsCount(l, data.periodTotal)}',
                       style: theme.textTheme.bodyMedium,
                     ),
                   ),
@@ -1449,13 +1464,15 @@ class _SupplierPerformancePageState extends State<SupplierPerformancePage> {
                   FilledButton.icon(
                     onPressed: () => _rate(data),
                     icon: const Icon(Icons.star_rate_outlined),
-                    label: Text(data.mine == null ? 'Rate' : 'Rate again'),
+                    label: Text(
+                      data.mine == null ? l.ratingRate : l.ratingRateAgain,
+                    ),
                   ),
                   if (supplier.websiteUrl != null)
                     OutlinedButton.icon(
                       onPressed: () => _openWebsite(supplier.websiteUrl!),
                       icon: const Icon(Icons.open_in_new),
-                      label: const Text('Website'),
+                      label: Text(l.ratingWebsite),
                     ),
                 ],
               ),
@@ -1465,39 +1482,39 @@ class _SupplierPerformancePageState extends State<SupplierPerformancePage> {
       ),
       const SizedBox(height: AppSpacing.md),
       SectionCard(
-        title: 'Rating distribution',
+        title: l.ratingDistribution,
         icon: Icons.donut_large_outlined,
-        trailing: Text('All time', style: theme.textTheme.bodySmall),
+        trailing: Text(l.ratingAllTime, style: theme.textTheme.bodySmall),
         children: [_DistributionChart(buckets: data.distribution)],
       ),
       const SizedBox(height: AppSpacing.md),
       SectionCard(
-        title: 'Scores by area',
+        title: l.ratingScoresByArea,
         icon: Icons.insights_outlined,
         children: [
           _CriteriaChart(
             criteria: data.criteria,
-            emptyMessage: 'No detailed scores yet.',
+            emptyMessage: l.ratingNoScores,
           ),
         ],
       ),
       const SizedBox(height: AppSpacing.md),
       SectionCard(
-        title: 'Monthly trend',
+        title: l.ratingMonthlyTrend,
         icon: Icons.show_chart,
-        trailing: Text('Last 12 months', style: theme.textTheme.bodySmall),
+        trailing: Text(l.ratingLast12Months, style: theme.textTheme.bodySmall),
         children: [_TrendChart(points: data.trend)],
       ),
       const SizedBox(height: AppSpacing.md),
       SectionCard(
-        title: 'Recent reviews',
+        title: l.ratingRecentReviews,
         icon: Icons.rate_review_outlined,
         children: [
           if (data.reviews.isEmpty)
-            const EmptyState(
+            EmptyState(
               compact: true,
               icon: Icons.rate_review_outlined,
-              title: 'No reviews yet.',
+              title: l.ratingNoReviews,
             )
           else
             for (final (index, review) in data.reviews.indexed) ...[
@@ -1529,7 +1546,7 @@ class _ReviewTile extends StatelessWidget {
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
-                  '${review.author ?? 'Verified user'} · '
+                  '${review.author ?? context.tr.ratingVerifiedUser} · '
                   '${displayDate(review.ratedAt)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -1537,7 +1554,10 @@ class _ReviewTile extends StatelessWidget {
                 ),
               ),
               if (review.isHidden)
-                const StatusBadge(label: 'Hidden', tone: StatusTone.neutral),
+                StatusBadge(
+                  label: context.tr.ratingHidden,
+                  tone: StatusTone.neutral,
+                ),
             ],
           ),
           if (review.comment != null) ...[
@@ -1671,7 +1691,7 @@ class _RateSupplierSheetState extends State<_RateSupplierSheet> {
     final supplier = _supplier;
     if (supplier == null) return;
     if (_rating == null) {
-      setState(() => _error = 'Choose an overall rating from 1 to 5 stars.');
+      setState(() => _error = context.tr.ratingChooseOverall);
       return;
     }
     setState(() {
@@ -1716,15 +1736,14 @@ class _RateSupplierSheetState extends State<_RateSupplierSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Rate a Supplier',
+                context.tr.ratingRateSupplier,
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),
               ),
               const SizedBox(height: AppSpacing.xs),
               Text(
-                'You can rate each supplier once a month; rating again in '
-                'the same month updates your rating.',
+                context.tr.ratingOncePerMonth,
                 style: theme.textTheme.bodySmall,
               ),
               const SizedBox(height: AppSpacing.lg),
@@ -1741,10 +1760,10 @@ class _RateSupplierSheetState extends State<_RateSupplierSheet> {
       controller: _search,
       autofocus: false,
       textInputAction: TextInputAction.search,
-      decoration: const InputDecoration(
-        prefixIcon: Icon(Icons.search),
-        labelText: 'Hardware or factory',
-        hintText: 'Search by name or location...',
+      decoration: InputDecoration(
+        prefixIcon: const Icon(Icons.search),
+        labelText: context.tr.ratingHardwareOrFactory,
+        hintText: context.tr.ratingSearchHint,
       ),
       onChanged: _onSearch,
     ),
@@ -1771,10 +1790,10 @@ class _RateSupplierSheetState extends State<_RateSupplierSheet> {
         }
         final suppliers = snapshot.data!;
         if (suppliers.isEmpty) {
-          return const EmptyState(
+          return EmptyState(
             compact: true,
             icon: Icons.search_off,
-            title: 'No active hardware or factory matches your search.',
+            title: context.tr.ratingNoMatches,
           );
         }
         return Column(
@@ -1790,7 +1809,7 @@ class _RateSupplierSheetState extends State<_RateSupplierSheet> {
                 title: Text(s.name, maxLines: 2),
                 subtitle: Text(
                   [
-                    _supplierTypeLabel(s.type),
+                    _supplierTypeLabel(context.tr, s.type),
                     if (s.place.isNotEmpty) s.place,
                   ].join(' · '),
                 ),
@@ -1810,6 +1829,7 @@ class _RateSupplierSheetState extends State<_RateSupplierSheet> {
 
   List<Widget> _form(RatedSupplier supplier) {
     final theme = Theme.of(context);
+    final l = context.tr;
     final enabled = !_saving && !_loadingMine;
     Widget criterion(String label, int? value, ValueChanged<int?> onChanged) {
       return Row(
@@ -1838,21 +1858,21 @@ class _RateSupplierSheetState extends State<_RateSupplierSheet> {
           title: Text(supplier.name),
           subtitle: Text(
             [
-              _supplierTypeLabel(supplier.type),
+              _supplierTypeLabel(l, supplier.type),
               if (supplier.place.isNotEmpty) supplier.place,
             ].join(' · '),
           ),
           trailing: widget.supplier == null
               ? TextButton(
                   onPressed: _saving ? null : _change,
-                  child: const Text('Change'),
+                  child: Text(l.hwChange),
                 )
               : null,
         ),
       ),
       if (_loadingMine) const LinearProgressIndicator(),
       const SizedBox(height: AppSpacing.lg),
-      Text('Overall rating *', style: theme.textTheme.titleSmall),
+      Text(l.ratingOverallRequired, style: theme.textTheme.titleSmall),
       const SizedBox(height: AppSpacing.xs),
       Center(
         child: _StarPicker(
@@ -1866,15 +1886,12 @@ class _RateSupplierSheetState extends State<_RateSupplierSheet> {
         ),
       ),
       const SizedBox(height: AppSpacing.md),
-      Text(
-        'Scores by area (optional, tap a chosen star again to clear)',
-        style: theme.textTheme.bodySmall,
-      ),
+      Text(l.ratingScoresOptional, style: theme.textTheme.bodySmall),
       const SizedBox(height: AppSpacing.xs),
-      criterion('Price', _price, (v) => _price = v),
-      criterion('Quality', _quality, (v) => _quality = v),
-      criterion('Delivery', _delivery, (v) => _delivery = v),
-      criterion('Service', _service, (v) => _service = v),
+      criterion(l.ratingPrice, _price, (v) => _price = v),
+      criterion(l.ratingQuality, _quality, (v) => _quality = v),
+      criterion(l.ratingDelivery, _delivery, (v) => _delivery = v),
+      criterion(l.ratingService, _service, (v) => _service = v),
       const SizedBox(height: AppSpacing.md),
       TextField(
         controller: _comment,
@@ -1882,11 +1899,9 @@ class _RateSupplierSheetState extends State<_RateSupplierSheet> {
         maxLength: 1000,
         maxLines: 4,
         minLines: 2,
-        decoration: const InputDecoration(
-          labelText: 'Comment',
-          hintText:
-              'What was good, and what could be better? (prices, stock, '
-              'delivery, service)',
+        decoration: InputDecoration(
+          labelText: l.ratingComment,
+          hintText: l.ratingCommentHint,
           alignLabelWithHint: true,
         ),
       ),
@@ -1901,7 +1916,7 @@ class _RateSupplierSheetState extends State<_RateSupplierSheet> {
       ],
       const SizedBox(height: AppSpacing.md),
       LoadingButton(
-        label: _rerating ? 'Update Rating' : 'Save Rating',
+        label: _rerating ? l.ratingUpdate : l.ratingSave,
         icon: Icons.check,
         loading: _saving,
         onPressed: enabled ? _save : null,

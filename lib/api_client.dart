@@ -6,23 +6,15 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import 'app_errors.dart';
+import 'json_utils.dart';
 
 part 'organisation_api.dart';
 
 /// `2026-09-01T00:00:00.000000Z` → `2026-09-01` (API date columns).
 String _dateOnly(dynamic value) {
-  final raw = (value as String? ?? '').trim();
+  final raw = jsonString(value).trim();
   return RegExp(r'^\d{4}-\d{2}-\d{2}').firstMatch(raw)?.group(0) ?? raw;
 }
-
-int _asInt(dynamic value) =>
-    value is num ? value.toInt() : int.tryParse('$value') ?? 0;
-
-double _asDouble(dynamic value) =>
-    value is num ? value.toDouble() : double.tryParse('$value') ?? 0.0;
-
-double? _asDoubleOrNull(dynamic value) =>
-    value == null ? null : _asDouble(value);
 
 /// A list of non-empty, trimmed strings from an API/JSON value.
 List<String> _stringList(dynamic value) =>
@@ -180,7 +172,10 @@ class ApiClient {
     required Iterable<String> roles,
     required bool hasOrganisation,
   }) {
-    _permissions = permissions.map((p) => p.trim()).where((p) => p.isNotEmpty).toSet();
+    _permissions = permissions
+        .map((p) => p.trim())
+        .where((p) => p.isNotEmpty)
+        .toSet();
     _roles = roles.map((r) => r.trim()).where((r) => r.isNotEmpty).toSet();
     _hasOrganisation = hasOrganisation;
     _accessLoaded = true;
@@ -191,14 +186,13 @@ class ApiClient {
   Future<void> _storeAccessFromData(Map<String, dynamic>? data) async {
     if (data == null) return;
     final user = data['user'] is Map<String, dynamic>
-        ? data['user'] as Map<String, dynamic>
+        ? jsonMap(data['user'])
         : const <String, dynamic>{};
-    final roles = (user['roles'] is List ? user['roles'] as List : const [])
+    final roles = (user['roles'] is List ? jsonList(user['roles']) : const [])
         .whereType<Map>()
         .map((role) => '${role['slug'] ?? ''}');
     final organisation = user['organisation'];
-    final hasOrganisation =
-        organisation is Map && organisation['id'] != null;
+    final hasOrganisation = organisation is Map && organisation['id'] != null;
     _applyAccess(
       permissions: _stringList(data['permissions']),
       roles: roles,
@@ -231,7 +225,11 @@ class ApiClient {
   }
 
   Future<void> _clearAccess() async {
-    _applyAccess(permissions: const [], roles: const [], hasOrganisation: false);
+    _applyAccess(
+      permissions: const [],
+      roles: const [],
+      hasOrganisation: false,
+    );
     _accessLoaded = false;
     await _storage.delete(key: _permissionsKey);
     await _storage.delete(key: _rolesKey);
@@ -249,12 +247,12 @@ class ApiClient {
       throw _apiError(response, body);
     }
 
-    final token = body['data']?['token'] as String?;
+    final token = jsonStringOrNull(jsonMap(body['data'])['token']);
     if (token == null || token.isEmpty) {
       throw const ApiException('The server did not return an access token.');
     }
     await _storage.write(key: _tokenKey, value: token);
-    await _storeAccessFromData(body['data'] as Map<String, dynamic>?);
+    await _storeAccessFromData(jsonMapOrNull(body['data']));
   }
 
   Future<void> register({
@@ -283,7 +281,7 @@ class ApiClient {
       throw _apiError(response, body);
     }
 
-    final token = body['data']?['token'] as String?;
+    final token = jsonStringOrNull(jsonMap(body['data'])['token']);
 
     if (token == null || token.isEmpty) {
       throw const ApiException(
@@ -292,7 +290,7 @@ class ApiClient {
     }
 
     await _storage.write(key: _tokenKey, value: token);
-    await _storeAccessFromData(body['data'] as Map<String, dynamic>?);
+    await _storeAccessFromData(jsonMapOrNull(body['data']));
   }
 
   Future<void> forgotPassword({required String email}) async {
@@ -318,7 +316,7 @@ class ApiClient {
     if (response.statusCode != 200) {
       throw _apiError(response, body);
     }
-    return DashboardSummary.fromJson(body['data'] as Map<String, dynamic>);
+    return DashboardSummary.fromJson(jsonMap(body['data']));
   }
 
   /// Uploads a new profile picture (JPEG/PNG/WebP, max 4 MB).
@@ -343,7 +341,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return UserProfile.fromJson(body['data']['user'] as Map<String, dynamic>);
+    return UserProfile.fromJson(jsonMap(jsonMap(body['data'])['user']));
   }
 
   Future<UserProfile> deleteAvatar() async {
@@ -353,7 +351,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return UserProfile.fromJson(body['data']['user'] as Map<String, dynamic>);
+    return UserProfile.fromJson(jsonMap(jsonMap(body['data'])['user']));
   }
 
   Future<UserProfile> profile() async {
@@ -366,13 +364,11 @@ class ApiClient {
       throw _apiError(response, body);
     }
     final data = body['data'];
-    final map = data is Map<String, dynamic>
-        ? data
-        : const <String, dynamic>{};
+    final map = data is Map<String, dynamic> ? data : const <String, dynamic>{};
     if (map['user'] is Map<String, dynamic>) {
       await _storeAccessFromData(map);
     }
-    return UserProfile.fromJson(map['user'] as Map<String, dynamic>);
+    return UserProfile.fromJson(jsonMap(map['user']));
   }
 
   Future<Map<String, dynamic>> currentSubscription() async {
@@ -382,7 +378,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return body['data'] as Map<String, dynamic>;
+    return jsonMap(body['data']);
   }
 
   Future<List<Map<String, dynamic>>> plans() async {
@@ -392,9 +388,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return (body['data'] as List<dynamic>? ?? [])
-        .whereType<Map<String, dynamic>>()
-        .toList();
+    return (jsonList(body['data'])).whereType<Map<String, dynamic>>().toList();
   }
 
   Future<Map<String, dynamic>> createSubscription(int planId) async {
@@ -407,7 +401,7 @@ class ApiClient {
     if (response.statusCode != 201) {
       throw _apiError(response, body);
     }
-    return body['data'] as Map<String, dynamic>;
+    return jsonMap(body['data']);
   }
 
   Future<List<Map<String, dynamic>>> paymentGateways() async {
@@ -419,9 +413,7 @@ class ApiClient {
     if (response.statusCode != 200) {
       throw _apiError(response, body);
     }
-    return (body['data'] as List<dynamic>? ?? [])
-        .whereType<Map<String, dynamic>>()
-        .toList();
+    return (jsonList(body['data'])).whereType<Map<String, dynamic>>().toList();
   }
 
   Future<Map<String, dynamic>> initiatePayment({
@@ -451,7 +443,7 @@ class ApiClient {
     if (response.statusCode != 201) {
       throw _apiError(response, body);
     }
-    return body['data'] as Map<String, dynamic>;
+    return jsonMap(body['data']);
   }
 
   Future<Map<String, dynamic>> transaction(int transactionId) async {
@@ -463,7 +455,7 @@ class ApiClient {
     if (response.statusCode != 200) {
       throw _apiError(response, body);
     }
-    return body['data'] as Map<String, dynamic>;
+    return jsonMap(body['data']);
   }
 
   Future<Map<String, dynamic>> paymentReceipt(int transactionId) async {
@@ -475,7 +467,7 @@ class ApiClient {
     if (response.statusCode != 200) {
       throw _apiError(response, body);
     }
-    return body['data'] as Map<String, dynamic>;
+    return jsonMap(body['data']);
   }
 
   Future<Map<String, dynamic>> verifyPayment(
@@ -494,7 +486,7 @@ class ApiClient {
     if (response.statusCode != 200) {
       throw _apiError(response, body);
     }
-    return body['data'] as Map<String, dynamic>;
+    return jsonMap(body['data']);
   }
 
   Future<List<Map<String, dynamic>>> subscriptions() async {
@@ -506,9 +498,7 @@ class ApiClient {
     if (response.statusCode != 200) {
       throw _apiError(response, body);
     }
-    return (body['data'] as List<dynamic>? ?? [])
-        .whereType<Map<String, dynamic>>()
-        .toList();
+    return (jsonList(body['data'])).whereType<Map<String, dynamic>>().toList();
   }
 
   Future<UserProfile> updateProfile({
@@ -538,7 +528,7 @@ class ApiClient {
     if (response.statusCode != 200) {
       throw _apiError(response, body);
     }
-    return UserProfile.fromJson(body['data']['user'] as Map<String, dynamic>);
+    return UserProfile.fromJson(jsonMap(jsonMap(body['data'])['user']));
   }
 
   Future<List<ProjectSummary>> projects({
@@ -562,11 +552,10 @@ class ApiClient {
     if (response.statusCode != 200) {
       throw _apiError(response, body);
     }
-    final pageData = body['data'] as Map<String, dynamic>;
-    return (pageData['data'] as List<dynamic>)
-        .cast<Map<String, dynamic>>()
-        .map(ProjectSummary.fromJson)
-        .toList();
+    final pageData = jsonMap(body['data']);
+    return (jsonList(
+      pageData['data'],
+    )).whereType<Map<String, dynamic>>().map(ProjectSummary.fromJson).toList();
   }
 
   Future<ProjectDetail> project(int id) async {
@@ -576,7 +565,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return ProjectDetail.fromJson(body['data'] as Map<String, dynamic>);
+    return ProjectDetail.fromJson(jsonMap(body['data']));
   }
 
   Future<ProjectSummary> createProject({
@@ -633,7 +622,7 @@ class ApiClient {
     if (response.statusCode != 201) {
       throw _apiError(response, body);
     }
-    return ProjectSummary.fromJson(body['data'] as Map<String, dynamic>);
+    return ProjectSummary.fromJson(jsonMap(body['data']));
   }
 
   Future<ProjectDetail> updateProject({
@@ -690,7 +679,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return ProjectDetail.fromJson(body['data'] as Map<String, dynamic>);
+    return ProjectDetail.fromJson(jsonMap(body['data']));
   }
 
   /// Sets only the project's location (other fields are left as they are).
@@ -753,9 +742,7 @@ class ApiClient {
     final response = await _httpClient.get(uri, headers: await _headers());
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return HardwarePricePaginated.fromJson(
-      body['data'] as Map<String, dynamic>,
-    );
+    return HardwarePricePaginated.fromJson(jsonMap(body['data']));
   }
 
   Future<HardwarePrice> hardwarePrice(int id) async {
@@ -765,7 +752,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return HardwarePrice.fromJson(body['data'] as Map<String, dynamic>);
+    return HardwarePrice.fromJson(jsonMap(body['data']));
   }
 
   Future<HardwarePriceHistory> hardwarePriceHistory(
@@ -784,7 +771,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return HardwarePriceHistory.fromJson(body['data'] as Map<String, dynamic>);
+    return HardwarePriceHistory.fromJson(jsonMap(body['data']));
   }
 
   Future<HardwarePriceStatistics> hardwarePriceStatistics() async {
@@ -794,9 +781,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return HardwarePriceStatistics.fromJson(
-      body['data'] as Map<String, dynamic>,
-    );
+    return HardwarePriceStatistics.fromJson(jsonMap(body['data']));
   }
 
   Future<List<HardwarePriceCategory>> hardwarePriceCategories() async {
@@ -806,8 +791,8 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return (body['data'] as List<dynamic>)
-        .cast<Map<String, dynamic>>()
+    return (jsonList(body['data']))
+        .whereType<Map<String, dynamic>>()
         .map(HardwarePriceCategory.fromJson)
         .toList();
   }
@@ -821,9 +806,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return CategoryCatalog.fromJson(
-      body['data'] as Map<String, dynamic>? ?? const {},
-    );
+    return CategoryCatalog.fromJson(jsonMap(body['data']));
   }
 
   /// Distinct suppliers, locations and regions for the price list filters.
@@ -837,11 +820,10 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    final data = body['data'] as Map<String, dynamic>? ?? const {};
-    List<String> names(String key) => (data[key] as List<dynamic>? ?? const [])
-        .map((e) => '$e'.trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
+    final data = jsonMap(body['data']);
+    List<String> names(String key) => (jsonList(
+      data[key],
+    )).map((e) => '$e'.trim()).where((e) => e.isNotEmpty).toList();
     return (
       suppliers: names('suppliers'),
       locations: names('locations'),
@@ -866,8 +848,8 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return (body['data'] as List<dynamic>)
-        .cast<Map<String, dynamic>>()
+    return (jsonList(body['data']))
+        .whereType<Map<String, dynamic>>()
         .map(PriceComparisonItem.fromJson)
         .toList();
   }
@@ -880,7 +862,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return PriceComparisonResult.fromJson(body['data'] as Map<String, dynamic>);
+    return PriceComparisonResult.fromJson(jsonMap(body['data']));
   }
 
   Future<BoqItemPriceMatch> matchBoqItem(int boqItemId) async {
@@ -890,7 +872,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return BoqItemPriceMatch.fromJson(body['data'] as Map<String, dynamic>);
+    return BoqItemPriceMatch.fromJson(jsonMap(body['data']));
   }
 
   Future<BoqItemSummary> applyPriceToBoqItem(
@@ -904,7 +886,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return BoqItemSummary.fromJson(body['data'] as Map<String, dynamic>);
+    return BoqItemSummary.fromJson(jsonMap(body['data']));
   }
 
   Future<BoqDetail> boqDetail(int id) async {
@@ -914,7 +896,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return BoqDetail.fromJson(body['data'] as Map<String, dynamic>);
+    return BoqDetail.fromJson(jsonMap(body['data']));
   }
 
   Future<BoqItemDetail> boqItemDetail(int id) async {
@@ -924,7 +906,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return BoqItemDetail.fromJson(body['data'] as Map<String, dynamic>);
+    return BoqItemDetail.fromJson(jsonMap(body['data']));
   }
 
   Future<BoqSummary> uploadBoq({
@@ -1037,12 +1019,12 @@ class ApiClient {
       throw _apiError(response, body);
     }
     final meta = body['meta'];
-    if (meta is Map && meta['items_imported'] is int) {
-      return meta['items_imported'] as int;
+    if (meta is Map && jsonIntOrNull(meta['items_imported']) != null) {
+      return jsonInt(meta['items_imported']);
     }
     final data = body['data'];
-    if (data is Map && data['items_created'] is int) {
-      return data['items_created'] as int;
+    if (data is Map && jsonIntOrNull(data['items_created']) != null) {
+      return jsonInt(data['items_created']);
     }
     return 0;
   }
@@ -1079,11 +1061,10 @@ class ApiClient {
     if (response.statusCode != 200) {
       throw _apiError(response, body);
     }
-    final pageData = body['data'] as Map<String, dynamic>;
-    return (pageData['data'] as List<dynamic>)
-        .cast<Map<String, dynamic>>()
-        .map(BoqItemSummary.fromJson)
-        .toList();
+    final pageData = jsonMap(body['data']);
+    return (jsonList(
+      pageData['data'],
+    )).whereType<Map<String, dynamic>>().map(BoqItemSummary.fromJson).toList();
   }
 
   /// Fetches every BOQ item across all pages of the paginated items endpoint.
@@ -1105,9 +1086,9 @@ class ApiClient {
       final rows = pageData['data'];
       if (rows is! List) break;
       all.addAll(
-        rows.cast<Map<String, dynamic>>().map(BoqItemSummary.fromJson),
+        rows.whereType<Map<String, dynamic>>().map(BoqItemSummary.fromJson),
       );
-      lastPage = pageData['last_page'] as int? ?? page;
+      lastPage = jsonIntOrNull(pageData['last_page']) ?? page;
       page++;
     } while (page <= lastPage);
     return all;
@@ -1121,7 +1102,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return body['data'] as Map<String, dynamic>;
+    return jsonMap(body['data']);
   }
 
   Future<int> priceAll(int boqId, String location) async {
@@ -1132,7 +1113,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return body['data']['items_priced'] as int? ?? 0;
+    return jsonIntOrNull(jsonMap(body['data'])['items_priced']) ?? 0;
   }
 
   Future<List<Map<String, dynamic>>> pricingHistory(
@@ -1145,9 +1126,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return (body['data'] as List<dynamic>)
-        .cast<Map<String, dynamic>>()
-        .toList();
+    return (jsonList(body['data'])).whereType<Map<String, dynamic>>().toList();
   }
 
   Future<List<Map<String, dynamic>>> allPricingHistory(int boqId) async {
@@ -1157,9 +1136,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return (body['data'] as List<dynamic>)
-        .cast<Map<String, dynamic>>()
-        .toList();
+    return (jsonList(body['data'])).whereType<Map<String, dynamic>>().toList();
   }
 
   Future<PricingBatch> startPricingBatch(int boqId, String location) async {
@@ -1170,7 +1147,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 202) throw _apiError(response, body);
-    return PricingBatch.fromJson(body['data'] as Map<String, dynamic>);
+    return PricingBatch.fromJson(jsonMap(body['data']));
   }
 
   Future<PricingBatch> pricingBatch(int id) async {
@@ -1182,7 +1159,7 @@ class ApiClient {
     if (response.statusCode != 200) {
       throw _apiError(response, body);
     }
-    return PricingBatch.fromJson(body['data'] as Map<String, dynamic>);
+    return PricingBatch.fromJson(jsonMap(body['data']));
   }
 
   Future<List<int>> pdf(int boqId) async {
@@ -1223,7 +1200,7 @@ class ApiClient {
     if (response.statusCode != 200) {
       throw _apiError(response, body);
     }
-    return body['message'] as String? ?? 'BOQ sent.';
+    return jsonStringOrNull(body['message']) ?? 'BOQ sent.';
   }
 
   /// Signed download link plus a ready-made message for WhatsApp / device sharing.
@@ -1236,7 +1213,7 @@ class ApiClient {
     if (response.statusCode != 200) {
       throw _apiError(response, body);
     }
-    return BoqShareLink.fromJson(body['data'] as Map<String, dynamic>);
+    return BoqShareLink.fromJson(jsonMap(body['data']));
   }
 
   /// ISO code => country name, from the server's managed list (default country first).
@@ -1296,7 +1273,7 @@ class ApiClient {
           errors is Map &&
               errors.values.isNotEmpty &&
               errors.values.first is List
-          ? (errors.values.first as List).firstOrNull?.toString()
+          ? jsonList(errors.values.first).firstOrNull?.toString()
           : null;
       final code = body['error_code'] ?? body['code'];
       throw ApiException(
@@ -1305,7 +1282,7 @@ class ApiClient {
         errorCode: code is String && code.trim().isNotEmpty ? code : null,
       );
     }
-    return CompanyProfile.fromJson(body['data'] as Map<String, dynamic>);
+    return CompanyProfile.fromJson(jsonMap(body['data']));
   }
 
   Future<void> logout() async {
@@ -1335,9 +1312,9 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    final pageData = body['data'] as Map<String, dynamic>;
-    return (pageData['data'] as List<dynamic>)
-        .cast<Map<String, dynamic>>()
+    final pageData = jsonMap(body['data']);
+    return (jsonList(pageData['data']))
+        .whereType<Map<String, dynamic>>()
         .map(NotificationItem.fromJson)
         .toList();
   }
@@ -1375,14 +1352,14 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    final pageData = body['data'] as Map<String, dynamic>? ?? const {};
-    final rows = pageData['data'] as List<dynamic>? ?? const [];
+    final pageData = jsonMap(body['data']);
+    final rows = jsonList(pageData['data']);
     return (
       items: rows
           .whereType<Map<String, dynamic>>()
           .map(BoqListItem.fromJson)
           .toList(),
-      lastPage: _asInt(pageData['last_page'] ?? 1),
+      lastPage: jsonInt(pageData['last_page'] ?? 1),
     );
   }
 
@@ -1404,7 +1381,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return BoqListItem.fromJson(body['data'] as Map<String, dynamic>);
+    return BoqListItem.fromJson(jsonMap(body['data']));
   }
 
   /// CSV of the BOQ's items with an "Estimated Rate" column to fill in.
@@ -1459,13 +1436,11 @@ class ApiClient {
     if (response.statusCode == 401) _expireSession();
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    final data = body['data'] as Map<String, dynamic>? ?? const {};
+    final data = jsonMap(body['data']);
     return (
       message: '${body['message'] ?? 'Estimated prices updated.'}',
       totals: BoqTotals.fromJson(data['totals']),
-      unmatched: (data['unmatched'] as List<dynamic>? ?? const [])
-          .map((e) => '$e')
-          .toList(),
+      unmatched: (jsonList(data['unmatched'])).map((e) => '$e').toList(),
     );
   }
 
@@ -1477,10 +1452,9 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return (body['data'] as List<dynamic>? ?? const [])
-        .whereType<Map<String, dynamic>>()
-        .map(BoqLocation.fromJson)
-        .toList();
+    return (jsonList(
+      body['data'],
+    )).whereType<Map<String, dynamic>>().map(BoqLocation.fromJson).toList();
   }
 
   /// Item rates side by side for 2 to 4 location keys.
@@ -1497,9 +1471,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return LocationComparison.fromJson(
-      body['data'] as Map<String, dynamic>? ?? const {},
-    );
+    return LocationComparison.fromJson(jsonMap(body['data']));
   }
 
   /// Switches the BOQ to one location's saved prices. Returns items changed.
@@ -1511,7 +1483,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return _asInt(body['data']?['applied']);
+    return jsonInt(jsonMap(body['data'])['applied']);
   }
 
   /// action: accept (use suggested as reviewed) | approve | reject (reason).
@@ -1533,8 +1505,8 @@ class ApiClient {
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
     return (
-      done: _asInt(body['data']?['done']),
-      skipped: _asInt(body['data']?['skipped']),
+      done: jsonInt(jsonMap(body['data'])['done']),
+      skipped: jsonInt(jsonMap(body['data'])['skipped']),
     );
   }
 
@@ -1559,11 +1531,11 @@ class ApiClient {
       throw _apiError(response, body);
     }
     final data = body['data'] is Map<String, dynamic>
-        ? body['data'] as Map<String, dynamic>
+        ? jsonMap(body['data'])
         : const <String, dynamic>{};
     final status = '${body['status'] ?? data['status'] ?? 'started'}';
     final message = body['message'] is String && '${body['message']}'.isNotEmpty
-        ? body['message'] as String
+        ? jsonString(body['message'])
         : status == 'running'
         ? 'Prices are already being fetched.'
         : 'Fetching the latest prices. New prices appear in a few minutes.';
@@ -1575,33 +1547,37 @@ class ApiClient {
   Future<List<BeneficiaryUser>> searchBeneficiaries(String query) async {
     final response = await _httpClient.get(
       Uri.parse(
-        '$baseUrl/proxy-subscriptions/beneficiaries/search',
-      ).replace(queryParameters: {'q': query}),
+        '$baseUrl/subscriptions/proxy/beneficiaries',
+      ).replace(queryParameters: {'query': query}),
       headers: await _headers(),
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return (body['data'] as List<dynamic>? ?? [])
-        .cast<Map<String, dynamic>>()
-        .map(BeneficiaryUser.fromJson)
-        .toList();
+    return (jsonList(
+      body['data'],
+    )).whereType<Map<String, dynamic>>().map(BeneficiaryUser.fromJson).toList();
   }
 
   Future<ProxySubscription> createProxySubscription({
     required int planId,
     required int beneficiaryId,
+    required int paymentGatewayId,
+    String? paymentMethod,
   }) async {
     final response = await _httpClient.post(
-      Uri.parse('$baseUrl/proxy-subscriptions'),
+      Uri.parse('$baseUrl/subscriptions/proxy'),
       headers: await _headers(),
       body: {
         'plan_id': planId.toString(),
         'beneficiary_id': beneficiaryId.toString(),
+        'payment_gateway_id': paymentGatewayId.toString(),
+        if (paymentMethod != null && paymentMethod.isNotEmpty)
+          'payment_method': paymentMethod,
       },
     );
     final body = _decode(response);
     if (response.statusCode != 201) throw _apiError(response, body);
-    return ProxySubscription.fromJson(body['data'] as Map<String, dynamic>);
+    return ProxySubscription.fromJson(jsonMap(body['data']));
   }
 
   Future<Map<String, dynamic>> initiateProxyPayment({
@@ -1613,7 +1589,7 @@ class ApiClient {
   }) async {
     final response = await _httpClient.post(
       Uri.parse(
-        '$baseUrl/proxy-subscriptions/$proxySubscriptionId/initiate-payment',
+        '$baseUrl/subscriptions/proxy/$proxySubscriptionId/payments',
       ),
       headers: await _headers(),
       body: {
@@ -1628,16 +1604,17 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 201) throw _apiError(response, body);
-    return body['data'] as Map<String, dynamic>;
+    return jsonMap(body['data']);
   }
 
+  /// Verifies a proxy payment by its transaction id (not the subscription id).
   Future<Map<String, dynamic>> verifyProxyPayment(
-    int proxySubscriptionId, {
+    int transactionId, {
     String? gatewayTransactionId,
   }) async {
     final response = await _httpClient.post(
       Uri.parse(
-        '$baseUrl/proxy-subscriptions/$proxySubscriptionId/verify-payment',
+        '$baseUrl/transactions/proxy/$transactionId/verify',
       ),
       headers: await _headers(),
       body: {
@@ -1647,35 +1624,35 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return body['data'] as Map<String, dynamic>;
+    return jsonMap(body['data']);
   }
 
   Future<List<ProxySubscription>> listProxySubscriptions() async {
     final response = await _httpClient.get(
-      Uri.parse('$baseUrl/proxy-subscriptions'),
+      Uri.parse('$baseUrl/subscriptions/proxy'),
       headers: await _headers(),
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return (body['data'] as List<dynamic>? ?? [])
-        .cast<Map<String, dynamic>>()
+    return (jsonList(body['data']))
+        .whereType<Map<String, dynamic>>()
         .map(ProxySubscription.fromJson)
         .toList();
   }
 
   Future<ProxySubscription> getProxySubscription(int id) async {
     final response = await _httpClient.get(
-      Uri.parse('$baseUrl/proxy-subscriptions/$id'),
+      Uri.parse('$baseUrl/subscriptions/proxy/$id'),
       headers: await _headers(),
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return ProxySubscription.fromJson(body['data'] as Map<String, dynamic>);
+    return ProxySubscription.fromJson(jsonMap(body['data']));
   }
 
   Future<void> cancelProxySubscription(int id) async {
-    final response = await _httpClient.delete(
-      Uri.parse('$baseUrl/proxy-subscriptions/$id'),
+    final response = await _httpClient.post(
+      Uri.parse('$baseUrl/subscriptions/proxy/$id/cancel'),
       headers: await _headers(),
     );
     final body = _decode(response);
@@ -1692,77 +1669,77 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 201) throw _apiError(response, body);
-    return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
+    return BoqPricingJob.fromJson(jsonMap(body['data']));
   }
 
   Future<BoqPricingJob> getPricingJob(int boqId, int jobId) async {
     final response = await _httpClient.get(
-      Uri.parse('$baseUrl/boqs/$boqId/pricing-jobs/$jobId'),
+      Uri.parse('$baseUrl/pricing-jobs/$jobId'),
       headers: await _headers(),
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
+    return BoqPricingJob.fromJson(jsonMap(body['data']));
   }
 
   Future<BoqPricingJob> startPricingJobProcessing(int boqId, int jobId) async {
     final response = await _httpClient.post(
-      Uri.parse('$baseUrl/boqs/$boqId/pricing-jobs/$jobId/start'),
+      Uri.parse('$baseUrl/pricing-jobs/$jobId/start'),
       headers: await _headers(),
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
+    return BoqPricingJob.fromJson(jsonMap(body['data']));
   }
 
   Future<BoqPricingJobProgress> processNextBatch(int boqId, int jobId) async {
     final response = await _httpClient.post(
-      Uri.parse('$baseUrl/boqs/$boqId/pricing-jobs/$jobId/next-batch'),
+      Uri.parse('$baseUrl/pricing-jobs/$jobId/next-batch'),
       headers: await _headers(),
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return BoqPricingJobProgress.fromJson(body['data'] as Map<String, dynamic>);
+    return BoqPricingJobProgress.fromJson(jsonMap(body['data']));
   }
 
   Future<BoqPricingJob> pausePricingJob(int boqId, int jobId) async {
     final response = await _httpClient.post(
-      Uri.parse('$baseUrl/boqs/$boqId/pricing-jobs/$jobId/pause'),
+      Uri.parse('$baseUrl/pricing-jobs/$jobId/pause'),
       headers: await _headers(),
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
+    return BoqPricingJob.fromJson(jsonMap(body['data']));
   }
 
   Future<BoqPricingJob> resumePricingJob(int boqId, int jobId) async {
     final response = await _httpClient.post(
-      Uri.parse('$baseUrl/boqs/$boqId/pricing-jobs/$jobId/resume'),
+      Uri.parse('$baseUrl/pricing-jobs/$jobId/resume'),
       headers: await _headers(),
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
+    return BoqPricingJob.fromJson(jsonMap(body['data']));
   }
 
   Future<BoqPricingJob> cancelPricingJob(int boqId, int jobId) async {
     final response = await _httpClient.post(
-      Uri.parse('$baseUrl/boqs/$boqId/pricing-jobs/$jobId/cancel'),
+      Uri.parse('$baseUrl/pricing-jobs/$jobId/cancel'),
       headers: await _headers(),
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
+    return BoqPricingJob.fromJson(jsonMap(body['data']));
   }
 
   Future<BoqPricingJob> retryFailedItems(int boqId, int jobId) async {
     final response = await _httpClient.post(
-      Uri.parse('$baseUrl/boqs/$boqId/pricing-jobs/$jobId/retry-failed'),
+      Uri.parse('$baseUrl/pricing-jobs/$jobId/retry-failed'),
       headers: await _headers(),
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return BoqPricingJob.fromJson(body['data'] as Map<String, dynamic>);
+    return BoqPricingJob.fromJson(jsonMap(body['data']));
   }
 
   Future<BoqPricingJobProgress> getPricingJobProgress(
@@ -1770,52 +1747,55 @@ class ApiClient {
     int jobId,
   ) async {
     final response = await _httpClient.get(
-      Uri.parse('$baseUrl/boqs/$boqId/pricing-jobs/$jobId/progress'),
+      Uri.parse('$baseUrl/pricing-jobs/$jobId/progress'),
       headers: await _headers(),
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return BoqPricingJobProgress.fromJson(body['data'] as Map<String, dynamic>);
+    return BoqPricingJobProgress.fromJson(jsonMap(body['data']));
   }
 
   // AI provider admin API methods.
 
   Future<List<AiProvider>> aiProviders() async {
     final response = await _httpClient.get(
-      Uri.parse('$baseUrl/admin/ai-providers'),
+      Uri.parse('$baseUrl/ai-providers'),
       headers: await _headers(),
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return (body['data'] as List<dynamic>? ?? [])
-        .cast<Map<String, dynamic>>()
-        .map(AiProvider.fromJson)
-        .toList();
+    return (jsonList(
+      body['data'],
+    )).whereType<Map<String, dynamic>>().map(AiProvider.fromJson).toList();
   }
 
   Future<AiProvider> createAiProvider({
     required String name,
     required String code,
     required String apiKey,
+    required String providerType,
+    required String defaultModel,
     Map<String, dynamic>? config,
     bool isDefault = false,
     bool isEnabled = true,
   }) async {
     final response = await _httpClient.post(
-      Uri.parse('$baseUrl/admin/ai-providers'),
+      Uri.parse('$baseUrl/ai-providers'),
       headers: await _headers(),
       body: {
         'name': name,
-        'code': code,
+        'key': code,
         'api_key': apiKey,
-        if (config != null) 'config': jsonEncode(config),
-        'is_default': isDefault.toString(),
-        'is_enabled': isEnabled.toString(),
+        'provider_type': providerType,
+        'default_model': defaultModel,
+        ..._settingsFields(config),
+        'is_default': isDefault ? '1' : '0',
+        'is_enabled': isEnabled ? '1' : '0',
       },
     );
     final body = _decode(response);
     if (response.statusCode != 201) throw _apiError(response, body);
-    return AiProvider.fromJson(body['data'] as Map<String, dynamic>);
+    return AiProvider.fromJson(jsonMap(body['data']));
   }
 
   Future<AiProvider> updateAiProvider(
@@ -1829,23 +1809,31 @@ class ApiClient {
     final body = <String, String>{};
     if (name != null) body['name'] = name;
     if (apiKey != null) body['api_key'] = apiKey;
-    if (config != null) body['config'] = jsonEncode(config);
-    if (isDefault != null) body['is_default'] = isDefault.toString();
-    if (isEnabled != null) body['is_enabled'] = isEnabled.toString();
+    body.addAll(_settingsFields(config));
+    if (isDefault != null) body['is_default'] = isDefault ? '1' : '0';
+    if (isEnabled != null) body['is_enabled'] = isEnabled ? '1' : '0';
 
     final response = await _httpClient.put(
-      Uri.parse('$baseUrl/admin/ai-providers/$id'),
+      Uri.parse('$baseUrl/ai-providers/$id'),
       headers: await _headers(),
       body: body,
     );
     final responseBody = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, responseBody);
-    return AiProvider.fromJson(responseBody['data'] as Map<String, dynamic>);
+    return AiProvider.fromJson(jsonMap(responseBody['data']));
   }
+
+  /// Provider settings as form fields (`settings[timeout]=30`), the shape
+  /// the API validates as an array.
+  static Map<String, String> _settingsFields(Map<String, dynamic>? config) => {
+    for (final entry in (config ?? const <String, dynamic>{}).entries)
+      if (entry.value != null && entry.value is! Map && entry.value is! List)
+        'settings[${entry.key}]': '${entry.value}',
+  };
 
   Future<void> deleteAiProvider(int id) async {
     final response = await _httpClient.delete(
-      Uri.parse('$baseUrl/admin/ai-providers/$id'),
+      Uri.parse('$baseUrl/ai-providers/$id'),
       headers: await _headers(),
     );
     final body = _decode(response);
@@ -1854,22 +1842,22 @@ class ApiClient {
 
   Future<Map<String, dynamic>> testAiProvider(int id) async {
     final response = await _httpClient.post(
-      Uri.parse('$baseUrl/admin/ai-providers/$id/test'),
+      Uri.parse('$baseUrl/ai-providers/$id/test'),
       headers: await _headers(),
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return body['data'] as Map<String, dynamic>;
+    return jsonMap(body['data']);
   }
 
   Future<AiProvider> setDefaultAiProvider(int id) async {
     final response = await _httpClient.post(
-      Uri.parse('$baseUrl/admin/ai-providers/$id/set-default'),
+      Uri.parse('$baseUrl/ai-providers/$id/set-default'),
       headers: await _headers(),
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return AiProvider.fromJson(body['data'] as Map<String, dynamic>);
+    return AiProvider.fromJson(jsonMap(body['data']));
   }
 
   // Hardware category admin API methods.
@@ -1885,10 +1873,10 @@ class ApiClient {
     final list = raw is List
         ? raw
         : raw is Map && raw['data'] is List
-        ? raw['data'] as List
+        ? jsonList(raw['data'])
         : <dynamic>[];
     return list
-        .cast<Map<String, dynamic>>()
+        .whereType<Map<String, dynamic>>()
         .map(HardwareCategory.fromJson)
         .toList();
   }
@@ -1910,7 +1898,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 201) throw _apiError(response, body);
-    return HardwareCategory.fromJson(body['data'] as Map<String, dynamic>);
+    return HardwareCategory.fromJson(jsonMap(body['data']));
   }
 
   Future<HardwareCategory> updateHardwareCategory(
@@ -1931,9 +1919,7 @@ class ApiClient {
     );
     final responseBody = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, responseBody);
-    return HardwareCategory.fromJson(
-      responseBody['data'] as Map<String, dynamic>,
-    );
+    return HardwareCategory.fromJson(jsonMap(responseBody['data']));
   }
 
   Future<void> deleteHardwareCategory(int id) async {
@@ -1952,7 +1938,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return HardwareCategory.fromJson(body['data'] as Map<String, dynamic>);
+    return HardwareCategory.fromJson(jsonMap(body['data']));
   }
 
   // Supplier and factory ratings ("Top Suppliers").
@@ -1978,9 +1964,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return SupplierLeaderboard.fromJson(
-      body['data'] as Map<String, dynamic>? ?? const {},
-    );
+    return SupplierLeaderboard.fromJson(jsonMap(body['data']));
   }
 
   /// Totals, distribution, by type, scores by area and 12-month trends.
@@ -1995,9 +1979,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return SupplierRatingSummary.fromJson(
-      body['data'] as Map<String, dynamic>? ?? const {},
-    );
+    return SupplierRatingSummary.fromJson(jsonMap(body['data']));
   }
 
   /// Active suppliers and factories to pick one to rate.
@@ -2018,10 +2000,9 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return (body['data'] as List<dynamic>? ?? const [])
-        .whereType<Map<String, dynamic>>()
-        .map(RatedSupplier.fromJson)
-        .toList();
+    return (jsonList(
+      body['data'],
+    )).whereType<Map<String, dynamic>>().map(RatedSupplier.fromJson).toList();
   }
 
   /// One supplier's performance and the user's rating this month.
@@ -2037,9 +2018,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return SupplierPerformance.fromJson(
-      body['data'] as Map<String, dynamic>? ?? const {},
-    );
+    return SupplierPerformance.fromJson(jsonMap(body['data']));
   }
 
   /// Rates a supplier (1 to 5 stars). A second rating in the same month
@@ -2072,9 +2051,7 @@ class ApiClient {
     }
     return (
       message: '${body['message'] ?? 'Your rating was saved.'}',
-      rating: SupplierRatingEntry.fromJson(
-        body['data'] as Map<String, dynamic>? ?? const {},
-      ),
+      rating: SupplierRatingEntry.fromJson(jsonMap(body['data'])),
     );
   }
 
@@ -2086,7 +2063,7 @@ class ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return (body['data'] as List<dynamic>? ?? const [])
+    return (jsonList(body['data']))
         .whereType<Map<String, dynamic>>()
         .map(SupplierRatingEntry.fromJson)
         .toList();
@@ -2132,7 +2109,7 @@ class ApiClient {
     if (response.statusCode == 403 &&
         body['error_code'] == 'ACCOUNT_DISABLED') {
       _expireSession(
-        body['message'] as String? ??
+        jsonStringOrNull(body['message']) ??
             'Your account has been disabled. Contact your administrator.',
       );
     }
@@ -2176,12 +2153,12 @@ class DashboardSummary {
 
   factory DashboardSummary.fromJson(Map<String, dynamic> json) =>
       DashboardSummary(
-        totalProjects: _asInt(json['total_projects']),
-        activeProjects: _asInt(json['active_projects']),
-        boqsAwaitingReview: _asInt(json['boqs_awaiting_review']),
-        totalEstimatedValue: _asDouble(json['total_estimated_value']),
-        recentProjects: (json['recent_projects'] as List<dynamic>? ?? [])
-            .cast<Map<String, dynamic>>()
+        totalProjects: jsonInt(json['total_projects']),
+        activeProjects: jsonInt(json['active_projects']),
+        boqsAwaitingReview: jsonInt(json['boqs_awaiting_review']),
+        totalEstimatedValue: jsonDouble(json['total_estimated_value']),
+        recentProjects: (jsonList(json['recent_projects']))
+            .whereType<Map<String, dynamic>>()
             .map(ProjectSummary.fromJson)
             .toList(),
       );
@@ -2204,14 +2181,14 @@ class UserProfile {
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
-    name: json['name'] as String? ?? '',
-    email: json['email'] as String? ?? '',
-    locale: json['locale'] as String? ?? 'en',
-    phone: json['phone'] as String?,
-    location: json['location'] as String?,
-    avatarUrl: (json['avatar_url'] as String?)?.trim().isEmpty ?? true
+    name: jsonStringOrNull(json['name']) ?? '',
+    email: jsonStringOrNull(json['email']) ?? '',
+    locale: jsonStringOrNull(json['locale']) ?? 'en',
+    phone: jsonStringOrNull(json['phone']),
+    location: jsonStringOrNull(json['location']),
+    avatarUrl: (jsonStringOrNull(json['avatar_url']))?.trim().isEmpty ?? true
         ? null
-        : json['avatar_url'] as String,
+        : jsonString(json['avatar_url']),
   );
 
   final String name;
@@ -2244,13 +2221,13 @@ class NotificationItem {
 
   factory NotificationItem.fromJson(Map<String, dynamic> json) =>
       NotificationItem(
-        id: _asInt(json['id']),
-        title: json['title'] as String? ?? '',
-        message: json['message'] as String? ?? '',
-        type: json['type'] as String? ?? 'info',
-        readAt: json['read_at'] as String?,
-        createdAt: json['created_at'] as String? ?? '',
-        data: json['data'] as Map<String, dynamic>?,
+        id: jsonInt(json['id']),
+        title: jsonStringOrNull(json['title']) ?? '',
+        message: jsonStringOrNull(json['message']) ?? '',
+        type: jsonStringOrNull(json['type']) ?? 'info',
+        readAt: jsonStringOrNull(json['read_at']),
+        createdAt: jsonStringOrNull(json['created_at']) ?? '',
+        data: jsonMapOrNull(json['data']),
       );
 
   final int id;
@@ -2279,11 +2256,11 @@ class BoqLocation {
   factory BoqLocation.fromJson(Map<String, dynamic> json) => BoqLocation(
     key: '${json['key'] ?? ''}',
     location: '${json['location'] ?? ''}',
-    pricedItems: _asInt(json['priced_items']),
-    totalItems: _asInt(json['total_items']),
-    total: _asDouble(json['total']),
+    pricedItems: jsonInt(json['priced_items']),
+    totalItems: jsonInt(json['total_items']),
+    total: jsonDouble(json['total']),
     current: json['current'] == true,
-    pricedAt: json['priced_at'] as String?,
+    pricedAt: jsonStringOrNull(json['priced_at']),
   );
 
   final String key;
@@ -2300,11 +2277,10 @@ class LocationComparison {
 
   factory LocationComparison.fromJson(Map<String, dynamic> json) =>
       LocationComparison(
-        locations: (json['locations'] as List<dynamic>? ?? const [])
-            .whereType<Map<String, dynamic>>()
-            .map(BoqLocation.fromJson)
-            .toList(),
-        rows: (json['rows'] as List<dynamic>? ?? const [])
+        locations: (jsonList(
+          json['locations'],
+        )).whereType<Map<String, dynamic>>().map(BoqLocation.fromJson).toList(),
+        rows: (jsonList(json['rows']))
             .whereType<Map<String, dynamic>>()
             .map(LocationComparisonRow.fromJson)
             .toList(),
@@ -2327,16 +2303,18 @@ class LocationComparisonRow {
   factory LocationComparisonRow.fromJson(Map<String, dynamic> json) {
     final raw = json['rates'];
     return LocationComparisonRow(
-      itemId: _asInt(json['item_id']),
+      itemId: jsonInt(json['item_id']),
       code: '${json['item_code'] ?? ''}',
       description: '${json['description'] ?? ''}',
-      quantity: _asDouble(json['quantity']),
+      quantity: jsonDouble(json['quantity']),
       rates: {
         if (raw is Map)
           for (final entry in raw.entries)
-            '${entry.key}': entry.value == null ? null : _asDouble(entry.value),
+            '${entry.key}': entry.value == null
+                ? null
+                : jsonDouble(entry.value),
       },
-      lowest: json['lowest'] as String?,
+      lowest: jsonStringOrNull(json['lowest']),
     );
   }
 
@@ -2365,7 +2343,7 @@ class CategoryCatalog {
       projectTypes: names(json['project_types']),
       workSections: names(json['work_sections']),
       materials:
-          (json['materials'] is List ? json['materials'] as List : const [])
+          (json['materials'] is List ? jsonList(json['materials']) : const [])
               .whereType<Map>()
               .map(
                 (m) => MaterialCategory(
@@ -2410,12 +2388,12 @@ class BoqTotals {
   factory BoqTotals.fromJson(dynamic json) {
     if (json is! Map) return empty;
     return BoqTotals(
-      items: _asInt(json['items']),
-      estimatedItems: _asInt(json['estimated_items']),
-      pricedItems: _asInt(json['priced_items']),
-      estimatedAmount: _asDouble(json['estimated_amount']),
-      generatedTotal: _asDouble(json['generated_total']),
-      boqs: _asInt(json['boqs']),
+      items: jsonInt(json['items']),
+      estimatedItems: jsonInt(json['estimated_items']),
+      pricedItems: jsonInt(json['priced_items']),
+      estimatedAmount: jsonDouble(json['estimated_amount']),
+      generatedTotal: jsonDouble(json['generated_total']),
+      boqs: jsonInt(json['boqs']),
     );
   }
 
@@ -2448,13 +2426,13 @@ class ProjectSummary {
   });
 
   factory ProjectSummary.fromJson(Map<String, dynamic> json) => ProjectSummary(
-    currency: json['currency'] as String? ?? 'UGX',
+    currency: jsonStringOrNull(json['currency']) ?? 'UGX',
     totals: BoqTotals.fromJson(json['totals']),
-    id: _asInt(json['id']),
-    name: json['name'] as String? ?? '',
-    code: json['code'] as String? ?? '',
-    status: json['status'] as String? ?? 'draft',
-    boqCount: _asInt(json['boqs_count']),
+    id: jsonInt(json['id']),
+    name: jsonStringOrNull(json['name']) ?? '',
+    code: jsonStringOrNull(json['code']) ?? '',
+    status: jsonStringOrNull(json['status']) ?? 'draft',
+    boqCount: jsonInt(json['boqs_count']),
   );
 
   final String name;
@@ -2498,33 +2476,32 @@ class ProjectDetail {
   });
   factory ProjectDetail.fromJson(Map<String, dynamic> json) => ProjectDetail(
     totals: BoqTotals.fromJson(json['totals']),
-    id: _asInt(json['id']),
-    name: json['name'] as String? ?? '',
-    code: json['code'] as String? ?? '',
-    client: json['client'] as String? ?? '',
-    contractor: json['contractor'] as String? ?? '',
-    consultant: json['consultant'] as String? ?? '',
-    quantitySurveyor: json['quantity_surveyor'] as String? ?? '',
-    projectManager: json['project_manager'] as String? ?? '',
-    siteEngineer: json['site_engineer'] as String? ?? '',
-    fundingOrganisation: json['funding_organisation'] as String? ?? '',
-    country: json['country'] as String? ?? '',
-    district: json['district'] as String? ?? '',
-    location: json['location'] as String? ?? '',
-    projectType: json['project_type'] as String? ?? '',
+    id: jsonInt(json['id']),
+    name: jsonStringOrNull(json['name']) ?? '',
+    code: jsonStringOrNull(json['code']) ?? '',
+    client: jsonStringOrNull(json['client']) ?? '',
+    contractor: jsonStringOrNull(json['contractor']) ?? '',
+    consultant: jsonStringOrNull(json['consultant']) ?? '',
+    quantitySurveyor: jsonStringOrNull(json['quantity_surveyor']) ?? '',
+    projectManager: jsonStringOrNull(json['project_manager']) ?? '',
+    siteEngineer: jsonStringOrNull(json['site_engineer']) ?? '',
+    fundingOrganisation: jsonStringOrNull(json['funding_organisation']) ?? '',
+    country: jsonStringOrNull(json['country']) ?? '',
+    district: jsonStringOrNull(json['district']) ?? '',
+    location: jsonStringOrNull(json['location']) ?? '',
+    projectType: jsonStringOrNull(json['project_type']) ?? '',
     startDate: _dateOnly(json['start_date']),
     expectedCompletionDate: _dateOnly(json['expected_completion_date']),
-    contractValue: _asDouble(json['contract_value']),
-    currency: json['currency'] as String? ?? 'UGX',
-    description: json['description'] as String? ?? '',
-    status: json['status'] as String? ?? 'draft',
-    ownerName: json['user']?['name'] as String? ?? '',
-    originalLanguage: json['original_language'] as String? ?? '',
-    reportLanguage: json['report_language'] as String? ?? '',
-    boqs: (json['boqs'] as List<dynamic>? ?? [])
-        .cast<Map<String, dynamic>>()
-        .map(BoqSummary.fromJson)
-        .toList(),
+    contractValue: jsonDouble(json['contract_value']),
+    currency: jsonStringOrNull(json['currency']) ?? 'UGX',
+    description: jsonStringOrNull(json['description']) ?? '',
+    status: jsonStringOrNull(json['status']) ?? 'draft',
+    ownerName: jsonStringOrNull(jsonMap(json['user'])['name']) ?? '',
+    originalLanguage: jsonStringOrNull(json['original_language']) ?? '',
+    reportLanguage: jsonStringOrNull(json['report_language']) ?? '',
+    boqs: (jsonList(
+      json['boqs'],
+    )).whereType<Map<String, dynamic>>().map(BoqSummary.fromJson).toList(),
   );
   final int id;
   final String name;
@@ -2564,9 +2541,9 @@ class BoqSummary {
   });
   factory BoqSummary.fromJson(Map<String, dynamic> json) => BoqSummary(
     totals: BoqTotals.fromJson(json['totals']),
-    id: _asInt(json['id']),
-    name: json['name'] as String? ?? '',
-    status: json['status'] as String? ?? 'draft',
+    id: jsonInt(json['id']),
+    name: jsonStringOrNull(json['name']) ?? '',
+    status: jsonStringOrNull(json['status']) ?? 'draft',
   );
   final int id;
   final String name;
@@ -2595,15 +2572,15 @@ class BoqListItem {
     final project = json['project'];
     return BoqListItem(
       totals: BoqTotals.fromJson(json['totals']),
-      id: _asInt(json['id']),
-      name: json['name'] as String? ?? '',
-      status: json['status'] as String? ?? 'draft',
-      description: json['description'] as String? ?? '',
-      projectId: _asInt(json['project_id']),
+      id: jsonInt(json['id']),
+      name: jsonStringOrNull(json['name']) ?? '',
+      status: jsonStringOrNull(json['status']) ?? 'draft',
+      description: jsonStringOrNull(json['description']) ?? '',
+      projectId: jsonInt(json['project_id']),
       projectName: project is Map ? '${project['name'] ?? ''}' : '',
-      itemsCount: _asInt(json['items_count']),
+      itemsCount: jsonInt(json['items_count']),
       createdAt: _dateOnly(json['created_at']),
-      currency: json['currency'] as String? ?? 'UGX',
+      currency: jsonStringOrNull(json['currency']) ?? 'UGX',
     );
   }
 
@@ -2632,12 +2609,12 @@ class BoqItemSummary {
     this.reviewStatus = 'pending',
   });
   factory BoqItemSummary.fromJson(Map<String, dynamic> json) => BoqItemSummary(
-    reviewStatus: json['status'] as String? ?? 'pending',
-    id: json['id'] as int,
-    code: json['item_code'] as String? ?? '',
-    description: json['description'] as String? ?? '',
+    reviewStatus: jsonStringOrNull(json['status']) ?? 'pending',
+    id: jsonInt(json['id']),
+    code: jsonStringOrNull(json['item_code']) ?? '',
+    description: jsonStringOrNull(json['description']) ?? '',
     quantity: '${json['quantity'] ?? 0}',
-    unit: json['unit'] as String? ?? '',
+    unit: jsonStringOrNull(json['unit']) ?? '',
     amount: '${json['amount'] ?? 0}',
     currentRate:
         '${json['ai_suggested_rate'] ?? json['approved_rate'] ?? json['original_rate'] ?? 0}',
@@ -2677,11 +2654,11 @@ class PricingBatch {
     required this.failed,
   });
   factory PricingBatch.fromJson(Map<String, dynamic> json) => PricingBatch(
-    id: _asInt(json['id']),
-    status: json['status'] as String? ?? 'unknown',
-    total: _asInt(json['total_items']),
-    processed: _asInt(json['processed_items']),
-    failed: _asInt(json['failed_items']),
+    id: jsonInt(json['id']),
+    status: jsonStringOrNull(json['status']) ?? 'unknown',
+    total: jsonInt(json['total_items']),
+    processed: jsonInt(json['processed_items']),
+    failed: jsonInt(json['failed_items']),
   );
   final int id;
   final String status;
@@ -2711,25 +2688,25 @@ class HardwarePrice {
     this.priceHistory = const [],
   });
   factory HardwarePrice.fromJson(Map<String, dynamic> json) => HardwarePrice(
-    id: _asInt(json['id']),
-    itemName: json['item_name'] as String? ?? '',
-    brand: json['brand'] as String? ?? '',
-    category: json['category'] as String? ?? '',
-    specification: json['specification'] as String? ?? '',
-    unit: json['unit'] as String? ?? '',
-    price: _asDouble(json['price']),
-    currency: json['currency'] as String? ?? 'UGX',
-    supplier: json['supplier'] as String? ?? '',
-    location: json['location'] as String? ?? '',
-    sourceReference: json['source_reference'] as String? ?? '',
-    fetchedAt: json['fetched_at'] as String? ?? '',
+    id: jsonInt(json['id']),
+    itemName: jsonStringOrNull(json['item_name']) ?? '',
+    brand: jsonStringOrNull(json['brand']) ?? '',
+    category: jsonStringOrNull(json['category']) ?? '',
+    specification: jsonStringOrNull(json['specification']) ?? '',
+    unit: jsonStringOrNull(json['unit']) ?? '',
+    price: jsonDouble(json['price']),
+    currency: jsonStringOrNull(json['currency']) ?? 'UGX',
+    supplier: jsonStringOrNull(json['supplier']) ?? '',
+    location: jsonStringOrNull(json['location']) ?? '',
+    sourceReference: jsonStringOrNull(json['source_reference']) ?? '',
+    fetchedAt: jsonStringOrNull(json['fetched_at']) ?? '',
     isActive: json['is_active'] == true || json['is_active'] == 1,
-    priceType: json['price_type'] as String? ?? 'hardware',
-    sourceUrl: json['source_url'] as String? ?? '',
-    lastVerifiedAt: json['last_verified_at'] as String? ?? '',
+    priceType: jsonStringOrNull(json['price_type']) ?? 'hardware',
+    sourceUrl: jsonStringOrNull(json['source_url']) ?? '',
+    lastVerifiedAt: jsonStringOrNull(json['last_verified_at']) ?? '',
     priceHistory: json['price_histories'] != null
-        ? (json['price_histories'] as List<dynamic>)
-              .cast<Map<String, dynamic>>()
+        ? (jsonList(json['price_histories']))
+              .whereType<Map<String, dynamic>>()
               .map(PriceHistory.fromJson)
               .toList()
         : [],
@@ -2769,11 +2746,11 @@ class BoqShareLink {
   });
 
   factory BoqShareLink.fromJson(Map<String, dynamic> json) => BoqShareLink(
-    url: json['url'] as String? ?? '',
-    message: json['message'] as String? ?? '',
-    whatsappUrl: json['whatsapp_url'] as String? ?? '',
-    filename: json['filename'] as String? ?? 'boq.pdf',
-    expiresInDays: _asInt(json['expires_in_days']),
+    url: jsonStringOrNull(json['url']) ?? '',
+    message: jsonStringOrNull(json['message']) ?? '',
+    whatsappUrl: jsonStringOrNull(json['whatsapp_url']) ?? '',
+    filename: jsonStringOrNull(json['filename']) ?? 'boq.pdf',
+    expiresInDays: jsonInt(json['expires_in_days']),
   );
 
   final String url;
@@ -2788,7 +2765,7 @@ class CompanyProfile {
 
   factory CompanyProfile.fromJson(Map<String, dynamic> json) => CompanyProfile(
     fields: {for (final key in keys) key: json[key]?.toString() ?? ''},
-    logoUrl: json['logo_url'] as String?,
+    logoUrl: jsonStringOrNull(json['logo_url']),
   );
 
   /// Field names shared with the Laravel API.
@@ -2823,12 +2800,12 @@ class PriceHistory {
     required this.recordedAt,
   });
   factory PriceHistory.fromJson(Map<String, dynamic> json) => PriceHistory(
-    id: _asInt(json['id']),
-    price: _asDouble(json['price']),
-    currency: json['currency'] as String? ?? 'UGX',
-    supplier: json['supplier'] as String? ?? '',
-    location: json['location'] as String? ?? '',
-    recordedAt: json['recorded_at'] as String? ?? '',
+    id: jsonInt(json['id']),
+    price: jsonDouble(json['price']),
+    currency: jsonStringOrNull(json['currency']) ?? 'UGX',
+    supplier: jsonStringOrNull(json['supplier']) ?? '',
+    location: jsonStringOrNull(json['location']) ?? '',
+    recordedAt: jsonStringOrNull(json['recorded_at']) ?? '',
   );
   final int id;
   final double price;
@@ -2849,15 +2826,15 @@ class HardwarePriceStatistics {
   });
   factory HardwarePriceStatistics.fromJson(Map<String, dynamic> json) =>
       HardwarePriceStatistics(
-        itemsTracked: json['items_tracked'] as int? ?? 0,
-        pricesUpdatedToday: json['prices_updated_today'] as int? ?? 0,
+        itemsTracked: jsonIntOrNull(json['items_tracked']) ?? 0,
+        pricesUpdatedToday: jsonIntOrNull(json['prices_updated_today']) ?? 0,
         averagePriceChange:
-            (json['average_price_change'] as num?)?.toDouble() ?? 0.0,
-        suppliersTracked: json['suppliers_tracked'] as int? ?? 0,
+            (jsonDoubleOrNull(json['average_price_change']))?.toDouble() ?? 0.0,
+        suppliersTracked: jsonIntOrNull(json['suppliers_tracked']) ?? 0,
         lowestPriceOpportunities:
-            json['lowest_price_opportunities'] as int? ?? 0,
+            jsonIntOrNull(json['lowest_price_opportunities']) ?? 0,
         boqItemsWithUpdatedPrices:
-            json['boq_items_with_updated_prices'] as int? ?? 0,
+            jsonIntOrNull(json['boq_items_with_updated_prices']) ?? 0,
       );
   final int itemsTracked;
   final int pricesUpdatedToday;
@@ -2890,36 +2867,34 @@ class PriceComparisonItem {
   });
   factory PriceComparisonItem.fromJson(Map<String, dynamic> json) =>
       PriceComparisonItem(
-        id: _asInt(json['id']),
-        itemName: json['item_name'] as String? ?? '',
-        brand: json['brand'] as String? ?? '',
-        category: json['category'] as String? ?? '',
-        specification: json['specification'] as String? ?? '',
-        unit: json['unit'] as String? ?? '',
-        price: _asDouble(json['price']),
-        currency: json['currency'] as String? ?? 'UGX',
-        supplier: json['supplier'] as String? ?? '',
-        location: json['location'] as String? ?? '',
-        sourceReference: json['source_reference'] as String? ?? '',
+        id: jsonInt(json['id']),
+        itemName: jsonStringOrNull(json['item_name']) ?? '',
+        brand: jsonStringOrNull(json['brand']) ?? '',
+        category: jsonStringOrNull(json['category']) ?? '',
+        specification: jsonStringOrNull(json['specification']) ?? '',
+        unit: jsonStringOrNull(json['unit']) ?? '',
+        price: jsonDouble(json['price']),
+        currency: jsonStringOrNull(json['currency']) ?? 'UGX',
+        supplier: jsonStringOrNull(json['supplier']) ?? '',
+        location: jsonStringOrNull(json['location']) ?? '',
+        sourceReference: jsonStringOrNull(json['source_reference']) ?? '',
         fetchedAt: '${json['fetched_at'] ?? ''}',
-        similarityScore: _asInt(json['similarity_score']),
-        matchReasons: (json['match_reasons'] as List<dynamic>? ?? [])
-            .map((e) => '$e')
-            .toList(),
-        variancePercent: _asDoubleOrNull(json['variance_percent']),
+        similarityScore: jsonInt(json['similarity_score']),
+        matchReasons: (jsonList(
+          json['match_reasons'],
+        )).map((e) => '$e').toList(),
+        variancePercent: jsonDoubleOrNull(json['variance_percent']),
         priceHistory: PriceHistorySummary.fromJson(
           json['price_history'] is Map<String, dynamic>
-              ? json['price_history'] as Map<String, dynamic>
+              ? jsonMap(json['price_history'])
               : const {},
         ),
         rating: PriceRating.fromJson(
           json['rating'] is Map<String, dynamic>
-              ? json['rating'] as Map<String, dynamic>
+              ? jsonMap(json['rating'])
               : const {},
         ),
-        badges: (json['badges'] as List<dynamic>? ?? [])
-            .map((e) => '$e')
-            .toList(),
+        badges: (jsonList(json['badges'])).map((e) => '$e').toList(),
       );
   final int id;
   final String itemName;
@@ -2953,13 +2928,13 @@ class PriceHistorySummary {
   });
   factory PriceHistorySummary.fromJson(Map<String, dynamic> json) =>
       PriceHistorySummary(
-        records: _asInt(json['records']),
-        lowest: _asDouble(json['lowest']),
-        highest: _asDouble(json['highest']),
-        average: _asDouble(json['average']),
-        change: _asDouble(json['change']),
-        changePercent: _asDouble(json['change_percent']),
-        trend: json['trend'] as String? ?? 'stable',
+        records: jsonInt(json['records']),
+        lowest: jsonDouble(json['lowest']),
+        highest: jsonDouble(json['highest']),
+        average: jsonDouble(json['average']),
+        change: jsonDouble(json['change']),
+        changePercent: jsonDouble(json['change_percent']),
+        trend: jsonStringOrNull(json['trend']) ?? 'stable',
       );
   final int records;
   final double lowest;
@@ -2981,13 +2956,13 @@ class PriceRating {
     required this.factors,
   });
   factory PriceRating.fromJson(Map<String, dynamic> json) => PriceRating(
-    overall: _asInt(json['overall']),
-    valueScore: _asInt(json['value_score']),
-    stabilityScore: _asInt(json['stability_score']),
-    freshnessScore: _asInt(json['freshness_score']),
-    supplierScore: _asInt(json['supplier_score']),
-    availabilityScore: _asInt(json['availability_score']),
-    factors: (json['factors'] is Map ? json['factors'] as Map : const {}).map(
+    overall: jsonInt(json['overall']),
+    valueScore: jsonInt(json['value_score']),
+    stabilityScore: jsonInt(json['stability_score']),
+    freshnessScore: jsonInt(json['freshness_score']),
+    supplierScore: jsonInt(json['supplier_score']),
+    availabilityScore: jsonInt(json['availability_score']),
+    factors: (json['factors'] is Map ? jsonMap(json['factors']) : const {}).map(
       (k, v) => MapEntry('$k', '$v'),
     ),
   );
@@ -3004,9 +2979,9 @@ class BoqItemPriceMatch {
   const BoqItemPriceMatch({required this.boqItem, required this.matches});
   factory BoqItemPriceMatch.fromJson(Map<String, dynamic> json) =>
       BoqItemPriceMatch(
-        boqItem: BoqItemMatchInfo.fromJson(json['boq_item'] ?? {}),
-        matches: (json['matches'] as List<dynamic>? ?? [])
-            .cast<Map<String, dynamic>>()
+        boqItem: BoqItemMatchInfo.fromJson(jsonMap(json['boq_item'])),
+        matches: (jsonList(json['matches']))
+            .whereType<Map<String, dynamic>>()
             .map(PriceComparisonItem.fromJson)
             .toList(),
       );
@@ -3025,12 +3000,12 @@ class BoqItemMatchInfo {
   });
   factory BoqItemMatchInfo.fromJson(Map<String, dynamic> json) =>
       BoqItemMatchInfo(
-        description: json['description'] as String? ?? '',
-        quantity: json['quantity'] as String? ?? '',
-        unit: json['unit'] as String? ?? '',
-        currentRate: _asDouble(json['current_rate']),
-        currency: json['currency'] as String? ?? 'UGX',
-        currentAmount: _asDouble(json['current_amount']),
+        description: jsonStringOrNull(json['description']) ?? '',
+        quantity: jsonStringOrNull(json['quantity']) ?? '',
+        unit: jsonStringOrNull(json['unit']) ?? '',
+        currentRate: jsonDouble(json['current_rate']),
+        currency: jsonStringOrNull(json['currency']) ?? 'UGX',
+        currentAmount: jsonDouble(json['current_amount']),
       );
   final String description;
   final String quantity;
@@ -3050,14 +3025,14 @@ class HardwarePricePaginated {
   });
   factory HardwarePricePaginated.fromJson(Map<String, dynamic> json) =>
       HardwarePricePaginated(
-        data: (json['data'] as List<dynamic>? ?? [])
-            .cast<Map<String, dynamic>>()
+        data: (jsonList(json['data']))
+            .whereType<Map<String, dynamic>>()
             .map(HardwarePrice.fromJson)
             .toList(),
-        currentPage: json['current_page'] as int? ?? 1,
-        lastPage: json['last_page'] as int? ?? 1,
-        perPage: json['per_page'] as int? ?? 20,
-        total: _asInt(json['total']),
+        currentPage: jsonIntOrNull(json['current_page']) ?? 1,
+        lastPage: jsonIntOrNull(json['last_page']) ?? 1,
+        perPage: jsonIntOrNull(json['per_page']) ?? 20,
+        total: jsonInt(json['total']),
       );
   final List<HardwarePrice> data;
   final int currentPage;
@@ -3074,19 +3049,13 @@ class HardwarePriceHistory {
   });
   factory HardwarePriceHistory.fromJson(Map<String, dynamic> json) =>
       HardwarePriceHistory(
-        item: HardwarePrice.fromJson(
-          (json['item'] as Map<String, dynamic>?) ?? {},
-        ),
+        item: HardwarePrice.fromJson((jsonMapOrNull(json['item'])) ?? {}),
         summary: PriceHistorySummary.fromJson(
-          (json['summary'] as Map<String, dynamic>?) ?? {},
+          (jsonMapOrNull(json['summary'])) ?? {},
         ),
-        history:
-            ((json['history'] as Map<String, dynamic>?)?['data']
-                        as List<dynamic>? ??
-                    [])
-                .cast<Map<String, dynamic>>()
-                .map(PriceHistory.fromJson)
-                .toList(),
+        history: jsonMaps(
+          jsonMap(json['history'])['data'],
+        ).map(PriceHistory.fromJson).toList(),
       );
   final HardwarePrice item;
   final PriceHistorySummary summary;
@@ -3097,8 +3066,8 @@ class HardwarePriceCategory {
   const HardwarePriceCategory({required this.name, required this.count});
   factory HardwarePriceCategory.fromJson(Map<String, dynamic> json) =>
       HardwarePriceCategory(
-        name: json['name'] as String? ?? '',
-        count: _asInt(json['count']),
+        name: jsonStringOrNull(json['name']) ?? '',
+        count: jsonInt(json['count']),
       );
   final String name;
   final int count;
@@ -3108,11 +3077,11 @@ class PriceComparisonResult {
   const PriceComparisonResult({required this.items, required this.summary});
   factory PriceComparisonResult.fromJson(Map<String, dynamic> json) =>
       PriceComparisonResult(
-        items: (json['items'] as List<dynamic>? ?? [])
-            .cast<Map<String, dynamic>>()
+        items: (jsonList(json['items']))
+            .whereType<Map<String, dynamic>>()
             .map(PriceComparisonItem.fromJson)
             .toList(),
-        summary: json['summary'] as Map<String, dynamic>? ?? {},
+        summary: jsonMap(json['summary']),
       );
   final List<PriceComparisonItem> items;
   final Map<String, dynamic> summary;
@@ -3138,23 +3107,21 @@ class BoqDetail {
   });
   factory BoqDetail.fromJson(Map<String, dynamic> json) => BoqDetail(
     totals: BoqTotals.fromJson(json['totals']),
-    id: _asInt(json['id']),
-    projectId: _asInt(json['project_id']),
-    name: json['name'] as String? ?? '',
-    code: json['code'] as String? ?? '',
-    description: json['description'] as String? ?? '',
-    currency: json['currency'] as String? ?? 'UGX',
-    status: json['status'] as String? ?? 'draft',
-    version: json['version'] as String? ?? '1.0',
-    metadata: json['metadata'] as Map<String, dynamic>? ?? {},
-    facilities: (json['facilities'] as List<dynamic>? ?? [])
-        .cast<Map<String, dynamic>>()
-        .map(Facility.fromJson)
-        .toList(),
-    summaries: (json['summaries'] as List<dynamic>? ?? [])
-        .cast<Map<String, dynamic>>()
-        .map(BoqCostSummary.fromJson)
-        .toList(),
+    id: jsonInt(json['id']),
+    projectId: jsonInt(json['project_id']),
+    name: jsonStringOrNull(json['name']) ?? '',
+    code: jsonStringOrNull(json['code']) ?? '',
+    description: jsonStringOrNull(json['description']) ?? '',
+    currency: jsonStringOrNull(json['currency']) ?? 'UGX',
+    status: jsonStringOrNull(json['status']) ?? 'draft',
+    version: jsonStringOrNull(json['version']) ?? '1.0',
+    metadata: jsonMap(json['metadata']),
+    facilities: (jsonList(
+      json['facilities'],
+    )).whereType<Map<String, dynamic>>().map(Facility.fromJson).toList(),
+    summaries: (jsonList(
+      json['summaries'],
+    )).whereType<Map<String, dynamic>>().map(BoqCostSummary.fromJson).toList(),
   );
   final int projectId;
   final int id;
@@ -3180,23 +3147,21 @@ class Facility {
     required this.summaries,
   });
   factory Facility.fromJson(Map<String, dynamic> json) => Facility(
-    id: _asInt(json['id']),
-    name: json['name'] as String? ?? '',
+    id: jsonInt(json['id']),
+    name: jsonStringOrNull(json['name']) ?? '',
     nameTranslations: json['name_translations'] != null
-        ? (json['name_translations'] as Map<String, dynamic>).map(
-            (k, v) => MapEntry(k, v as String),
-          )
+        ? (jsonMap(
+            json['name_translations'],
+          )).map((k, v) => MapEntry(k, jsonString(v)))
         : null,
-    description: json['description'] as String?,
-    displayOrder: _asInt(json['display_order']),
-    bills: (json['bills'] as List<dynamic>? ?? [])
-        .cast<Map<String, dynamic>>()
-        .map(Bill.fromJson)
-        .toList(),
-    summaries: (json['summaries'] as List<dynamic>? ?? [])
-        .cast<Map<String, dynamic>>()
-        .map(BoqCostSummary.fromJson)
-        .toList(),
+    description: jsonStringOrNull(json['description']),
+    displayOrder: jsonInt(json['display_order']),
+    bills: (jsonList(
+      json['bills'],
+    )).whereType<Map<String, dynamic>>().map(Bill.fromJson).toList(),
+    summaries: (jsonList(
+      json['summaries'],
+    )).whereType<Map<String, dynamic>>().map(BoqCostSummary.fromJson).toList(),
   );
   final int id;
   final String name;
@@ -3218,23 +3183,21 @@ class Bill {
     required this.summaries,
   });
   factory Bill.fromJson(Map<String, dynamic> json) => Bill(
-    id: _asInt(json['id']),
-    name: json['name'] as String? ?? '',
+    id: jsonInt(json['id']),
+    name: jsonStringOrNull(json['name']) ?? '',
     nameTranslations: json['name_translations'] != null
-        ? (json['name_translations'] as Map<String, dynamic>).map(
-            (k, v) => MapEntry(k, v as String),
-          )
+        ? (jsonMap(
+            json['name_translations'],
+          )).map((k, v) => MapEntry(k, jsonString(v)))
         : null,
-    description: json['description'] as String?,
-    displayOrder: _asInt(json['display_order']),
-    elements: (json['elements'] as List<dynamic>? ?? [])
-        .cast<Map<String, dynamic>>()
-        .map(Element.fromJson)
-        .toList(),
-    summaries: (json['summaries'] as List<dynamic>? ?? [])
-        .cast<Map<String, dynamic>>()
-        .map(BoqCostSummary.fromJson)
-        .toList(),
+    description: jsonStringOrNull(json['description']),
+    displayOrder: jsonInt(json['display_order']),
+    elements: (jsonList(
+      json['elements'],
+    )).whereType<Map<String, dynamic>>().map(Element.fromJson).toList(),
+    summaries: (jsonList(
+      json['summaries'],
+    )).whereType<Map<String, dynamic>>().map(BoqCostSummary.fromJson).toList(),
   );
   final int id;
   final String name;
@@ -3256,23 +3219,21 @@ class Element {
     required this.items,
   });
   factory Element.fromJson(Map<String, dynamic> json) => Element(
-    id: _asInt(json['id']),
-    name: json['name'] as String? ?? '',
+    id: jsonInt(json['id']),
+    name: jsonStringOrNull(json['name']) ?? '',
     nameTranslations: json['name_translations'] != null
-        ? (json['name_translations'] as Map<String, dynamic>).map(
-            (k, v) => MapEntry(k, v as String),
-          )
+        ? (jsonMap(
+            json['name_translations'],
+          )).map((k, v) => MapEntry(k, jsonString(v)))
         : null,
-    description: json['description'] as String?,
-    displayOrder: _asInt(json['display_order']),
-    subElements: (json['sub_elements'] as List<dynamic>? ?? [])
-        .cast<Map<String, dynamic>>()
-        .map(SubElement.fromJson)
-        .toList(),
-    items: (json['items'] as List<dynamic>? ?? [])
-        .cast<Map<String, dynamic>>()
-        .map(BoqItemSummary.fromJson)
-        .toList(),
+    description: jsonStringOrNull(json['description']),
+    displayOrder: jsonInt(json['display_order']),
+    subElements: (jsonList(
+      json['sub_elements'],
+    )).whereType<Map<String, dynamic>>().map(SubElement.fromJson).toList(),
+    items: (jsonList(
+      json['items'],
+    )).whereType<Map<String, dynamic>>().map(BoqItemSummary.fromJson).toList(),
   );
   final int id;
   final String name;
@@ -3293,19 +3254,18 @@ class SubElement {
     required this.items,
   });
   factory SubElement.fromJson(Map<String, dynamic> json) => SubElement(
-    id: _asInt(json['id']),
-    name: json['name'] as String? ?? '',
+    id: jsonInt(json['id']),
+    name: jsonStringOrNull(json['name']) ?? '',
     nameTranslations: json['name_translations'] != null
-        ? (json['name_translations'] as Map<String, dynamic>).map(
-            (k, v) => MapEntry(k, v as String),
-          )
+        ? (jsonMap(
+            json['name_translations'],
+          )).map((k, v) => MapEntry(k, jsonString(v)))
         : null,
-    description: json['description'] as String?,
-    displayOrder: _asInt(json['display_order']),
-    items: (json['items'] as List<dynamic>? ?? [])
-        .cast<Map<String, dynamic>>()
-        .map(BoqItemSummary.fromJson)
-        .toList(),
+    description: jsonStringOrNull(json['description']),
+    displayOrder: jsonInt(json['display_order']),
+    items: (jsonList(
+      json['items'],
+    )).whereType<Map<String, dynamic>>().map(BoqItemSummary.fromJson).toList(),
   );
   final int id;
   final String name;
@@ -3327,14 +3287,14 @@ class BoqCostSummary {
     this.metadata,
   });
   factory BoqCostSummary.fromJson(Map<String, dynamic> json) => BoqCostSummary(
-    id: _asInt(json['id']),
-    summaryType: json['summary_type'] as String? ?? 'grand',
-    name: json['name'] as String?,
-    subtotal: _asDouble(json['subtotal']),
-    vat: _asDouble(json['vat']),
-    contingency: _asDouble(json['contingency']),
-    grandTotal: _asDouble(json['grand_total']),
-    metadata: json['metadata'] as Map<String, dynamic>?,
+    id: jsonInt(json['id']),
+    summaryType: jsonStringOrNull(json['summary_type']) ?? 'grand',
+    name: jsonStringOrNull(json['name']),
+    subtotal: jsonDouble(json['subtotal']),
+    vat: jsonDouble(json['vat']),
+    contingency: jsonDouble(json['contingency']),
+    grandTotal: jsonDouble(json['grand_total']),
+    metadata: jsonMapOrNull(json['metadata']),
   );
   final int id;
   final String summaryType;
@@ -3376,34 +3336,34 @@ class BoqItemDetail extends BoqItemSummary {
     this.translations = const [],
   });
   factory BoqItemDetail.fromJson(Map<String, dynamic> json) => BoqItemDetail(
-    id: json['id'] as int,
-    code: json['item_code'] as String? ?? '',
-    description: json['description'] as String? ?? '',
+    id: jsonInt(json['id']),
+    code: jsonStringOrNull(json['item_code']) ?? '',
+    description: jsonStringOrNull(json['description']) ?? '',
     quantity: '${json['quantity'] ?? 0}',
-    unit: json['unit'] as String? ?? '',
+    unit: jsonStringOrNull(json['unit']) ?? '',
     amount: '${json['amount'] ?? 0}',
     currentRate:
         '${json['ai_suggested_rate'] ?? json['approved_rate'] ?? json['original_rate'] ?? 0}',
     aiRate: '${json['ai_suggested_rate'] ?? 0}',
-    facilityId: json['facility_id'] as int?,
-    billId: json['bill_id'] as int?,
-    elementId: json['element_id'] as int?,
-    subElementId: json['sub_element_id'] as int?,
-    originalRate: _asDoubleOrNull(json['original_rate']),
-    approvedRate: _asDoubleOrNull(json['approved_rate']),
-    aiSuggestedRate: _asDoubleOrNull(json['ai_suggested_rate']),
-    currency: json['currency'] as String? ?? 'UGX',
-    workCategory: json['work_category'] as String?,
-    materialCategory: json['material_category'] as String?,
-    location: json['location'] as String?,
-    pricingSource: json['pricing_source'] as String?,
-    pricingDate: json['pricing_date'] as String?,
-    aiConfidence: _asDoubleOrNull(json['ai_confidence']),
-    translationConfidence: _asDoubleOrNull(json['translation_confidence']),
-    notes: json['notes'] as String?,
-    status: json['status'] as String? ?? 'pending',
-    translations: (json['translations'] as List<dynamic>? ?? [])
-        .cast<Map<String, dynamic>>()
+    facilityId: jsonIntOrNull(json['facility_id']),
+    billId: jsonIntOrNull(json['bill_id']),
+    elementId: jsonIntOrNull(json['element_id']),
+    subElementId: jsonIntOrNull(json['sub_element_id']),
+    originalRate: jsonDoubleOrNull(json['original_rate']),
+    approvedRate: jsonDoubleOrNull(json['approved_rate']),
+    aiSuggestedRate: jsonDoubleOrNull(json['ai_suggested_rate']),
+    currency: jsonStringOrNull(json['currency']) ?? 'UGX',
+    workCategory: jsonStringOrNull(json['work_category']),
+    materialCategory: jsonStringOrNull(json['material_category']),
+    location: jsonStringOrNull(json['location']),
+    pricingSource: jsonStringOrNull(json['pricing_source']),
+    pricingDate: jsonStringOrNull(json['pricing_date']),
+    aiConfidence: jsonDoubleOrNull(json['ai_confidence']),
+    translationConfidence: jsonDoubleOrNull(json['translation_confidence']),
+    notes: jsonStringOrNull(json['notes']),
+    status: jsonStringOrNull(json['status']) ?? 'pending',
+    translations: (jsonList(json['translations']))
+        .whereType<Map<String, dynamic>>()
         .map(BoqItemTranslation.fromJson)
         .toList(),
   );
@@ -3439,13 +3399,14 @@ class BoqItemTranslation {
   });
   factory BoqItemTranslation.fromJson(Map<String, dynamic> json) =>
       BoqItemTranslation(
-        id: _asInt(json['id']),
-        locale: json['locale'] as String? ?? '',
-        translatedDescription: json['translated_description'] as String? ?? '',
-        provider: json['provider'] as String?,
-        confidence: (json['confidence'] as num?)?.toDouble(),
-        status: json['status'] as String? ?? 'pending_review',
-        reviewedAt: json['reviewed_at'] as String?,
+        id: jsonInt(json['id']),
+        locale: jsonStringOrNull(json['locale']) ?? '',
+        translatedDescription:
+            jsonStringOrNull(json['translated_description']) ?? '',
+        provider: jsonStringOrNull(json['provider']),
+        confidence: (jsonDoubleOrNull(json['confidence']))?.toDouble(),
+        status: jsonStringOrNull(json['status']) ?? 'pending_review',
+        reviewedAt: jsonStringOrNull(json['reviewed_at']),
       );
   final int id;
   final String locale;
@@ -3476,23 +3437,37 @@ class ProxySubscription {
     required this.createdAt,
   });
 
-  factory ProxySubscription.fromJson(Map<String, dynamic> json) =>
-      ProxySubscription(
-        id: _asInt(json['id']),
-        beneficiaryId: _asInt(json['beneficiary_id']),
-        beneficiaryName: json['beneficiary_name'] as String? ?? '',
-        beneficiaryEmail: json['beneficiary_email'] as String? ?? '',
-        payerId: _asInt(json['payer_id']),
-        payerName: json['payer_name'] as String? ?? '',
-        planId: _asInt(json['plan_id']),
-        planName: json['plan_name'] as String? ?? '',
-        status: json['status'] as String? ?? 'pending',
-        startDate: json['start_date'] as String? ?? '',
-        endDate: json['end_date'] as String? ?? '',
-        paymentStatus: json['payment_status'] as String? ?? 'pending',
-        transactionId: json['transaction_id'] as String? ?? '',
-        createdAt: json['created_at'] as String? ?? '',
-      );
+  /// ProxySubscriptionResource nests `beneficiary`, `payer`, `plan` and
+  /// `transactions`; flat `*_id`/`*_name` keys are accepted as a fallback.
+  factory ProxySubscription.fromJson(Map<String, dynamic> json) {
+    final beneficiary = jsonMap(json['beneficiary']);
+    final payer = jsonMap(json['payer']);
+    final plan = jsonMap(json['plan']);
+    final transactions = jsonMaps(json['transactions']);
+    final latest = transactions.isEmpty ? null : transactions.last;
+    return ProxySubscription(
+      id: jsonInt(json['id']),
+      beneficiaryId: jsonInt(beneficiary['id'] ?? json['beneficiary_id']),
+      beneficiaryName: jsonString(
+        beneficiary['name'] ?? json['beneficiary_name'],
+      ),
+      beneficiaryEmail: jsonString(
+        beneficiary['email'] ?? json['beneficiary_email'],
+      ),
+      payerId: jsonInt(payer['id'] ?? json['payer_id']),
+      payerName: jsonString(payer['name'] ?? json['payer_name']),
+      planId: jsonInt(plan['id'] ?? json['plan_id']),
+      planName: jsonString(plan['name'] ?? json['plan_name']),
+      status: jsonString(json['status'], 'pending'),
+      startDate: jsonString(json['start_date']),
+      endDate: jsonString(json['end_date']),
+      paymentStatus: jsonString(json['payment_status'], 'pending'),
+      transactionId: jsonString(
+        latest?['reference'] ?? latest?['id'] ?? json['transaction_id'],
+      ),
+      createdAt: jsonString(json['created_at']),
+    );
+  }
 
   final int id;
   final int beneficiaryId;
@@ -3519,9 +3494,9 @@ class BeneficiaryUser {
 
   factory BeneficiaryUser.fromJson(Map<String, dynamic> json) =>
       BeneficiaryUser(
-        id: _asInt(json['id']),
-        name: json['name'] as String? ?? '',
-        email: json['email'] as String? ?? '',
+        id: jsonInt(json['id']),
+        name: jsonStringOrNull(json['name']) ?? '',
+        email: jsonStringOrNull(json['email']) ?? '',
       );
 
   final int id;
@@ -3550,20 +3525,20 @@ class BoqPricingJob {
   });
 
   factory BoqPricingJob.fromJson(Map<String, dynamic> json) => BoqPricingJob(
-    id: _asInt(json['id']),
-    boqId: _asInt(json['boq_id']),
-    status: json['status'] as String? ?? 'pending',
-    currentBatch: _asInt(json['current_batch']),
-    totalBatches: _asInt(json['total_batches']),
-    batchSize: _asInt(json['batch_size']),
-    totalItems: _asInt(json['total_items']),
-    processedItems: _asInt(json['processed_items']),
-    failedItems: _asInt(json['failed_items']),
-    lockedAt: json['locked_at'] as String?,
-    lockedBy: json['locked_by'] as int?,
-    startedAt: json['started_at'] as String?,
-    completedAt: json['completed_at'] as String?,
-    createdAt: json['created_at'] as String? ?? '',
+    id: jsonInt(json['id']),
+    boqId: jsonInt(json['boq_id']),
+    status: jsonStringOrNull(json['status']) ?? 'pending',
+    currentBatch: jsonInt(json['current_batch']),
+    totalBatches: jsonInt(json['total_batches']),
+    batchSize: jsonInt(json['batch_size']),
+    totalItems: jsonInt(json['total_items']),
+    processedItems: jsonInt(json['processed_items']),
+    failedItems: jsonInt(json['failed_items']),
+    lockedAt: jsonStringOrNull(json['locked_at']),
+    lockedBy: jsonIntOrNull(json['locked_by']),
+    startedAt: jsonStringOrNull(json['started_at']),
+    completedAt: jsonStringOrNull(json['completed_at']),
+    createdAt: jsonStringOrNull(json['created_at']) ?? '',
   );
 
   final int id;
@@ -3597,15 +3572,17 @@ class BoqPricingJobProgress {
 
   factory BoqPricingJobProgress.fromJson(Map<String, dynamic> json) =>
       BoqPricingJobProgress(
-        jobId: _asInt(json['job_id']),
-        percentage: (json['percentage'] as num?)?.toDouble() ?? 0.0,
-        currentBatch: _asInt(json['current_batch']),
-        totalBatches: _asInt(json['total_batches']),
-        itemsPricedThisBatch: _asInt(json['items_priced_this_batch']),
-        totalPriced: _asInt(json['total_priced']),
-        remaining: _asInt(json['remaining']),
-        failedItems: _asInt(json['failed_items']),
-        status: json['status'] as String? ?? 'unknown',
+        jobId: jsonInt(json['job_id'] ?? json['id']),
+        percentage: jsonDouble(
+          json['progress_percentage'] ?? json['percentage'],
+        ),
+        currentBatch: jsonInt(json['current_batch']),
+        totalBatches: jsonInt(json['total_batches']),
+        itemsPricedThisBatch: jsonInt(json['items_priced_this_batch']),
+        totalPriced: jsonInt(json['processed_items'] ?? json['total_priced']),
+        remaining: jsonInt(json['remaining_items'] ?? json['remaining']),
+        failedItems: jsonInt(json['failed_items']),
+        status: jsonStringOrNull(json['status']) ?? 'unknown',
       );
 
   final int jobId;
@@ -3635,15 +3612,15 @@ class AiProvider {
   });
 
   factory AiProvider.fromJson(Map<String, dynamic> json) => AiProvider(
-    id: _asInt(json['id']),
-    name: json['name'] as String? ?? '',
-    code: json['code'] as String? ?? '',
-    apiKeyEncrypted: json['api_key_encrypted'] as String? ?? '',
-    isDefault: json['is_default'] as bool? ?? false,
-    isEnabled: json['is_enabled'] as bool? ?? true,
-    config: json['config'] as Map<String, dynamic>? ?? {},
-    createdAt: json['created_at'] as String? ?? '',
-    updatedAt: json['updated_at'] as String? ?? '',
+    id: jsonInt(json['id']),
+    name: jsonStringOrNull(json['name']) ?? '',
+    code: jsonString(json['key'] ?? json['code']),
+    apiKeyEncrypted: jsonStringOrNull(json['api_key_encrypted']) ?? '',
+    isDefault: jsonBoolOrNull(json['is_default']) ?? false,
+    isEnabled: jsonBoolOrNull(json['is_enabled']) ?? true,
+    config: jsonMap(json['config']),
+    createdAt: jsonStringOrNull(json['created_at']) ?? '',
+    updatedAt: jsonStringOrNull(json['updated_at']) ?? '',
   );
 
   final int id;
@@ -3670,13 +3647,13 @@ class HardwareCategory {
 
   factory HardwareCategory.fromJson(Map<String, dynamic> json) =>
       HardwareCategory(
-        id: _asInt(json['id']),
-        name: json['name'] as String? ?? '',
-        code: json['code'] as String? ?? '',
-        description: json['description'] as String?,
-        isActive: json['is_active'] as bool? ?? true,
-        createdAt: json['created_at'] as String? ?? '',
-        updatedAt: json['updated_at'] as String? ?? '',
+        id: jsonInt(json['id']),
+        name: jsonStringOrNull(json['name']) ?? '',
+        code: jsonStringOrNull(json['code']) ?? '',
+        description: jsonStringOrNull(json['description']),
+        isActive: jsonBoolOrNull(json['is_active']) ?? true,
+        createdAt: jsonStringOrNull(json['created_at']) ?? '',
+        updatedAt: jsonStringOrNull(json['updated_at']) ?? '',
       );
 
   final int id;
@@ -3692,13 +3669,6 @@ class HardwareCategory {
 
 Map<String, dynamic> _asMap(dynamic value) =>
     value is Map<String, dynamic> ? value : const <String, dynamic>{};
-
-List<Map<String, dynamic>> _asMapList(dynamic value) =>
-    (value is List ? value : const [])
-        .whereType<Map<String, dynamic>>()
-        .toList();
-
-int? _asIntOrNull(dynamic value) => value == null ? null : _asInt(value);
 
 String? _asTextOrNull(dynamic value) {
   final text = value?.toString().trim() ?? '';
@@ -3720,15 +3690,15 @@ class RatedSupplier {
   });
 
   factory RatedSupplier.fromJson(Map<String, dynamic> json) => RatedSupplier(
-    id: _asInt(json['id']),
+    id: jsonInt(json['id']),
     name: '${json['name'] ?? ''}',
     type: '${json['type'] ?? 'supplier'}',
     location: _asTextOrNull(json['location']),
     region: _asTextOrNull(json['region']),
     country: _asTextOrNull(json['country']),
     websiteUrl: _asTextOrNull(json['website_url']),
-    rating: _asDouble(json['rating']),
-    ratingsCount: _asInt(json['ratings_count']),
+    rating: jsonDouble(json['rating']),
+    ratingsCount: jsonInt(json['ratings_count']),
   );
 
   final int id;
@@ -3758,10 +3728,10 @@ class RatingCriteria {
   factory RatingCriteria.fromJson(dynamic json) {
     final map = _asMap(json);
     return RatingCriteria(
-      price: _asDoubleOrNull(map['price']),
-      quality: _asDoubleOrNull(map['quality']),
-      delivery: _asDoubleOrNull(map['delivery']),
-      service: _asDoubleOrNull(map['service']),
+      price: jsonDoubleOrNull(map['price']),
+      quality: jsonDoubleOrNull(map['quality']),
+      delivery: jsonDoubleOrNull(map['delivery']),
+      service: jsonDoubleOrNull(map['service']),
     );
   }
 
@@ -3794,11 +3764,11 @@ class SupplierLeaderboardEntry {
 
   factory SupplierLeaderboardEntry.fromJson(Map<String, dynamic> json) =>
       SupplierLeaderboardEntry(
-        rank: _asInt(json['rank']),
+        rank: jsonInt(json['rank']),
         supplier: RatedSupplier.fromJson(_asMap(json['supplier'])),
-        average: _asDouble(json['average']),
-        score: _asDouble(json['score']),
-        count: _asInt(json['count']),
+        average: jsonDouble(json['average']),
+        score: jsonDouble(json['score']),
+        count: jsonInt(json['count']),
         criteria: RatingCriteria.fromJson(json['criteria']),
       );
 
@@ -3829,7 +3799,7 @@ class SupplierLeaderboard {
         period: '${json['period'] ?? 'month'}',
         periodLabel: '${json['period_label'] ?? ''}',
         type: '${json['type'] ?? 'supplier'}',
-        items: _asMapList(
+        items: jsonMaps(
           json['items'],
         ).map(SupplierLeaderboardEntry.fromJson).toList(),
       );
@@ -3844,8 +3814,10 @@ class SupplierLeaderboard {
 class RatingBucket {
   const RatingBucket({required this.stars, required this.count});
 
-  factory RatingBucket.fromJson(Map<String, dynamic> json) =>
-      RatingBucket(stars: _asInt(json['stars']), count: _asInt(json['count']));
+  factory RatingBucket.fromJson(Map<String, dynamic> json) => RatingBucket(
+    stars: jsonInt(json['stars']),
+    count: jsonInt(json['count']),
+  );
 
   final int stars;
   final int count;
@@ -3853,7 +3825,7 @@ class RatingBucket {
   /// 5 down to 1, filling in missing star values with 0.
   static List<RatingBucket> listFrom(dynamic json) {
     final counts = {
-      for (final row in _asMapList(json).map(RatingBucket.fromJson))
+      for (final row in jsonMaps(json).map(RatingBucket.fromJson))
         row.stars: row.count,
     };
     return [
@@ -3876,8 +3848,8 @@ class RatingTrendPoint {
       RatingTrendPoint(
         period: '${json['period'] ?? ''}',
         label: '${json['label'] ?? json['period'] ?? ''}',
-        average: _asDoubleOrNull(json['average']),
-        count: _asInt(json['count']),
+        average: jsonDoubleOrNull(json['average']),
+        count: jsonInt(json['count']),
       );
 
   /// `YYYY-MM`.
@@ -3889,7 +3861,7 @@ class RatingTrendPoint {
   final int count;
 
   static List<RatingTrendPoint> listFrom(dynamic json) =>
-      _asMapList(json).map(RatingTrendPoint.fromJson).toList();
+      jsonMaps(json).map(RatingTrendPoint.fromJson).toList();
 }
 
 class RatingTypeStat {
@@ -3898,8 +3870,8 @@ class RatingTypeStat {
   factory RatingTypeStat.fromJson(dynamic json) {
     final map = _asMap(json);
     return RatingTypeStat(
-      count: _asInt(map['count']),
-      average: _asDoubleOrNull(map['average']),
+      count: jsonInt(map['count']),
+      average: jsonDoubleOrNull(map['average']),
     );
   }
 
@@ -3930,9 +3902,9 @@ class SupplierRatingSummary {
     return SupplierRatingSummary(
       period: '${json['period'] ?? 'month'}',
       periodLabel: '${json['period_label'] ?? ''}',
-      total: _asInt(json['total']),
-      suppliers: _asInt(json['suppliers']),
-      average: _asDoubleOrNull(json['average']),
+      total: jsonInt(json['total']),
+      suppliers: jsonInt(json['suppliers']),
+      average: jsonDoubleOrNull(json['average']),
       distribution: RatingBucket.listFrom(json['distribution']),
       hardware: RatingTypeStat.fromJson(byType['supplier']),
       factories: RatingTypeStat.fromJson(byType['factory']),
@@ -3977,12 +3949,12 @@ class SupplierReview {
   });
 
   factory SupplierReview.fromJson(Map<String, dynamic> json) => SupplierReview(
-    id: _asInt(json['id']),
-    rating: _asInt(json['rating']),
+    id: jsonInt(json['id']),
+    rating: jsonInt(json['rating']),
     comment: _asTextOrNull(json['comment']),
     author: _asTextOrNull(json['author']),
     isHidden: json['is_hidden'] == true || json['is_hidden'] == 1,
-    ratedAt: json['rated_at'] as String?,
+    ratedAt: jsonStringOrNull(json['rated_at']),
   );
 
   final int id;
@@ -4014,16 +3986,16 @@ class SupplierRatingEntry {
   factory SupplierRatingEntry.fromJson(Map<String, dynamic> json) {
     final supplier = json['supplier'];
     return SupplierRatingEntry(
-      id: _asIntOrNull(json['id']),
-      supplierId: _asIntOrNull(json['supplier_id']),
-      rating: _asInt(json['rating']),
-      priceRating: _asIntOrNull(json['price_rating']),
-      qualityRating: _asIntOrNull(json['quality_rating']),
-      deliveryRating: _asIntOrNull(json['delivery_rating']),
-      serviceRating: _asIntOrNull(json['service_rating']),
+      id: jsonIntOrNull(json['id']),
+      supplierId: jsonIntOrNull(json['supplier_id']),
+      rating: jsonInt(json['rating']),
+      priceRating: jsonIntOrNull(json['price_rating']),
+      qualityRating: jsonIntOrNull(json['quality_rating']),
+      deliveryRating: jsonIntOrNull(json['delivery_rating']),
+      serviceRating: jsonIntOrNull(json['service_rating']),
       comment: _asTextOrNull(json['comment']),
-      period: json['period'] as String?,
-      ratedAt: json['rated_at'] as String?,
+      period: jsonStringOrNull(json['period']),
+      ratedAt: jsonStringOrNull(json['rated_at']),
       supplier: supplier is Map<String, dynamic>
           ? RatedSupplier.fromJson(supplier)
           : null,
@@ -4069,18 +4041,16 @@ class SupplierPerformance {
     return SupplierPerformance(
       supplier: RatedSupplier.fromJson(_asMap(json['supplier'])),
       period: '${json['period'] ?? 'month'}',
-      rank: rank is Map ? _asIntOrNull(rank['rank']) : null,
-      rankOf: rank is Map ? _asIntOrNull(rank['of']) : null,
-      periodTotal: _asInt(json['period_total']),
-      periodAverage: _asDoubleOrNull(json['period_average']),
-      total: _asInt(json['total']),
-      average: _asDoubleOrNull(json['average']),
+      rank: rank is Map ? jsonIntOrNull(rank['rank']) : null,
+      rankOf: rank is Map ? jsonIntOrNull(rank['of']) : null,
+      periodTotal: jsonInt(json['period_total']),
+      periodAverage: jsonDoubleOrNull(json['period_average']),
+      total: jsonInt(json['total']),
+      average: jsonDoubleOrNull(json['average']),
       distribution: RatingBucket.listFrom(json['distribution']),
       criteria: RatingCriteria.fromJson(json['criteria']),
       trend: RatingTrendPoint.listFrom(json['trend']),
-      reviews: _asMapList(
-        json['reviews'],
-      ).map(SupplierReview.fromJson).toList(),
+      reviews: jsonMaps(json['reviews']).map(SupplierReview.fromJson).toList(),
       mine: mine is Map<String, dynamic>
           ? SupplierRatingEntry.fromJson(mine)
           : null,

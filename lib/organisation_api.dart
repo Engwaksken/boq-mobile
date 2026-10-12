@@ -3,10 +3,10 @@ part of 'api_client.dart';
 /// Resource collections use Laravel's top-level data/meta envelope.
 class ResourcePage {
   ResourcePage.fromJson(Map<String, dynamic> json)
-    : items = (json['data'] as List).cast<Map<String, dynamic>>(),
-      page = _asInt(json['meta']?['current_page']).clamp(1, 100000),
-      lastPage = _asInt(json['meta']?['last_page']).clamp(1, 100000),
-      totals = (json['totals'] as List? ?? []).cast<Map<String, dynamic>>();
+    : items = jsonMaps(json['data']),
+      page = jsonInt(jsonMap(json['meta'])['current_page']).clamp(1, 100000),
+      lastPage = jsonInt(jsonMap(json['meta'])['last_page']).clamp(1, 100000),
+      totals = jsonMaps(json['totals']);
 
   final List<Map<String, dynamic>> items;
   final int page;
@@ -60,27 +60,27 @@ extension OrganisationApi on ApiClient {
         'GET',
         'expenses/projects?page=$page',
       );
-      projects.addAll((body['data'] as List).cast<Map<String, dynamic>>());
-      if (page >= (_asInt(body['meta']?['last_page']).clamp(1, 100000))) break;
+      projects.addAll(jsonMaps(body['data']));
+      final lastPage = jsonInt(jsonMap(body['meta'])['last_page']);
+      if (page >= lastPage.clamp(1, 100000)) break;
       page++;
     }
     return projects;
   }
 
   Future<Map<String, dynamic>> expense(int id) async =>
-      (await _resourceRequest('GET', 'expenses/$id'))['data']
-          as Map<String, dynamic>;
+      jsonMap((await _resourceRequest('GET', 'expenses/$id'))['data']);
 
   Future<Map<String, dynamic>> saveExpense(
     Map<String, dynamic> data, {
     int? id,
-  }) async =>
-      (await _resourceRequest(
-            id == null ? 'POST' : 'PUT',
-            id == null ? 'expenses' : 'expenses/$id',
-            data,
-          ))['data']
-          as Map<String, dynamic>;
+  }) async => jsonMap(
+    (await _resourceRequest(
+      id == null ? 'POST' : 'PUT',
+      id == null ? 'expenses' : 'expenses/$id',
+      data,
+    ))['data'],
+  );
 
   Future<void> uploadExpenseReceipt(
     int expenseId,
@@ -127,12 +127,13 @@ extension OrganisationApi on ApiClient {
       );
 
   Future<List<Map<String, dynamic>>> invitationRoles() async =>
-      ((await _resourceRequest('GET', 'invitations/roles'))['data'] as List)
-          .cast<Map<String, dynamic>>();
+      jsonMaps((await _resourceRequest('GET', 'invitations/roles'))['data']);
 
   /// The raw single-use token is returned only on creation.
   Future<String> createInvitation(Map<String, dynamic> data) async =>
-      (await _resourceRequest('POST', 'invitations', data))['token'] as String;
+      jsonString(
+        (await _resourceRequest('POST', 'invitations', data))['token'],
+      );
 
   Future<void> updateInvitation(int id, Map<String, dynamic> data) async {
     await _resourceRequest('PUT', 'invitations/$id', data);
@@ -172,7 +173,7 @@ extension OrganisationApi on ApiClient {
     );
     final body = _decode(response);
     if (response.statusCode != 200) throw _apiError(response, body);
-    return body['data'] as Map<String, dynamic>;
+    return jsonMap(body['data']);
   }
 
   Future<ResourcePage> projectAssignments({int page = 1}) async =>
@@ -180,9 +181,9 @@ extension OrganisationApi on ApiClient {
         await _resourceRequest('GET', 'project-assignments?page=$page'),
       );
 
-  Future<Map<String, dynamic>> assignmentOptions() async =>
-      (await _resourceRequest('GET', 'project-assignments/options'))['data']
-          as Map<String, dynamic>;
+  Future<Map<String, dynamic>> assignmentOptions() async => jsonMap(
+    (await _resourceRequest('GET', 'project-assignments/options'))['data'],
+  );
 
   Future<void> saveProjectAssignment(
     int projectId,

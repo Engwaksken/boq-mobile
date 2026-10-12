@@ -87,9 +87,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
           body = _scrollableFill(
             EmptyState(
               icon: Icons.folder_open_outlined,
-              title: widget._filtered
-                  ? 'No matching projects'
-                  : l10n.noProjects,
+              title: widget._filtered ? l10n.projNoMatching : l10n.noProjects,
               actionLabel: widget._filtered ? null : l10n.createProject,
               onAction: widget._filtered ? null : _createProject,
             ),
@@ -107,7 +105,11 @@ class _ProjectsPageState extends State<ProjectsPage> {
                     status: _statusLabel(project.status),
                     color: _statusColor(project.status),
                     totals: project.totals.items > 0
-                        ? boqTotalsLine(project.totals, project.currency)
+                        ? boqTotalsLine(
+                            project.totals,
+                            project.currency,
+                            context.tr,
+                          )
                         : null,
                     onTap: () async {
                       await Navigator.of(context).push(
@@ -226,10 +228,10 @@ class _ProjectTypeFieldState extends State<_ProjectTypeField> {
           child: ListView(
             shrinkWrap: true,
             children: [
-              const ListTile(
+              ListTile(
                 title: Text(
-                  'Project type',
-                  style: TextStyle(fontWeight: FontWeight.w700),
+                  sheetContext.tr.projTypeSheetTitle,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),
               for (final type in _types)
@@ -245,7 +247,7 @@ class _ProjectTypeFieldState extends State<_ProjectTypeField> {
         ),
       ),
     );
-    if (chosen != null) widget.controller.text = chosen;
+    if (chosen != null && mounted) widget.controller.text = chosen;
   }
 
   @override
@@ -253,19 +255,38 @@ class _ProjectTypeFieldState extends State<_ProjectTypeField> {
     return TextFormField(
       controller: widget.controller,
       decoration: InputDecoration(
-        labelText: 'Project Type',
-        hintText: 'Choose or type a project type',
+        labelText: context.tr.projProjectType,
+        hintText: context.tr.projTypeHint,
         prefixIcon: const Icon(Icons.category_outlined),
         suffixIcon: _types.isEmpty
             ? null
             : IconButton(
-                tooltip: 'Choose a project type',
+                tooltip: context.tr.projChooseType,
                 icon: const Icon(Icons.arrow_drop_down_circle_outlined),
                 onPressed: _choose,
               ),
       ),
     );
   }
+}
+
+/// Project status choices; an unknown status from the API is kept so the
+/// dropdown never fails its "value must be one of the items" assertion.
+List<DropdownMenuItem<String>> _projectStatusItems(
+  AppLocalizations l10n,
+  String current,
+) {
+  final labels = {
+    'draft': l10n.draft,
+    'active': l10n.projectStatusActive,
+    'completed': l10n.projStatusCompleted,
+    'archived': l10n.projStatusArchived,
+  };
+  if (!labels.containsKey(current)) labels[current] = current.capitalize();
+  return [
+    for (final entry in labels.entries)
+      DropdownMenuItem(value: entry.key, child: Text(entry.value)),
+  ];
 }
 
 /// Read-only date field that opens a picker when tapped.
@@ -351,7 +372,9 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
-    if (date != null) controller.text = date.toIso8601String().split('T').first;
+    if (date != null && mounted) {
+      controller.text = date.toIso8601String().split('T').first;
+    }
   }
 
   Future<void> _save(AppLocalizations l10n) async {
@@ -414,8 +437,8 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
         ).showSnackBar(SnackBar(content: Text(l10n.projectCreated)));
         Navigator.of(context).pop(true);
       }
-    } on ApiException catch (error) {
-      if (mounted) setState(() => _error = error.message);
+    } on Object catch (error) {
+      if (mounted) setState(() => _error = friendlyError(error));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -436,17 +459,17 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   SectionCard(
-                    title: 'Basic details',
+                    title: l10n.projBasicDetails,
                     icon: Icons.info_outline,
                     spacing: AppSpacing.md,
                     children: [
                       _projectTextField(
                         controller: _name,
-                        label: 'Project Name *',
+                        label: l10n.projNameRequired,
                         icon: Icons.foundation_outlined,
                         validator: (value) =>
                             value == null || value.trim().isEmpty
-                            ? 'Required'
+                            ? l10n.projRequired
                             : null,
                       ),
                       _projectTextField(
@@ -460,124 +483,107 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
                       ),
                       DropdownButtonFormField<String>(
                         initialValue: _status,
-                        decoration: const InputDecoration(
-                          labelText: 'Status',
-                          prefixIcon: Icon(Icons.flag_outlined),
+                        decoration: InputDecoration(
+                          labelText: l10n.status,
+                          prefixIcon: const Icon(Icons.flag_outlined),
                         ),
-                        items: const [
-                          DropdownMenuItem(
-                            value: 'draft',
-                            child: Text('Draft'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'active',
-                            child: Text('Active'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'completed',
-                            child: Text('Completed'),
-                          ),
-                          DropdownMenuItem(
-                            value: 'archived',
-                            child: Text('Archived'),
-                          ),
-                        ],
+                        items: _projectStatusItems(l10n, _status),
                         onChanged: (value) {
                           if (value != null) setState(() => _status = value);
                         },
                       ),
                       _projectTextField(
                         controller: _description,
-                        label: 'Description',
+                        label: l10n.projDescription,
                         maxLines: 3,
                       ),
                     ],
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   SectionCard(
-                    title: 'Parties',
+                    title: l10n.projParties,
                     icon: Icons.groups_outlined,
                     spacing: AppSpacing.md,
                     children: [
                       _projectTextField(
                         controller: _client,
-                        label: 'Client',
+                        label: l10n.projClient,
                         icon: Icons.business_outlined,
                       ),
                       _projectTextField(
                         controller: _contractor,
-                        label: 'Contractor',
+                        label: l10n.projContractor,
                         icon: Icons.engineering_outlined,
                       ),
                       _projectTextField(
                         controller: _consultant,
-                        label: 'Consultant',
+                        label: l10n.projConsultant,
                         icon: Icons.support_agent_outlined,
                       ),
                       _projectTextField(
                         controller: _quantitySurveyor,
-                        label: 'Quantity Surveyor',
+                        label: l10n.projQuantitySurveyor,
                         icon: Icons.straighten_outlined,
                       ),
                       _projectTextField(
                         controller: _projectManager,
-                        label: 'Project Manager',
+                        label: l10n.projProjectManager,
                         icon: Icons.manage_accounts_outlined,
                       ),
                       _projectTextField(
                         controller: _siteEngineer,
-                        label: 'Site Engineer',
+                        label: l10n.projSiteEngineer,
                         icon: Icons.construction_outlined,
                       ),
                       _projectTextField(
                         controller: _fundingOrganisation,
-                        label: 'Funding Organisation',
+                        label: l10n.projFundingOrganisation,
                         icon: Icons.account_balance_outlined,
                       ),
                     ],
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   SectionCard(
-                    title: 'Location',
+                    title: l10n.location,
                     icon: Icons.location_on_outlined,
                     spacing: AppSpacing.md,
                     children: [
                       _projectTextField(
                         controller: _country,
-                        label: 'Country',
+                        label: l10n.projCountry,
                         icon: Icons.public,
                       ),
                       _projectTextField(
                         controller: _district,
-                        label: 'District',
+                        label: l10n.projDistrict,
                         icon: Icons.map_outlined,
                       ),
                       _projectTextField(
                         controller: _location,
-                        label: 'Location',
+                        label: l10n.location,
                         icon: Icons.place_outlined,
                       ),
                     ],
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   SectionCard(
-                    title: 'Dates & value',
+                    title: l10n.projDatesValue,
                     icon: Icons.event_note_outlined,
                     spacing: AppSpacing.md,
                     children: [
                       _projectDateField(
                         controller: _startDate,
-                        label: 'Start Date',
+                        label: l10n.startDate,
                         onTap: () => _pickDate(_startDate),
                       ),
                       _projectDateField(
                         controller: _expectedCompletionDate,
-                        label: 'Expected Completion Date',
+                        label: l10n.projExpectedCompletionDate,
                         onTap: () => _pickDate(_expectedCompletionDate),
                       ),
                       _projectTextField(
                         controller: _contractValue,
-                        label: 'Contract Value',
+                        label: l10n.projContractValue,
                         icon: Icons.payments_outlined,
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
@@ -595,18 +601,18 @@ class _CreateProjectPageState extends State<CreateProjectPage> {
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   SectionCard(
-                    title: 'Languages',
+                    title: l10n.projLanguages,
                     icon: Icons.translate,
                     spacing: AppSpacing.md,
                     children: [
                       _projectTextField(
                         controller: _originalLanguage,
-                        label: 'Original Language',
+                        label: l10n.projOriginalLanguage,
                         icon: Icons.language,
                       ),
                       _projectTextField(
                         controller: _reportLanguage,
-                        label: 'Report Language',
+                        label: l10n.projReportLanguage,
                         icon: Icons.description_outlined,
                       ),
                     ],

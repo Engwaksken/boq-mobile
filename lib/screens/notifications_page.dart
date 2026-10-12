@@ -9,7 +9,11 @@ class NotificationsPage extends StatefulWidget {
 }
 
 class _NotificationsPageState extends State<NotificationsPage> {
-  late Future<List<NotificationItem>> _notifications;
+  static const _perPage = 20;
+
+  /// Loaded rows (all pages so far); null until the first page arrives.
+  List<NotificationItem>? _items;
+  Object? _error;
   int _page = 1;
   bool _loadingMore = false;
   bool _hasMore = true;
@@ -20,42 +24,41 @@ class _NotificationsPageState extends State<NotificationsPage> {
     _loadNotifications();
   }
 
+  /// Loads the first page, or appends the next one when [loadMore] is set.
   Future<void> _loadNotifications({bool loadMore = false}) async {
-    if (_loadingMore) return;
+    if (_loadingMore || (loadMore && !_hasMore)) return;
     final targetPage = loadMore ? _page + 1 : 1;
-    if (loadMore) {
-      setState(() => _loadingMore = true);
-    } else {
-      setState(() {
-        _notifications = widget.api.getNotifications(page: targetPage);
-      });
-    }
+    setState(() {
+      if (loadMore) {
+        _loadingMore = true;
+      } else {
+        _error = null;
+      }
+    });
     try {
-      final notifications = await widget.api.getNotifications(page: targetPage);
-      if (mounted) {
-        setState(() {
-          if (loadMore) {
-            // We need to get the current list and append
-            // For simplicity, we'll just reload the whole list
-            _notifications = widget.api.getNotifications(page: 1);
-            _page = 1;
-          } else {
-            _notifications = Future.value(notifications);
-            _page = targetPage;
-          }
-          _hasMore = notifications.length >= 20;
-          _loadingMore = false;
-        });
+      final notifications = await widget.api.getNotifications(
+        page: targetPage,
+        perPage: _perPage,
+      );
+      if (!mounted) return;
+      setState(() {
+        _items = loadMore
+            ? [...?_items, ...notifications]
+            : notifications;
+        _page = targetPage;
+        _hasMore = notifications.length >= _perPage;
+      });
+    } on Object catch (e) {
+      if (!mounted) return;
+      if (loadMore) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(friendlyError(e))));
+      } else {
+        setState(() => _error = e);
       }
-    } on ApiException catch (e) {
-      if (mounted) {
-        setState(() {
-          _loadingMore = false;
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(e.message)));
-        });
-      }
+    } finally {
+      if (mounted && loadMore) setState(() => _loadingMore = false);
     }
   }
 
@@ -63,16 +66,12 @@ class _NotificationsPageState extends State<NotificationsPage> {
     if (notification.isRead) return;
     try {
       await widget.api.markNotificationAsRead(notification.id);
-      if (mounted) {
-        setState(() {
-          _loadNotifications();
-        });
-      }
-    } on ApiException catch (e) {
+      if (mounted) await _loadNotifications();
+    } on Object catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(e.message)));
+        ).showSnackBar(SnackBar(content: Text(friendlyError(e))));
       }
     }
   }
@@ -84,22 +83,21 @@ class _NotificationsPageState extends State<NotificationsPage> {
       appBar: AppBar(title: Text(l10n.notifications)),
       body: RefreshIndicator(
         onRefresh: () => _loadNotifications(),
-        child: FutureBuilder<List<NotificationItem>>(
-          future: _notifications,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const SkeletonList();
-            }
-            if (snapshot.hasError) {
+        child: Builder(
+          builder: (context) {
+            final notifications = _items;
+            if (_error != null && notifications == null) {
               return _fillScrollable(
                 ErrorState(
-                  error: snapshot.error,
+                  error: _error,
                   onRetry: () => _loadNotifications(),
                   compact: true,
                 ),
               );
             }
-            final notifications = snapshot.data ?? [];
+            if (notifications == null) {
+              return const SkeletonList();
+            }
             if (notifications.isEmpty) {
               return _fillScrollable(
                 EmptyState(
@@ -208,7 +206,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
                           if (unread) ...[
                             const SizedBox(width: AppSpacing.sm),
                             Semantics(
-                              label: 'Unread',
+                              label: l10n.notifUnread,
                               child: Container(
                                 width: 8,
                                 height: 8,
@@ -251,7 +249,10 @@ class _NotificationsPageState extends State<NotificationsPage> {
                                 Icons.done_all_rounded,
                                 size: 18,
                               ),
-                              label: Text(l10n.markAsRead),
+                              label: Text(
+                                l10n.markAsRead,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                         ],
                       ),

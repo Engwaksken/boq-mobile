@@ -1,5 +1,10 @@
 part of '../main.dart';
 
+/// Shorthand for the app's localised strings where a [BuildContext] is at hand.
+extension _AppStrings on BuildContext {
+  AppLocalizations get tr => AppLocalizations.of(this)!;
+}
+
 class HardwarePricesPage extends StatefulWidget {
   const HardwarePricesPage({super.key, required this.api, required this.l10n});
   final ApiClient api;
@@ -42,6 +47,7 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
   @override
   void dispose() {
     _tabController.dispose();
+    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -132,10 +138,10 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
           _loadingMore = false;
         });
       }
-    } on ApiException catch (e) {
+    } on Object catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.message;
+          _error = friendlyError(e);
           _loading = false;
           _loadingMore = false;
         });
@@ -172,30 +178,32 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
                     child: TabBar(
                       controller: _tabController,
                       dividerColor: Colors.transparent,
-                      tabs: const [
-                        Tab(text: 'All Prices'),
-                        Tab(text: 'Categories'),
+                      tabs: [
+                        Tab(text: context.tr.hwAllPrices),
+                        Tab(text: context.tr.hwCategories),
                       ],
                     ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.refresh),
                     onPressed: () => _fetch(),
-                    tooltip: 'Refresh',
+                    tooltip: context.tr.refresh,
                   ),
                   PopupMenuButton<String>(
-                    tooltip: 'More actions',
+                    tooltip: context.tr.hwMoreActions,
                     onSelected: (value) {
                       if (value == 'fetch') _fetchNow();
                     },
                     itemBuilder: (_) => [
-                      const PopupMenuItem(
+                      PopupMenuItem(
                         value: 'fetch',
                         child: Row(
                           children: [
-                            Icon(Icons.cloud_download_outlined),
-                            SizedBox(width: AppSpacing.md),
-                            Text('Fetch Latest Prices'),
+                            const Icon(Icons.cloud_download_outlined),
+                            const SizedBox(width: AppSpacing.md),
+                            Flexible(
+                              child: Text(context.tr.hwFetchLatestPrices),
+                            ),
                           ],
                         ),
                       ),
@@ -239,28 +247,42 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
           horizontal: AppSpacing.lg,
           vertical: AppSpacing.xs,
         ),
-        child: Row(
+        // Wraps the buttons below the text on narrow phones / large text.
+        child: Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: AppSpacing.xs,
           children: [
-            Icon(Icons.compare_arrows, color: scheme.onPrimaryContainer),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Text(
-                count < 2
-                    ? '$count selected · add one more to compare'
-                    : '$count items selected',
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: scheme.onPrimaryContainer,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.compare_arrows, color: scheme.onPrimaryContainer),
+                const SizedBox(width: AppSpacing.sm),
+                Flexible(
+                  child: Text(
+                    count < 2
+                        ? context.tr.hwSelectedAddMore(count)
+                        : context.tr.hwItemsSelected(count),
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: scheme.onPrimaryContainer,
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-            TextButton(
-              onPressed: () => setState(_compareItems.clear),
-              child: const Text('Clear'),
-            ),
-            const SizedBox(width: AppSpacing.xs),
-            FilledButton(
-              onPressed: count < 2 ? null : _openComparison,
-              child: const Text('Compare'),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextButton(
+                  onPressed: () => setState(_compareItems.clear),
+                  child: Text(context.tr.hwClear),
+                ),
+                const SizedBox(width: AppSpacing.xs),
+                FilledButton(
+                  onPressed: count < 2 ? null : _openComparison,
+                  child: Text(context.tr.hwCompare),
+                ),
+              ],
             ),
           ],
         ),
@@ -300,7 +322,7 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
             children: [
               Expanded(
                 child: Text(
-                  'Page $_page of $last',
+                  context.tr.hwPageOf(_page, last),
                   style: theme.textTheme.labelLarge?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
@@ -316,12 +338,12 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
                 ),
               IconButton(
                 icon: const Icon(Icons.chevron_left),
-                tooltip: 'Previous page',
+                tooltip: context.tr.hwPreviousPage,
                 onPressed: _page <= 1 ? null : () => _goToPage(_page - 1),
               ),
               IconButton(
                 icon: const Icon(Icons.chevron_right),
-                tooltip: 'Next page',
+                tooltip: context.tr.hwNextPage,
                 onPressed: _page >= last ? null : () => _goToPage(_page + 1),
               ),
             ],
@@ -351,8 +373,8 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
         _fetchFilters,
         EmptyState(
           icon: Icons.category_outlined,
-          title: 'No categories loaded',
-          actionLabel: 'Load categories',
+          title: context.tr.hwNoCategories,
+          actionLabel: context.tr.hwLoadCategories,
           actionIcon: Icons.refresh,
           onAction: _fetchFilters,
         ),
@@ -373,8 +395,8 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
           if (index == 0) {
             return ListItemCard(
               leading: const IconTile(icon: Icons.apps),
-              title: 'All categories',
-              subtitle: '$total items',
+              title: context.tr.hwAllCategories,
+              subtitle: context.tr.hwItemCount(total),
               trailing: selectedMark(_selectedCategory == null),
               onTap: () {
                 setState(() => _selectedCategory = null);
@@ -390,7 +412,7 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
               tone: StatusTone.neutral,
             ),
             title: cat.name,
-            subtitle: '${cat.count} items',
+            subtitle: context.tr.hwItemCount(cat.count),
             trailing: selectedMark(_selectedCategory == cat.name),
             onTap: () {
               setState(() => _selectedCategory = cat.name);
@@ -405,10 +427,10 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
 
   Widget _buildFilters() {
     final scheme = Theme.of(context).colorScheme;
-    const priceTypes = <(String?, String, IconData)>[
-      (null, 'All', Icons.list),
-      ('hardware', 'Supplier', Icons.storefront_outlined),
-      ('factory', 'Factory', Icons.factory_outlined),
+    final priceTypes = <(String?, String, IconData)>[
+      (null, context.tr.hwAll, Icons.list),
+      ('hardware', context.tr.hwSupplier, Icons.storefront_outlined),
+      ('factory', context.tr.hwFactory, Icons.factory_outlined),
     ];
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -437,7 +459,7 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
                   suffixIcon: value.text.isNotEmpty
                       ? IconButton(
                           icon: const Icon(Icons.close),
-                          tooltip: 'Clear search',
+                          tooltip: context.tr.hwClearSearch,
                           onPressed: () {
                             _searchController.clear();
                             _fetch();
@@ -475,7 +497,7 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   _FilterMenuChip(
-                    label: 'Category',
+                    label: context.tr.hwCategory,
                     icon: Icons.category_outlined,
                     value: _selectedCategory,
                     options: _categories,
@@ -486,7 +508,7 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   _FilterMenuChip(
-                    label: 'Supplier',
+                    label: context.tr.hwSupplier,
                     icon: Icons.storefront_outlined,
                     value: _selectedSupplier,
                     options: _suppliers,
@@ -497,7 +519,7 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   _FilterMenuChip(
-                    label: 'Region',
+                    label: context.tr.hwRegion,
                     icon: Icons.map_outlined,
                     value: _selectedRegion,
                     options: _regions,
@@ -508,7 +530,7 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   _FilterMenuChip(
-                    label: 'Location',
+                    label: context.tr.location,
                     icon: Icons.place_outlined,
                     value: _selectedLocation,
                     options: _locations,
@@ -540,10 +562,10 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
     if (items.isEmpty) {
       return _pullable(
         () => _fetch(),
-        const EmptyState(
+        EmptyState(
           icon: Icons.inventory_2_outlined,
-          title: 'No hardware prices found',
-          message: 'Try adjusting your filters',
+          title: context.tr.hwNoPrices,
+          message: context.tr.hwAdjustFilters,
         ),
       );
     }
@@ -601,13 +623,13 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
   void _addToCompare(HardwarePrice item) {
     if (_compareItems.length >= 5) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Maximum 5 items for comparison')),
+        SnackBar(content: Text(context.tr.hwCompareMax)),
       );
       return;
     }
     if (_compareItems.any((i) => i.id == item.id)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Already in the comparison')),
+        SnackBar(content: Text(context.tr.hwAlreadyCompared)),
       );
       return;
     }
@@ -616,9 +638,14 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('Added to comparison (${_compareItems.length}/5)'),
+          content: Text(
+            context.tr.hwAddedToComparison(_compareItems.length),
+          ),
           action: _compareItems.length >= 2
-              ? SnackBarAction(label: 'Compare', onPressed: _openComparison)
+              ? SnackBarAction(
+                  label: context.tr.hwCompare,
+                  onPressed: _openComparison,
+                )
               : null,
         ),
       );
@@ -632,7 +659,10 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
           SnackBar(
             content: Text(result.message),
             duration: const Duration(seconds: 6),
-            action: SnackBarAction(label: 'Refresh', onPressed: _fetch),
+            action: SnackBarAction(
+              label: context.tr.refresh,
+              onPressed: _fetch,
+            ),
           ),
         );
       }
@@ -680,7 +710,7 @@ class _FilterMenuChip extends StatelessWidget {
         MenuItemButton(
           leadingIcon: mark(value == null),
           onPressed: () => onChanged(null),
-          child: const Text('All'),
+          child: Text(context.tr.hwAll),
         ),
         for (final option in options)
           MenuItemButton(
@@ -694,7 +724,7 @@ class _FilterMenuChip extends StatelessWidget {
       ],
       builder: (context, controller, _) => FilterChip(
         avatar: Icon(icon, size: 18),
-        tooltip: '$label filter',
+        tooltip: context.tr.hwFilterTooltip(label),
         showCheckmark: false,
         selected: selected,
         label: Row(
@@ -795,18 +825,18 @@ class _HardwarePriceCard extends StatelessWidget {
                       ),
                     ),
                     PopupMenuButton<String>(
-                      tooltip: 'More options',
+                      tooltip: context.tr.hwMoreOptions,
                       onSelected: (v) {
                         if (v == 'compare') onCompare();
                       },
                       itemBuilder: (_) => [
-                        const PopupMenuItem(
+                        PopupMenuItem(
                           value: 'compare',
                           child: Row(
                             children: [
-                              Icon(Icons.compare_arrows),
-                              SizedBox(width: AppSpacing.md),
-                              Text('Compare'),
+                              const Icon(Icons.compare_arrows),
+                              const SizedBox(width: AppSpacing.md),
+                              Text(context.tr.hwCompare),
                             ],
                           ),
                         ),
@@ -825,7 +855,9 @@ class _HardwarePriceCard extends StatelessWidget {
                         runSpacing: AppSpacing.xs + 2,
                         children: [
                           StatusBadge(
-                            label: item.isFactory ? 'Factory' : 'Supplier',
+                            label: item.isFactory
+                                ? context.tr.hwFactory
+                                : context.tr.hwSupplier,
                             tone: item.isFactory
                                 ? StatusTone.info
                                 : StatusTone.brand,
@@ -878,7 +910,13 @@ class _HardwarePriceCard extends StatelessWidget {
                           const SizedBox(width: AppSpacing.xs),
                           Expanded(
                             child: Text(
-                              '${item.lastVerifiedAt.isNotEmpty ? 'Verified' : 'Updated'}: ${_formatDate(item.updatedAt)}',
+                              item.lastVerifiedAt.isNotEmpty
+                                  ? context.tr.hwVerifiedOn(
+                                      _formatDate(item.updatedAt),
+                                    )
+                                  : context.tr.hwUpdatedOn(
+                                      _formatDate(item.updatedAt),
+                                    ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: theme.textTheme.bodySmall,
@@ -896,8 +934,15 @@ class _HardwarePriceCard extends StatelessWidget {
                               ),
                               iconAlignment: IconAlignment.end,
                               icon: const Icon(Icons.open_in_new, size: 14),
-                              label: Text(
-                                Uri.tryParse(item.sourceUrl)?.host ?? 'Source',
+                              label: ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 140,
+                                ),
+                                child: Text(
+                                  Uri.tryParse(item.sourceUrl)?.host ??
+                                      context.tr.hwSource,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                             )
                           else if (item.sourceReference.isNotEmpty)
@@ -936,6 +981,35 @@ class _HardwarePriceCard extends StatelessWidget {
       return dateStr;
     }
   }
+}
+
+/// Runs [load] once (and again on retry) instead of on every rebuild, which a
+/// `FutureBuilder` created inside a stateless `build` would do.
+class _FutureOnce<T> extends StatefulWidget {
+  const _FutureOnce({super.key, required this.load, required this.builder});
+
+  final Future<T> Function() load;
+  final Widget Function(
+    BuildContext context,
+    AsyncSnapshot<T> snapshot,
+    VoidCallback retry,
+  )
+  builder;
+
+  @override
+  State<_FutureOnce<T>> createState() => _FutureOnceState<T>();
+}
+
+class _FutureOnceState<T> extends State<_FutureOnce<T>> {
+  late Future<T> _future = widget.load();
+
+  void _retry() => setState(() => _future = widget.load());
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<T>(
+    future: _future,
+    builder: (context, snapshot) => widget.builder(context, snapshot, _retry),
+  );
 }
 
 /// Tone for a price trend string ("up" is bad for buyers, "down" is good).
@@ -997,10 +1071,12 @@ class _HwPriceHistoryEntry extends StatelessWidget {
           ),
         ),
         const SizedBox(width: AppSpacing.sm),
-        Text(
-          date,
-          textAlign: TextAlign.right,
-          style: theme.textTheme.bodySmall,
+        Flexible(
+          child: Text(
+            date,
+            textAlign: TextAlign.right,
+            style: theme.textTheme.bodySmall,
+          ),
         ),
       ],
     );
@@ -1092,16 +1168,16 @@ class HardwarePriceDetailPage extends StatelessWidget {
       actions: [
         IconButton(
           icon: const Icon(Icons.history),
-          tooltip: 'Price History',
+          tooltip: l10n.hwPriceHistory,
           onPressed: () => _openHistory(context),
         ),
       ],
     ),
-    body: FutureBuilder<HardwarePriceHistory>(
-      future: api.hardwarePriceHistory(hardwarePrice.id),
-      builder: (context, snapshot) {
+    body: _FutureOnce<HardwarePriceHistory>(
+      load: () => api.hardwarePriceHistory(hardwarePrice.id),
+      builder: (context, snapshot, retry) {
         if (snapshot.hasError) {
-          return ErrorState(error: snapshot.error);
+          return ErrorState(error: snapshot.error, onRetry: retry);
         }
         if (!snapshot.hasData) {
           return const LoadingState();
@@ -1123,7 +1199,7 @@ class HardwarePriceDetailPage extends StatelessWidget {
                   OutlinedButton.icon(
                     onPressed: () => _openHistory(context),
                     icon: const Icon(Icons.history),
-                    label: const Text('Price History'),
+                    label: Text(l10n.hwPriceHistory),
                   ),
                 ],
               ),
@@ -1182,7 +1258,7 @@ class HardwarePriceDetailPage extends StatelessWidget {
               runSpacing: AppSpacing.xs + 2,
               children: [
                 StatusBadge(
-                  label: item.isFactory ? 'Factory' : 'Supplier',
+                  label: item.isFactory ? l10n.hwFactory : l10n.hwSupplier,
                   tone: item.isFactory ? StatusTone.info : StatusTone.brand,
                 ),
                 if (item.category.isNotEmpty) StatusBadge(label: item.category),
@@ -1195,7 +1271,7 @@ class HardwarePriceDetailPage extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.lg),
             Text(
-              'Current',
+              l10n.hwCurrent,
               style: theme.textTheme.labelMedium?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
@@ -1228,7 +1304,7 @@ class HardwarePriceDetailPage extends StatelessWidget {
               children: [
                 _stat(
                   context,
-                  'Lowest',
+                  l10n.hwLowest,
                   NumberFormat('#,##0').format(summary.lowest),
                   summary.lowest <= item.price
                       ? AppColors.success
@@ -1236,7 +1312,7 @@ class HardwarePriceDetailPage extends StatelessWidget {
                 ),
                 _stat(
                   context,
-                  'Highest',
+                  l10n.hwHighest,
                   NumberFormat('#,##0').format(summary.highest),
                   summary.highest >= item.price
                       ? AppColors.danger
@@ -1244,13 +1320,13 @@ class HardwarePriceDetailPage extends StatelessWidget {
                 ),
                 _stat(
                   context,
-                  'Average',
+                  l10n.hwAverage,
                   NumberFormat('#,##0').format(summary.average),
                   AppColors.info,
                 ),
                 _stat(
                   context,
-                  'Change',
+                  l10n.hwChange,
                   '${changeUp ? '+' : ''}${summary.changePercent.toStringAsFixed(1)}%',
                   changeUp ? AppColors.danger : AppColors.success,
                 ),
@@ -1267,7 +1343,12 @@ class HardwarePriceDetailPage extends StatelessWidget {
     return Expanded(
       child: Column(
         children: [
-          Text(label, style: theme.textTheme.bodySmall),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall,
+          ),
           const SizedBox(height: 2),
           FittedBox(
             fit: BoxFit.scaleDown,
@@ -1286,28 +1367,29 @@ class HardwarePriceDetailPage extends StatelessWidget {
   }
 
   Widget _buildDetailsCard(HardwarePrice item) => SectionCard(
-    title: 'Details',
+    title: l10n.hwDetails,
     icon: Icons.info_outline,
     children: [
-      if (item.brand.isNotEmpty) KeyValueRow(label: 'Brand', value: item.brand),
-      KeyValueRow(label: 'Category', value: item.category),
+      if (item.brand.isNotEmpty)
+        KeyValueRow(label: l10n.hwBrand, value: item.brand),
+      KeyValueRow(label: l10n.hwCategory, value: item.category),
       if (item.specification.isNotEmpty)
-        KeyValueRow(label: 'Spec', value: item.specification),
-      KeyValueRow(label: 'Unit', value: item.unit),
-      KeyValueRow(label: 'Supplier', value: item.supplier),
+        KeyValueRow(label: l10n.hwSpec, value: item.specification),
+      KeyValueRow(label: l10n.hwUnit, value: item.unit),
+      KeyValueRow(label: l10n.hwSupplier, value: item.supplier),
       if (item.location.isNotEmpty)
-        KeyValueRow(label: 'Location', value: item.location),
+        KeyValueRow(label: l10n.location, value: item.location),
     ],
   );
 
   Widget _buildHistoryList(List<PriceHistory> history) => SectionCard(
-    title: 'Price History (${history.length} records)',
+    title: l10n.hwPriceHistoryCount(history.length),
     icon: Icons.timeline,
     children: [
       if (history.isEmpty)
-        const EmptyState(
+        EmptyState(
           icon: Icons.history,
-          title: 'No history available',
+          title: l10n.hwNoHistory,
           compact: true,
         ),
       for (var i = 0; i < history.length; i++)
@@ -1343,21 +1425,23 @@ class PriceHistoryPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: Text('${hardwarePrice.itemName} - Price History')),
-    body: FutureBuilder<HardwarePriceHistory>(
-      future: api.hardwarePriceHistory(hardwarePrice.id),
-      builder: (context, snapshot) {
+    appBar: AppBar(
+      title: Text(l10n.hwItemPriceHistory(hardwarePrice.itemName)),
+    ),
+    body: _FutureOnce<HardwarePriceHistory>(
+      load: () => api.hardwarePriceHistory(hardwarePrice.id),
+      builder: (context, snapshot, retry) {
         if (snapshot.hasError) {
-          return ErrorState(error: snapshot.error);
+          return ErrorState(error: snapshot.error, onRetry: retry);
         }
         if (!snapshot.hasData) {
           return const SkeletonList();
         }
         final history = snapshot.data!.history;
         if (history.isEmpty) {
-          return const EmptyState(
+          return EmptyState(
             icon: Icons.history,
-            title: 'No history available',
+            title: l10n.hwNoHistory,
           );
         }
         return ListView.builder(
@@ -1458,7 +1542,7 @@ class _PriceComparisonPageState extends State<PriceComparisonPage> {
       actions: [
         IconButton(
           icon: const Icon(Icons.refresh),
-          tooltip: 'Refresh',
+          tooltip: widget.l10n.refresh,
           onPressed: _compare,
         ),
       ],
@@ -1469,9 +1553,9 @@ class _PriceComparisonPageState extends State<PriceComparisonPage> {
         ? _pullable(ErrorState(error: _error, onRetry: _compare))
         : _result == null || _result!.items.isEmpty
         ? _pullable(
-            const EmptyState(
+            EmptyState(
               icon: Icons.compare_arrows,
-              title: 'No comparison data',
+              title: widget.l10n.hwNoComparison,
             ),
           )
         : _buildComparison(),
@@ -1485,20 +1569,20 @@ class _PriceComparisonPageState extends State<PriceComparisonPage> {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.lg),
       child: SectionCard(
-        title: '${items.length} prices compared',
+        title: widget.l10n.hwPricesCompared(items.length),
         icon: Icons.compare_arrows,
         children: [
           KeyValueRow(
-            label: 'Lowest',
+            label: widget.l10n.hwLowest,
             value: formatAmount(prices.first, currency: currency),
             emphasize: true,
           ),
           KeyValueRow(
-            label: 'Highest',
+            label: widget.l10n.hwHighest,
             value: formatAmount(prices.last, currency: currency),
           ),
           KeyValueRow(
-            label: 'You save',
+            label: widget.l10n.hwYouSave,
             value: formatAmount(prices.last - prices.first, currency: currency),
             valueStyle: theme.textTheme.bodyMedium?.copyWith(
               fontWeight: FontWeight.w700,
@@ -1506,7 +1590,7 @@ class _PriceComparisonPageState extends State<PriceComparisonPage> {
             ),
           ),
           KeyValueRow(
-            label: 'Best choice',
+            label: widget.l10n.hwBestChoice,
             value: [
               lowest.supplier,
               lowest.location,
@@ -1591,8 +1675,8 @@ class _PriceComparisonPageState extends State<PriceComparisonPage> {
                 ),
                 if (isCheapest) ...[
                   const SizedBox(width: AppSpacing.sm),
-                  const StatusBadge(
-                    label: 'Lowest',
+                  StatusBadge(
+                    label: widget.l10n.hwLowest,
                     tone: StatusTone.success,
                     icon: Icons.savings_outlined,
                   ),
@@ -1632,31 +1716,34 @@ class _PriceComparisonPageState extends State<PriceComparisonPage> {
               ],
             ),
             group([
-              KeyValueRow(label: 'Category', value: item.category),
+              KeyValueRow(label: widget.l10n.hwCategory, value: item.category),
               KeyValueRow(
-                label: 'Specification',
+                label: widget.l10n.hwSpecification,
                 value: item.specification.isEmpty ? '—' : item.specification,
               ),
-              KeyValueRow(label: 'Unit', value: item.unit),
+              KeyValueRow(label: widget.l10n.hwUnit, value: item.unit),
               KeyValueRow(
-                label: 'Price',
+                label: widget.l10n.hwPrice,
                 value:
                     '${NumberFormat('#,##0').format(item.price)} ${item.currency}',
               ),
-              KeyValueRow(label: 'Supplier', value: item.supplier),
+              KeyValueRow(label: widget.l10n.hwSupplier, value: item.supplier),
               KeyValueRow(
-                label: 'Location',
+                label: widget.l10n.location,
                 value: item.location.isEmpty ? '—' : item.location,
               ),
               KeyValueRow(
-                label: 'Source',
+                label: widget.l10n.hwSource,
                 value: item.sourceReference.isEmpty
                     ? '—'
                     : item.sourceReference,
               ),
-              KeyValueRow(label: 'Updated', value: _formatDate(item.fetchedAt)),
               KeyValueRow(
-                label: 'vs lowest',
+                label: widget.l10n.hwUpdated,
+                value: _formatDate(item.fetchedAt),
+              ),
+              KeyValueRow(
+                label: widget.l10n.hwVsLowest,
                 value: variance == null
                     ? '—'
                     : '${variance >= 0 ? '+' : ''}${variance.toStringAsFixed(1)}%',
@@ -1672,7 +1759,7 @@ class _PriceComparisonPageState extends State<PriceComparisonPage> {
             ]),
             group([
               KeyValueRow(
-                label: 'Trend',
+                label: widget.l10n.hwTrend,
                 value: trend.capitalize(),
                 icon: _hwTrendIcon(trend),
                 valueStyle: theme.textTheme.bodyMedium?.copyWith(
@@ -1681,38 +1768,38 @@ class _PriceComparisonPageState extends State<PriceComparisonPage> {
                 ),
               ),
               KeyValueRow(
-                label: 'Records',
+                label: widget.l10n.hwRecords,
                 value: '${item.priceHistory.records}',
               ),
               KeyValueRow(
-                label: 'Lowest',
+                label: widget.l10n.hwLowest,
                 value: NumberFormat('#,##0').format(item.priceHistory.lowest),
               ),
               KeyValueRow(
-                label: 'Highest',
+                label: widget.l10n.hwHighest,
                 value: NumberFormat('#,##0').format(item.priceHistory.highest),
               ),
               KeyValueRow(
-                label: 'Average',
+                label: widget.l10n.hwAverage,
                 value: NumberFormat('#,##0').format(item.priceHistory.average),
               ),
             ]),
             group([
               KeyValueRow(
-                label: 'Rating',
+                label: widget.l10n.hwRating,
                 value: '${item.rating.overall}/100',
                 emphasize: true,
               ),
               KeyValueRow(
-                label: 'Value Score',
+                label: widget.l10n.hwValueScore,
                 value: '${item.rating.valueScore}',
               ),
               KeyValueRow(
-                label: 'Stability',
+                label: widget.l10n.hwStability,
                 value: '${item.rating.stabilityScore}',
               ),
               KeyValueRow(
-                label: 'Freshness',
+                label: widget.l10n.hwFreshness,
                 value: '${item.rating.freshnessScore}',
               ),
             ]),
@@ -1776,10 +1863,10 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           _loading = false;
         });
       }
-    } on ApiException catch (e) {
+    } on Object catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.message;
+          _error = friendlyError(e);
           _loading = false;
         });
       }
@@ -1818,7 +1905,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           children: [
             ChoiceChip(
               avatar: const Icon(Icons.category_outlined, size: 18),
-              label: const Text('All'),
+              label: Text(widget.l10n.hwAll),
               showCheckmark: false,
               selected: _selectedCategory == null,
               onSelected: (_) => _selectCategory(null),
@@ -1845,9 +1932,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     }
     if (_items.isEmpty) {
       return _pullable(
-        const EmptyState(
+        EmptyState(
           icon: Icons.recommend_outlined,
-          title: 'No recommendations available',
+          title: widget.l10n.hwNoRecommendations,
         ),
       );
     }
@@ -1904,7 +1991,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       actions: [
         IconButton(
           icon: const Icon(Icons.refresh),
-          tooltip: 'Refresh',
+          tooltip: widget.l10n.refresh,
           onPressed: _fetch,
         ),
       ],
@@ -1979,7 +2066,7 @@ class _RecommendationCard extends StatelessWidget {
                     ),
                     const SizedBox(width: AppSpacing.sm),
                     Semantics(
-                      label: 'Rating ${item.rating.overall}',
+                      label: context.tr.hwRatingSemantics(item.rating.overall),
                       excludeSemantics: true,
                       child: StatusBadge(
                         label: '${item.rating.overall}',
@@ -2036,32 +2123,40 @@ class _RecommendationCard extends StatelessWidget {
                 const SizedBox(height: AppSpacing.md),
                 Divider(height: 1, color: scheme.outlineVariant),
                 const SizedBox(height: AppSpacing.md),
-                Row(
+                // Wraps onto two lines on narrow phones / large text.
+                Wrap(
+                  spacing: AppSpacing.lg,
+                  runSpacing: AppSpacing.sm,
+                  crossAxisAlignment: WrapCrossAlignment.end,
+                  alignment: WrapAlignment.spaceBetween,
                   children: [
-                    _miniStat(
-                      context,
-                      'Value',
-                      item.rating.valueScore,
-                      AppColors.success,
+                    Wrap(
+                      spacing: AppSpacing.lg,
+                      runSpacing: AppSpacing.sm,
+                      children: [
+                        _miniStat(
+                          context,
+                          context.tr.hwValue,
+                          item.rating.valueScore,
+                          AppColors.success,
+                        ),
+                        _miniStat(
+                          context,
+                          context.tr.hwStability,
+                          item.rating.stabilityScore,
+                          AppColors.info,
+                        ),
+                        _miniStat(
+                          context,
+                          context.tr.hwFreshness,
+                          item.rating.freshnessScore,
+                          AppColors.warning,
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: AppSpacing.lg),
-                    _miniStat(
-                      context,
-                      'Stability',
-                      item.rating.stabilityScore,
-                      AppColors.info,
-                    ),
-                    const SizedBox(width: AppSpacing.lg),
-                    _miniStat(
-                      context,
-                      'Freshness',
-                      item.rating.freshnessScore,
-                      AppColors.warning,
-                    ),
-                    const Spacer(),
                     OutlinedButton(
                       onPressed: onTap,
-                      child: const Text('Details'),
+                      child: Text(context.tr.hwDetails),
                     ),
                   ],
                 ),

@@ -34,6 +34,7 @@ class _BoqsPageState extends State<BoqsPage> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() => _error = null);
     try {
       final result = await widget.api.boqs(search: _search.text);
@@ -93,7 +94,8 @@ class _BoqsPageState extends State<BoqsPage> {
   }
 
   Future<void> _delete(BoqListItem boq) async {
-    if (await confirmDeleteBoq(context, widget.api, boq.id, boq.name)) {
+    if (await confirmDeleteBoq(context, widget.api, boq.id, boq.name) &&
+        mounted) {
       setState(() => _items?.removeWhere((b) => b.id == boq.id));
     }
   }
@@ -117,10 +119,12 @@ class _BoqsPageState extends State<BoqsPage> {
       body = _fill(
         EmptyState(
           icon: Icons.receipt_long_outlined,
-          title: _search.text.isEmpty ? 'No BOQs yet' : 'No matching BOQs',
+          title: _search.text.isEmpty
+              ? widget.l10n.boqNoBoqsYet
+              : widget.l10n.boqNoMatchingBoqs,
           message: _search.text.isEmpty
-              ? 'Import a BOQ into one of your projects to see it here.'
-              : 'Try a different search.',
+              ? widget.l10n.boqNoBoqsMessage
+              : widget.l10n.commonTryDifferentSearch,
         ),
       );
     } else {
@@ -155,7 +159,7 @@ class _BoqsPageState extends State<BoqsPage> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('BOQs')),
+      appBar: AppBar(title: Text(widget.l10n.boqs)),
       // Importing is an edit action; finance and other read-only roles do
       // not get the entry point.
       floatingActionButton: widget.api.can('boq.edit')
@@ -193,14 +197,14 @@ class _BoqsPageState extends State<BoqsPage> {
                 onSubmitted: (_) => _load(),
                 decoration: InputDecoration(
                   isDense: true,
-                  hintText: 'Search BOQs or projects',
+                  hintText: widget.l10n.boqSearchHint,
                   prefixIcon: const Icon(Icons.search),
                   suffixIcon: ValueListenableBuilder<TextEditingValue>(
                     valueListenable: _search,
                     builder: (context, value, _) => value.text.isEmpty
                         ? const SizedBox.shrink()
                         : IconButton(
-                            tooltip: 'Clear search',
+                            tooltip: widget.l10n.commonClearSearch,
                             icon: const Icon(Icons.close),
                             onPressed: () {
                               _search.clear();
@@ -236,17 +240,18 @@ class _BoqListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final details = [
       [
         if (boq.projectName.isNotEmpty) boq.projectName,
-        '${boq.itemsCount} items',
+        l10n.boqItemsCount(boq.itemsCount),
         if (boq.createdAt.isNotEmpty) displayDate(boq.createdAt),
       ].join(' · '),
-      ?boqTotalsLine(boq.totals, boq.currency),
+      ?boqTotalsLine(boq.totals, boq.currency, l10n),
     ].join('\n');
     return ListItemCard(
       leading: const IconTile(icon: Icons.receipt_long_outlined),
-      title: boq.name.isEmpty ? 'Untitled BOQ' : boq.name,
+      title: boq.name.isEmpty ? l10n.boqUntitled : boq.name,
       subtitle: details,
       showChevron: false,
       onTap: onTap,
@@ -277,18 +282,19 @@ class BoqActionsMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return PopupMenuButton<String>(
-      tooltip: 'BOQ actions',
+      tooltip: l10n.boqActions,
       icon: const Icon(Icons.more_vert),
       onSelected: (value) => value == 'edit' ? onEdit() : onDelete(),
-      itemBuilder: (_) => const [
+      itemBuilder: (_) => [
         PopupMenuItem(
           value: 'edit',
           child: Row(
             children: [
-              Icon(Icons.edit_outlined),
-              SizedBox(width: AppSpacing.md),
-              Text('Edit'),
+              const Icon(Icons.edit_outlined),
+              const SizedBox(width: AppSpacing.md),
+              Flexible(child: Text(l10n.commonEdit)),
             ],
           ),
         ),
@@ -296,9 +302,14 @@ class BoqActionsMenu extends StatelessWidget {
           value: 'delete',
           child: Row(
             children: [
-              Icon(Icons.delete_outline, color: AppColors.danger),
-              SizedBox(width: AppSpacing.md),
-              Text('Delete', style: TextStyle(color: AppColors.danger)),
+              const Icon(Icons.delete_outline, color: AppColors.danger),
+              const SizedBox(width: AppSpacing.md),
+              Flexible(
+                child: Text(
+                  l10n.commonDelete,
+                  style: const TextStyle(color: AppColors.danger),
+                ),
+              ),
             ],
           ),
         ),
@@ -370,7 +381,9 @@ class _EditBoqSheetState extends State<_EditBoqSheet> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('BOQ updated')));
+      ).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.boqUpdated)),
+      );
       Navigator.of(context).pop(true);
     } on Object catch (error) {
       if (mounted) setState(() => _error = friendlyError(error));
@@ -382,6 +395,7 @@ class _EditBoqSheetState extends State<_EditBoqSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context)!;
     return Padding(
       padding: EdgeInsets.only(
         left: AppSpacing.xl,
@@ -395,27 +409,27 @@ class _EditBoqSheetState extends State<_EditBoqSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Edit BOQ', style: theme.textTheme.titleLarge),
+              Text(l10n.boqEditTitle, style: theme.textTheme.titleLarge),
               const SizedBox(height: AppSpacing.lg),
               TextFormField(
                 controller: _name,
                 textInputAction: TextInputAction.next,
                 maxLength: 255,
-                decoration: const InputDecoration(
-                  labelText: 'BOQ name',
-                  prefixIcon: Icon(Icons.receipt_long_outlined),
+                decoration: InputDecoration(
+                  labelText: l10n.boqName,
+                  prefixIcon: const Icon(Icons.receipt_long_outlined),
                   counterText: '',
                 ),
                 validator: (v) =>
-                    (v ?? '').trim().isEmpty ? 'Enter a name' : null,
+                    (v ?? '').trim().isEmpty ? l10n.boqEnterName : null,
               ),
               const SizedBox(height: AppSpacing.md),
               TextFormField(
                 controller: _description,
                 maxLines: 3,
                 maxLength: 2000,
-                decoration: const InputDecoration(
-                  labelText: 'Description (optional)',
+                decoration: InputDecoration(
+                  labelText: l10n.boqDescriptionOptional,
                   alignLabelWithHint: true,
                   counterText: '',
                 ),
@@ -433,9 +447,9 @@ class _EditBoqSheetState extends State<_EditBoqSheet> {
                     key: ValueKey('boq-project-$value'),
                     initialValue: value,
                     isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Project',
-                      prefixIcon: Icon(Icons.folder_outlined),
+                    decoration: InputDecoration(
+                      labelText: l10n.boqProject,
+                      prefixIcon: const Icon(Icons.folder_outlined),
                     ),
                     items: [
                       for (final p in projects)
@@ -455,7 +469,11 @@ class _EditBoqSheetState extends State<_EditBoqSheet> {
                 InfoBanner(message: _error!),
               ],
               const SizedBox(height: AppSpacing.xl),
-              LoadingButton(label: 'Save', loading: _saving, onPressed: _save),
+              LoadingButton(
+                label: l10n.commonSave,
+                loading: _saving,
+                onPressed: _save,
+              ),
             ],
           ),
         ),
@@ -471,18 +489,19 @@ Future<bool> confirmDeleteBoq(
   int boqId,
   String name,
 ) async {
+  final l10n = AppLocalizations.of(context)!;
   final confirm = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
       icon: const Icon(Icons.delete_outline, color: AppColors.danger),
-      title: const Text('Delete BOQ?'),
+      title: Text(l10n.boqDeleteTitle),
       content: Text(
-        '"${name.isEmpty ? 'This BOQ' : name}" and all its items will be deleted.',
+        l10n.boqDeleteMessage(name.isEmpty ? l10n.boqThisBoq : name),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext, false),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
         FilledButton(
           style: FilledButton.styleFrom(
@@ -490,7 +509,7 @@ Future<bool> confirmDeleteBoq(
             foregroundColor: Colors.white,
           ),
           onPressed: () => Navigator.pop(dialogContext, true),
-          child: const Text('Delete'),
+          child: Text(l10n.commonDelete),
         ),
       ],
     ),
@@ -500,7 +519,7 @@ Future<bool> confirmDeleteBoq(
   final messenger = ScaffoldMessenger.of(context);
   try {
     await api.deleteBoq(boqId);
-    messenger.showSnackBar(const SnackBar(content: Text('BOQ deleted')));
+    messenger.showSnackBar(SnackBar(content: Text(l10n.boqDeleted)));
     return true;
   } on Object catch (error) {
     messenger.showSnackBar(SnackBar(content: Text(friendlyError(error))));
@@ -509,7 +528,12 @@ Future<bool> confirmDeleteBoq(
 }
 
 /// "Estimated UGX 11,000 · Generated UGX 12,900" for list rows.
-String? boqTotalsLine(BoqTotals totals, String currency) {
+/// Pass [l10n] to localise the labels (English otherwise).
+String? boqTotalsLine(
+  BoqTotals totals,
+  String currency, [
+  AppLocalizations? l10n,
+]) {
   if (totals.items == 0) return null;
   final estimated = totals.hasEstimate
       ? formatAmount(totals.estimatedAmount, currency: currency)
@@ -517,7 +541,10 @@ String? boqTotalsLine(BoqTotals totals, String currency) {
   final generated = totals.hasGenerated
       ? formatAmount(totals.generatedTotal, currency: currency)
       : '—';
-  return 'Estimated $estimated · Generated $generated';
+  return (l10n ?? lookupAppLocalizations(const Locale('en'))).boqTotalsLine(
+    estimated,
+    generated,
+  );
 }
 
 /// Estimated amount (rates from the uploaded file) next to the generated total
@@ -527,19 +554,21 @@ class BoqTotalsCard extends StatelessWidget {
     super.key,
     required this.totals,
     required this.currency,
-    this.title = 'Totals',
+    this.title,
     this.actions = const [],
   });
 
   final BoqTotals totals;
   final String currency;
-  final String title;
+  /// Defaults to the localised "Totals".
+  final String? title;
   final List<Widget> actions;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final l10n = AppLocalizations.of(context)!;
     String money(double value) => formatAmount(value, currency: currency);
     final difference = totals.difference;
     final showDifference = totals.hasEstimate && totals.hasGenerated;
@@ -573,12 +602,12 @@ class BoqTotalsCard extends StatelessWidget {
         );
 
     return SectionCard(
-      title: title,
+      title: title ?? l10n.boqTotals,
       icon: Icons.account_balance_wallet_outlined,
       children: [
         if (totals.items == 0)
           Text(
-            'Totals appear once BOQ items have been imported.',
+            l10n.boqTotalsEmpty,
             style: theme.textTheme.bodyMedium?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
@@ -588,16 +617,16 @@ class BoqTotalsCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               figure(
-                'Estimated amount',
+                l10n.boqEstimatedAmount,
                 totals.hasEstimate ? money(totals.estimatedAmount) : '—',
-                '${totals.estimatedItems} of ${totals.items} items',
+                l10n.boqEstimatedOf(totals.estimatedItems, totals.items),
                 scheme.onSurface,
               ),
               const SizedBox(width: AppSpacing.md),
               figure(
-                'Generated total',
+                l10n.boqGeneratedTotal,
                 totals.hasGenerated ? money(totals.generatedTotal) : '—',
-                '${totals.pricedItems} of ${totals.items} priced',
+                l10n.boqPricedOf(totals.pricedItems, totals.items),
                 scheme.primary,
               ),
             ],
@@ -605,7 +634,9 @@ class BoqTotalsCard extends StatelessWidget {
           if (showDifference) ...[
             const SizedBox(height: AppSpacing.md),
             KeyValueRow(
-              label: difference >= 0 ? 'Above estimate' : 'Below estimate',
+              label: difference >= 0
+                  ? l10n.boqAboveEstimate
+                  : l10n.boqBelowEstimate,
               value: money(difference.abs()),
               valueStyle: theme.textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.w700,
@@ -642,6 +673,7 @@ Future<bool> uploadBoqEstimates(
   ApiClient api,
   int boqId,
 ) async {
+  final l10n = AppLocalizations.of(context)!;
   final messenger = ScaffoldMessenger.of(context);
   void show(String message) => messenger
     ..hideCurrentSnackBar()
@@ -658,7 +690,7 @@ Future<bool> uploadBoqEstimates(
     try {
       picked = await FilePicker.platform.pickFiles(withData: kIsWeb);
     } on Object {
-      show('Files could not be opened on this device. Try again.');
+      show(l10n.commonFilesUnavailable);
       return false;
     }
   }
@@ -666,11 +698,11 @@ Future<bool> uploadBoqEstimates(
   final file = picked.files.single;
   final path = kIsWeb ? null : file.path;
   if (path == null && file.bytes == null) {
-    show('The file could not be read. Choose it again.');
+    show(l10n.commonFileUnreadable);
     return false;
   }
 
-  show('Uploading estimated prices...');
+  show(l10n.boqUploadingEstimates);
   try {
     final prepared = await prepareUpload(
       name: file.name,
@@ -700,6 +732,7 @@ Future<void> shareBoqEstimatesTemplate(
   String title,
 ) async {
   final messenger = ScaffoldMessenger.of(context);
+  final l10n = AppLocalizations.of(context)!;
   try {
     final bytes = await api.boqEstimatesTemplate(boqId);
     final slug = title.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '-').toLowerCase();
@@ -708,7 +741,7 @@ Future<void> shareBoqEstimatesTemplate(
       ShareParams(
         files: [XFile.fromData(bytes, mimeType: 'text/csv', name: name)],
         fileNameOverrides: [name],
-        subject: 'Estimated prices – $title',
+        subject: l10n.boqEstimatesSubject(title),
       ),
     );
   } on Object catch (error) {

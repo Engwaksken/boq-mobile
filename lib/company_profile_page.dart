@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'api_client.dart';
+import 'l10n/app_localizations.dart';
 import 'app_errors.dart';
 import 'theme/app_theme.dart';
 import 'widgets/widgets.dart';
@@ -35,43 +36,49 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
   /// Editing is limited to organisation admins and personal accounts.
   bool get _canEdit => widget.api.canManageCompanyProfile;
 
-  static const _labels = {
-    'company_name': (
-      'Company Name *',
-      'e.g. Riverside Builders Ltd',
-      TextInputType.text,
-    ),
-    'registration_number': (
-      'Registration Number',
-      'e.g. 80020001234567',
-      TextInputType.text,
-    ),
-    'tin': ('TIN (if applicable)', 'e.g. 1000123456', TextInputType.text),
-    'city': ('District/City', 'e.g. city, town or market', TextInputType.text),
-    'physical_address': (
-      'Physical Address',
-      'e.g. Plot 1, Main Street',
-      TextInputType.streetAddress,
-    ),
-    'postal_address': (
-      'Postal Address',
-      'e.g. P.O. Box 1234',
-      TextInputType.text,
-    ),
-    'telephone': ('Telephone', '+256 700 000 000', TextInputType.phone),
-    'alt_telephone': (
-      'Alternative Telephone',
-      '+256 700 000 001',
-      TextInputType.phone,
-    ),
-    'email': ('Email', 'info@example.com', TextInputType.emailAddress),
-    'website': ('Website', 'https://example.com', TextInputType.url),
-    'description': (
-      'Company Description',
-      'A short description of your business',
-      TextInputType.multiline,
-    ),
-  };
+  AppLocalizations get _l10n => AppLocalizations.of(context)!;
+
+  /// Label, hint and keyboard for each profile field.
+  Map<String, (String, String, TextInputType)> get _labels {
+    final l10n = _l10n;
+    return {
+      'company_name': (
+        l10n.coCompanyNameLabel,
+        l10n.coCompanyNameHint,
+        TextInputType.text,
+      ),
+      'registration_number': (
+        l10n.coRegistrationNumber,
+        '80020001234567',
+        TextInputType.text,
+      ),
+      'tin': (l10n.coTin, '1000123456', TextInputType.text),
+      'city': (l10n.coCity, l10n.coCityHint, TextInputType.text),
+      'physical_address': (
+        l10n.coPhysicalAddress,
+        l10n.coPhysicalAddressHint,
+        TextInputType.streetAddress,
+      ),
+      'postal_address': (
+        l10n.coPostalAddress,
+        l10n.coPostalAddressHint,
+        TextInputType.text,
+      ),
+      'telephone': (l10n.coTelephone, '+256 700 000 000', TextInputType.phone),
+      'alt_telephone': (
+        l10n.coAltTelephone,
+        '+256 700 000 001',
+        TextInputType.phone,
+      ),
+      'email': (l10n.coEmail, 'info@example.com', TextInputType.emailAddress),
+      'website': (l10n.coWebsite, 'https://example.com', TextInputType.url),
+      'description': (
+        l10n.coDescription,
+        l10n.coDescriptionHint,
+        TextInputType.multiline,
+      ),
+    };
+  }
 
   @override
   void initState() {
@@ -123,17 +130,16 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       );
       if (picked == null) return;
       if (await File(picked.path).length() > 2 * 1024 * 1024) {
-        _snack('The logo must be 2 MB or smaller.');
+        if (mounted) _snack(_l10n.coLogoTooLarge);
         return;
       }
+      if (!mounted) return;
       setState(() {
         _newLogoPath = picked.path;
         _removeLogo = false;
       });
     } on Object {
-      _snack(
-        'The photo library could not be opened. Check the app\'s photo permission.',
-      );
+      if (mounted) _snack(_l10n.coPhotoLibraryDenied);
     }
   }
 
@@ -149,12 +155,13 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
         logoPath: _newLogoPath,
         removeLogo: _removeLogo,
       );
+      if (!mounted) return;
       setState(() {
         _logoUrl = saved.logoUrl;
         _newLogoPath = null;
         _removeLogo = false;
       });
-      _snack('Company profile saved. New BOQ exports will use these details.');
+      _snack(_l10n.coSaved);
     } on Object catch (error) {
       _snack(friendlyError(error));
     } finally {
@@ -208,19 +215,19 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
 
   /// Visual grouping of [CompanyProfile.keys]; any key not listed here is
   /// still rendered, in the last section.
-  static const _sections = <(String, IconData, List<String>)>[
+  List<(String, IconData, List<String>)> get _sections => [
     (
-      'Company details',
+      _l10n.coCompanyDetails,
       Icons.business_outlined,
       ['company_name', 'registration_number', 'tin', 'description'],
     ),
     (
-      'Location',
+      _l10n.coLocation,
       Icons.place_outlined,
       ['country', 'city', 'physical_address', 'postal_address'],
     ),
     (
-      'Contact',
+      _l10n.coContact,
       Icons.contact_phone_outlined,
       ['telephone', 'alt_telephone', 'email', 'website'],
     ),
@@ -230,16 +237,17 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       key == 'country' ? _countryField() : _textField(key);
 
   List<Widget> _formSections() {
-    final grouped = {for (final section in _sections) ...section.$3};
+    final sections = _sections;
+    final grouped = {for (final section in sections) ...section.$3};
     final leftovers = CompanyProfile.keys
         .where((key) => !grouped.contains(key))
         .toList();
     final widgets = <Widget>[];
-    for (var i = 0; i < _sections.length; i++) {
-      final (title, icon, keys) = _sections[i];
+    for (var i = 0; i < sections.length; i++) {
+      final (title, icon, keys) = sections[i];
       final sectionKeys = [
         ...keys.where(CompanyProfile.keys.contains),
-        if (i == _sections.length - 1) ...leftovers,
+        if (i == sections.length - 1) ...leftovers,
       ];
       if (sectionKeys.isEmpty) continue;
       widgets
@@ -260,8 +268,9 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final l10n = _l10n;
     return Scaffold(
-      appBar: AppBar(title: const Text('Company Profile')),
+      appBar: AppBar(title: Text(l10n.acctCompanyProfile)),
       body: _loading
           ? const LoadingState()
           : _loadError != null
@@ -275,14 +284,14 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const SectionHeader(
-                          title: 'PDF letterhead preview',
-                          subtitle: 'How your details appear on exported BOQs',
+                        SectionHeader(
+                          title: l10n.coPreviewTitle,
+                          subtitle: l10n.coPreviewSubtitle,
                         ),
                         _preview(context),
                         const SizedBox(height: AppSpacing.sectionGap),
                         SectionCard(
-                          title: 'Logo',
+                          title: l10n.coLogo,
                           icon: Icons.image_outlined,
                           children: [
                             Row(
@@ -304,7 +313,8 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
                                   child:
                                       _logoImage() ??
                                       Text(
-                                        'No logo',
+                                        l10n.coNoLogo,
+                                        textAlign: TextAlign.center,
                                         style: theme.textTheme.bodySmall
                                             ?.copyWith(
                                               color: scheme.onSurfaceVariant,
@@ -321,7 +331,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
                                         OutlinedButton.icon(
                                           onPressed: _pickLogo,
                                           icon: const Icon(Icons.upload),
-                                          label: const Text('Choose logo'),
+                                          label: Text(l10n.coChooseLogo),
                                         ),
                                         if (_logoImage() != null)
                                           TextButton.icon(
@@ -335,12 +345,11 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
                                             icon: const Icon(
                                               Icons.delete_outline,
                                             ),
-                                            label: const Text('Remove'),
+                                            label: Text(l10n.coRemove),
                                           ),
                                       ] else
                                         Text(
-                                          'The logo is managed by your '
-                                          'organisation administrator.',
+                                          l10n.coLogoManaged,
                                           style: theme.textTheme.bodySmall
                                               ?.copyWith(
                                                 color: scheme.onSurfaceVariant,
@@ -358,20 +367,16 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
                         const SizedBox(height: AppSpacing.sm),
                         if (_canEdit)
                           LoadingButton(
-                            label: 'Save Company Profile',
+                            label: l10n.coSaveProfile,
                             icon: Icons.save_outlined,
                             loading: _saving,
                             onPressed: _save,
                           )
                         else
-                          const InfoBanner(
-                            message:
-                                'This company profile is managed by your '
-                                'organisation administrator.',
-                          ),
+                          InfoBanner(message: l10n.coProfileManaged),
                         const SizedBox(height: AppSpacing.md),
                         Text(
-                          'BOQs keep the company details they were first exported with, even if you change this profile later.',
+                          l10n.coDetailsKept,
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
@@ -402,16 +407,16 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       validator: (value) {
         final text = value?.trim() ?? '';
         if (key == 'company_name' && text.isEmpty) {
-          return 'Company name is required.';
+          return _l10n.coNameRequired;
         }
         if (text.isEmpty) return null;
         if (key == 'email' &&
             !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(text)) {
-          return 'Enter a valid email address.';
+          return _l10n.commonInvalidEmail;
         }
         if ((key == 'telephone' || key == 'alt_telephone') &&
             !RegExp(r'^\+?[0-9 ()-]{6,40}$').hasMatch(text)) {
-          return 'Enter a valid phone number, including the country code.';
+          return _l10n.coInvalidPhone;
         }
         return null;
       },
@@ -424,13 +429,16 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
       initialValue: _countries.containsKey(current) ? current : null,
       isExpanded: true,
       decoration: InputDecoration(
-        labelText: 'Country',
+        labelText: _l10n.coCountry,
         prefixIcon: Icon(_fieldIcons['country']),
       ),
       items: [
-        const DropdownMenuItem(value: '', child: Text('Select...')),
+        DropdownMenuItem(value: '', child: Text(_l10n.coSelect)),
         for (final entry in _countries.entries)
-          DropdownMenuItem(value: entry.key, child: Text(entry.value)),
+          DropdownMenuItem(
+            value: entry.key,
+            child: Text(entry.value, overflow: TextOverflow.ellipsis),
+          ),
       ],
       onChanged: _canEdit
           ? (value) => _controllers['country']!.text = value ?? ''
@@ -483,7 +491,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
                     children: [
                       Text(
                         field('company_name').isEmpty
-                            ? 'Your Company Name'
+                            ? _l10n.coYourCompanyName
                             : field('company_name'),
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w800,
@@ -501,7 +509,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
                   ),
                 ),
                 Text(
-                  'BILL OF\nQUANTITIES',
+                  _l10n.coBillOfQuantities,
                   textAlign: TextAlign.right,
                   style: theme.textTheme.labelSmall?.copyWith(
                     fontSize: 9,
@@ -522,7 +530,7 @@ class _CompanyProfilePageState extends State<CompanyProfilePage> {
                   ),
                 Center(
                   child: Text(
-                    'PDF preview',
+                    _l10n.coPdfPreview,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: scheme.outline,
                     ),

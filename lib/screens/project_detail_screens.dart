@@ -23,65 +23,10 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
   Future<String?> _askProjectLocation(
     BuildContext context, {
     String initial = '',
-  }) async {
-    final controller = TextEditingController(text: initial);
-    final formKey = GlobalKey<FormState>();
-    final location = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        icon: const Icon(Icons.location_on_outlined),
-        title: const Text('Generate BOQ'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Prices depend on the location. Enter the town or district '
-                'where the project will be built; it is saved to the project.',
-              ),
-              const SizedBox(height: AppSpacing.md),
-              TextFormField(
-                controller: controller,
-                autofocus: true,
-                textInputAction: TextInputAction.done,
-                decoration: const InputDecoration(
-                  labelText: 'Project location',
-                  hintText: 'e.g. Kampala, Wakiso',
-                  prefixIcon: Icon(Icons.place_outlined),
-                ),
-                validator: (value) => (value ?? '').trim().isEmpty
-                    ? 'Enter the project location'
-                    : null,
-                onFieldSubmitted: (_) {
-                  if (formKey.currentState!.validate()) {
-                    Navigator.pop(dialogContext, controller.text.trim());
-                  }
-                },
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                Navigator.pop(dialogContext, controller.text.trim());
-              }
-            },
-            child: const Text('Generate BOQ'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    return location;
-  }
+  }) => showDialog<String>(
+    context: context,
+    builder: (_) => _ProjectLocationDialog(initial: initial),
+  );
 
   Future<void> _generateBoq(
     BuildContext context,
@@ -116,54 +61,68 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
       if (!context.mounted) return;
       final items = await api.allBoqItems(boq.id);
       if (!context.mounted) return;
+      final l10n = context.tr;
       if (items.isEmpty) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('$created BOQ items created')));
+        ).showSnackBar(SnackBar(content: Text(l10n.pdItemsCreated(created))));
         return;
       }
-      final progress = ValueNotifier<String>('Preparing to fetch prices...');
+      final progress = ValueNotifier<String>(l10n.pdPreparingPrices);
       final reportFuture = _priceBoqItems(
         api,
         items,
         place,
         onProgress: (done, total, description) {
-          progress.value = 'Fetching $done/$total: $description';
+          progress.value = l10n.pdFetchingProgress(done, total, description);
         },
       );
-      await showDialog<void>(
+      // The dialog is closed from here (once) when pricing finishes or fails.
+      BuildContext? dialogContext;
+      final dialogClosed = showDialog<void>(
         context: context,
         barrierDismissible: false,
-        builder: (dialogContext) {
-          reportFuture.then((_) {
-            if (dialogContext.mounted) {
-              Navigator.of(dialogContext).pop();
-            }
-          });
-          return AlertDialog(
-            title: const Text('Generating BOQ prices'),
-            content: ValueListenableBuilder<String>(
-              valueListenable: progress,
-              builder: (context, value, _) => Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(),
-                  const SizedBox(width: AppSpacing.lg),
-                  Expanded(child: Text(value)),
-                ],
+        builder: (ctx) {
+          dialogContext = ctx;
+          return PopScope(
+            canPop: false,
+            child: AlertDialog(
+              title: Text(l10n.pdGeneratingPrices),
+              content: ValueListenableBuilder<String>(
+                valueListenable: progress,
+                builder: (context, value, _) => Row(
+                  children: [
+                    const CircularProgressIndicator(),
+                    const SizedBox(width: AppSpacing.lg),
+                    Expanded(child: Text(value)),
+                  ],
+                ),
               ),
             ),
           );
         },
       );
-      final report = await reportFuture;
+      ItemPricingReport report;
+      try {
+        report = await reportFuture;
+      } finally {
+        if (dialogContext == null) await WidgetsBinding.instance.endOfFrame;
+        final dialog = dialogContext;
+        if (dialog != null && dialog.mounted) Navigator.of(dialog).pop();
+        await dialogClosed;
+        progress.dispose();
+      }
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             report.failedMessages.isEmpty
-                ? 'Generated prices for ${report.priced} items'
-                : 'Generated ${report.priced} of ${items.length} (${report.failedMessages.length} failed)',
+                ? l10n.pdGeneratedAll(report.priced)
+                : l10n.pdGeneratedPartial(
+                    report.priced,
+                    items.length,
+                    report.failedMessages.length,
+                  ),
           ),
         ),
       );
@@ -173,11 +132,11 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
               BoqItemsPage(api: api, boqId: boq.id, title: boq.name),
         ),
       );
-    } on ApiException catch (error) {
+    } on Object catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(error.message)));
+        ).showSnackBar(SnackBar(content: Text(friendlyError(error))));
       }
     }
   }
@@ -185,10 +144,10 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('Project Details'),
+      title: Text(context.tr.pdTitle),
       actions: [
         PopupMenuButton<String>(
-          tooltip: 'Project actions',
+          tooltip: context.tr.pdActions,
           onSelected: (value) async {
             if (value == 'edit') {
               final saved = await Navigator.of(context).push<bool>(
@@ -197,31 +156,31 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                       EditProjectPage(api: api, projectId: projectId),
                 ),
               );
-              if (saved == true) _reload();
+              if (saved == true && mounted) _reload();
             } else if (value == 'delete') {
               final confirm = await showDialog<bool>(
                 context: context,
-                builder: (_) => AlertDialog(
+                builder: (dialogContext) => AlertDialog(
                   icon: const Icon(
                     Icons.delete_outline,
                     color: AppColors.danger,
                   ),
-                  title: const Text('Delete Project'),
-                  content: const Text(
-                    'Are you sure you want to delete this project? This action cannot be undone.',
-                  ),
+                  title: Text(dialogContext.tr.pdDeleteTitle),
+                  content: Text(dialogContext.tr.pdDeleteConfirm),
                   actions: [
                     TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Cancel'),
+                      onPressed: () => Navigator.pop(dialogContext, false),
+                      child: Text(dialogContext.tr.cancel),
                     ),
                     FilledButton(
                       style: FilledButton.styleFrom(
                         backgroundColor: AppColors.danger,
-                        foregroundColor: Theme.of(context).colorScheme.onError,
+                        foregroundColor: Theme.of(
+                          dialogContext,
+                        ).colorScheme.onError,
                       ),
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Delete'),
+                      onPressed: () => Navigator.pop(dialogContext, true),
+                      child: Text(dialogContext.tr.pdDelete),
                     ),
                   ],
                 ),
@@ -230,39 +189,42 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                 try {
                   await api.deleteProject(projectId);
                   if (context.mounted) {
+                    final messenger = ScaffoldMessenger.of(context);
+                    final message = context.tr.pdDeleted;
                     Navigator.of(context).pop(true);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Project deleted')),
-                    );
+                    messenger.showSnackBar(SnackBar(content: Text(message)));
                   }
-                } on ApiException catch (e) {
+                } on Object catch (e) {
                   if (context.mounted) {
                     ScaffoldMessenger.of(
                       context,
-                    ).showSnackBar(SnackBar(content: Text(e.message)));
+                    ).showSnackBar(SnackBar(content: Text(friendlyError(e))));
                   }
                 }
               }
             }
           },
-          itemBuilder: (_) => [
-            const PopupMenuItem(
+          itemBuilder: (menuContext) => [
+            PopupMenuItem(
               value: 'edit',
               child: Row(
                 children: [
-                  Icon(Icons.edit_outlined),
-                  SizedBox(width: AppSpacing.sm),
-                  Text('Edit'),
+                  const Icon(Icons.edit_outlined),
+                  const SizedBox(width: AppSpacing.sm),
+                  Text(menuContext.tr.orgEdit),
                 ],
               ),
             ),
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'delete',
               child: Row(
                 children: [
-                  Icon(Icons.delete_outline, color: AppColors.danger),
-                  SizedBox(width: AppSpacing.sm),
-                  Text('Delete', style: TextStyle(color: AppColors.danger)),
+                  const Icon(Icons.delete_outline, color: AppColors.danger),
+                  const SizedBox(width: AppSpacing.sm),
+                  Text(
+                    menuContext.tr.pdDelete,
+                    style: const TextStyle(color: AppColors.danger),
+                  ),
                 ],
               ),
             ),
@@ -284,6 +246,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
           final project = snapshot.data!;
           final theme = Theme.of(context);
           final scheme = theme.colorScheme;
+          final l10n = context.tr;
           return ListView(
             padding: AppSpacing.page,
             children: [
@@ -319,7 +282,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                                       ),
                                       const SizedBox(height: AppSpacing.xs),
                                       Text(
-                                        'Code: ${project.code}',
+                                        l10n.pdCode(project.code),
                                         style: theme.textTheme.bodySmall
                                             ?.copyWith(
                                               color: scheme.onSurfaceVariant,
@@ -344,7 +307,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                             const Divider(height: 1),
                             const SizedBox(height: AppSpacing.md),
                             Text(
-                              'Contract Value',
+                              l10n.projContractValue,
                               style: theme.textTheme.labelLarge?.copyWith(
                                 color: scheme.onSurfaceVariant,
                               ),
@@ -365,18 +328,18 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                     ),
                     const SizedBox(height: AppSpacing.lg),
                     SectionCard(
-                      title: 'Overview',
+                      title: l10n.pdOverview,
                       icon: Icons.info_outline,
                       children: [
                         _detailRow(
-                          'Owner',
+                          l10n.pdOwner,
                           project.ownerName.isNotEmpty
                               ? project.ownerName
                               : '—',
                         ),
-                        _detailRow('Status', project.status.capitalize()),
+                        _detailRow(l10n.status, project.status.capitalize()),
                         _detailRow(
-                          'Project Type',
+                          l10n.projProjectType,
                           project.projectType.isNotEmpty
                               ? project.projectType
                               : '—',
@@ -385,45 +348,45 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                     ),
                     const SizedBox(height: AppSpacing.lg),
                     SectionCard(
-                      title: 'Parties',
+                      title: l10n.projParties,
                       icon: Icons.groups_outlined,
                       children: [
                         _detailRow(
-                          'Client',
+                          l10n.projClient,
                           project.client.isNotEmpty ? project.client : '—',
                         ),
                         _detailRow(
-                          'Contractor',
+                          l10n.projContractor,
                           project.contractor.isNotEmpty
                               ? project.contractor
                               : '—',
                         ),
                         _detailRow(
-                          'Consultant',
+                          l10n.projConsultant,
                           project.consultant.isNotEmpty
                               ? project.consultant
                               : '—',
                         ),
                         _detailRow(
-                          'Quantity Surveyor',
+                          l10n.projQuantitySurveyor,
                           project.quantitySurveyor.isNotEmpty
                               ? project.quantitySurveyor
                               : '—',
                         ),
                         _detailRow(
-                          'Project Manager',
+                          l10n.projProjectManager,
                           project.projectManager.isNotEmpty
                               ? project.projectManager
                               : '—',
                         ),
                         _detailRow(
-                          'Site Engineer',
+                          l10n.projSiteEngineer,
                           project.siteEngineer.isNotEmpty
                               ? project.siteEngineer
                               : '—',
                         ),
                         _detailRow(
-                          'Funding Organisation',
+                          l10n.projFundingOrganisation,
                           project.fundingOrganisation.isNotEmpty
                               ? project.fundingOrganisation
                               : '—',
@@ -432,11 +395,11 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                     ),
                     const SizedBox(height: AppSpacing.lg),
                     SectionCard(
-                      title: 'Location',
+                      title: l10n.location,
                       icon: Icons.location_on_outlined,
                       children: [
                         _detailRow(
-                          'Location',
+                          l10n.location,
                           _formatLocation(
                             project.country,
                             project.district,
@@ -447,15 +410,15 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                     ),
                     const SizedBox(height: AppSpacing.lg),
                     SectionCard(
-                      title: 'Dates',
+                      title: l10n.pdDates,
                       icon: Icons.event_note_outlined,
                       children: [
                         _detailRow(
-                          'Start Date',
+                          l10n.startDate,
                           displayDate(project.startDate),
                         ),
                         _detailRow(
-                          'Expected Completion',
+                          l10n.pdExpectedCompletion,
                           displayDate(project.expectedCompletionDate),
                         ),
                       ],
@@ -463,7 +426,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                     if (project.description.isNotEmpty) ...[
                       const SizedBox(height: AppSpacing.lg),
                       SectionCard(
-                        title: 'Description',
+                        title: l10n.projDescription,
                         icon: Icons.notes_outlined,
                         children: [
                           Text(
@@ -477,11 +440,11 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                     BoqTotalsCard(
                       totals: project.totals,
                       currency: project.currency,
-                      title: 'Project totals',
+                      title: l10n.pdProjectTotals,
                     ),
                     const SizedBox(height: AppSpacing.sectionGap),
                     SectionHeader(
-                      title: 'BOQs',
+                      title: l10n.boqs,
                       trailing: project.boqs.isEmpty
                           ? null
                           : StatusBadge(
@@ -490,11 +453,11 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                             ),
                     ),
                     if (project.boqs.isEmpty)
-                      const Card(
+                      Card(
                         child: EmptyState(
                           compact: true,
                           icon: Icons.description_outlined,
-                          title: 'No BOQs yet',
+                          title: l10n.pdNoBoqs,
                         ),
                       ),
                     for (final boq in project.boqs)
@@ -503,7 +466,11 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                           icon: Icons.description_outlined,
                         ),
                         title: boq.name,
-                        subtitle: boqTotalsLine(boq.totals, project.currency),
+                        subtitle: boqTotalsLine(
+                          boq.totals,
+                          project.currency,
+                          l10n,
+                        ),
                         showChevron: false,
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -533,15 +500,16 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                                     createdAt: '',
                                   ),
                                 );
-                                if (saved) reload();
+                                if (saved && mounted) reload();
                               },
                               onDelete: () async {
                                 if (await confirmDeleteBoq(
-                                  context,
-                                  api,
-                                  boq.id,
-                                  boq.name,
-                                )) {
+                                      context,
+                                      api,
+                                      boq.id,
+                                      boq.name,
+                                    ) &&
+                                    mounted) {
                                   reload();
                                 }
                               },
@@ -559,10 +527,9 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                                   ),
                                 ),
                               );
-                          if (changed == true) reload();
+                          if (changed == true && mounted) reload();
                         },
-                        footer:
-                            boq.status == 'uploaded' && api.can('boq.edit')
+                        footer: boq.status == 'uploaded' && api.can('boq.edit')
                             ? FilledButton.icon(
                                 style: FilledButton.styleFrom(
                                   minimumSize: const Size.fromHeight(
@@ -572,7 +539,7 @@ class _ProjectDetailPageState extends State<ProjectDetailPage> {
                                 onPressed: () =>
                                     _generateBoq(context, project, boq),
                                 icon: const Icon(Icons.auto_awesome),
-                                label: const Text('Generate BOQ'),
+                                label: Text(l10n.pdGenerateBoq),
                               )
                             : null,
                       ),
@@ -685,6 +652,7 @@ class _EditProjectPageState extends State<EditProjectPage> {
   String _status = 'draft';
   bool _loading = false;
   ProjectDetail? _project;
+  Object? _loadError;
 
   @override
   void initState() {
@@ -692,7 +660,37 @@ class _EditProjectPageState extends State<EditProjectPage> {
     _loadProject();
   }
 
+  @override
+  void dispose() {
+    for (final controller in [
+      _name,
+      _code,
+      _client,
+      _contractor,
+      _consultant,
+      _quantitySurveyor,
+      _projectManager,
+      _siteEngineer,
+      _fundingOrganisation,
+      _country,
+      _district,
+      _location,
+      _projectType,
+      _startDate,
+      _expectedCompletionDate,
+      _contractValue,
+      _currency,
+      _description,
+      _originalLanguage,
+      _reportLanguage,
+    ]) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
   Future<void> _loadProject() async {
+    if (_loadError != null) setState(() => _loadError = null);
     try {
       final project = await widget.api.project(widget.projectId);
       if (mounted) {
@@ -721,12 +719,9 @@ class _EditProjectPageState extends State<EditProjectPage> {
           _status = project.status;
         });
       }
-    } on ApiException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.message)));
-      }
+    } on Object catch (e) {
+      // Shown as an error state with Retry instead of an endless spinner.
+      if (mounted) setState(() => _loadError = e);
     }
   }
 
@@ -737,7 +732,9 @@ class _EditProjectPageState extends State<EditProjectPage> {
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
     );
-    if (date != null) controller.text = date.toIso8601String().split('T').first;
+    if (date != null && mounted) {
+      controller.text = date.toIso8601String().split('T').first;
+    }
   }
 
   Future<void> _save() async {
@@ -785,7 +782,7 @@ class _EditProjectPageState extends State<EditProjectPage> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Project updated')));
+        ).showSnackBar(SnackBar(content: Text(context.tr.pdUpdated)));
         Navigator.pop(context, true);
       }
     } on Object catch (e) {
@@ -801,9 +798,12 @@ class _EditProjectPageState extends State<EditProjectPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.tr;
     return Scaffold(
-      appBar: AppBar(title: const Text('Edit Project')),
-      body: _project == null
+      appBar: AppBar(title: Text(l10n.pdEditTitle)),
+      body: _loadError != null
+          ? ErrorState(error: _loadError, onRetry: _loadProject)
+          : _project == null
           ? const LoadingState()
           : Form(
               key: _formKey,
@@ -815,19 +815,21 @@ class _EditProjectPageState extends State<EditProjectPage> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         SectionCard(
-                          title: 'Basic details',
+                          title: l10n.projBasicDetails,
                           icon: Icons.info_outline,
                           spacing: AppSpacing.md,
                           children: [
                             _projectTextField(
                               controller: _name,
-                              label: 'Project Name *',
+                              label: l10n.projNameRequired,
                               icon: Icons.foundation_outlined,
-                              validator: (v) => v!.isEmpty ? 'Required' : null,
+                              validator: (v) => (v ?? '').trim().isEmpty
+                                  ? l10n.projRequired
+                                  : null,
                             ),
                             _projectTextField(
                               controller: _code,
-                              label: 'Project Code',
+                              label: l10n.projectCode,
                               icon: Icons.tag,
                             ),
                             _ProjectTypeField(
@@ -836,122 +838,107 @@ class _EditProjectPageState extends State<EditProjectPage> {
                             ),
                             DropdownButtonFormField<String>(
                               initialValue: _status,
-                              decoration: const InputDecoration(
-                                labelText: 'Status',
-                                prefixIcon: Icon(Icons.flag_outlined),
+                              decoration: InputDecoration(
+                                labelText: l10n.status,
+                                prefixIcon: const Icon(Icons.flag_outlined),
                               ),
-                              items: const [
-                                DropdownMenuItem(
-                                  value: 'draft',
-                                  child: Text('Draft'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'active',
-                                  child: Text('Active'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'completed',
-                                  child: Text('Completed'),
-                                ),
-                                DropdownMenuItem(
-                                  value: 'archived',
-                                  child: Text('Archived'),
-                                ),
-                              ],
-                              onChanged: (v) => setState(() => _status = v!),
+                              items: _projectStatusItems(l10n, _status),
+                              onChanged: (v) {
+                                if (v != null) setState(() => _status = v);
+                              },
                             ),
                             _projectTextField(
                               controller: _description,
-                              label: 'Description',
+                              label: l10n.projDescription,
                               maxLines: 3,
                             ),
                           ],
                         ),
                         const SizedBox(height: AppSpacing.lg),
                         SectionCard(
-                          title: 'Parties',
+                          title: l10n.projParties,
                           icon: Icons.groups_outlined,
                           spacing: AppSpacing.md,
                           children: [
                             _projectTextField(
                               controller: _client,
-                              label: 'Client',
+                              label: l10n.projClient,
                               icon: Icons.business_outlined,
                             ),
                             _projectTextField(
                               controller: _contractor,
-                              label: 'Contractor',
+                              label: l10n.projContractor,
                               icon: Icons.engineering_outlined,
                             ),
                             _projectTextField(
                               controller: _consultant,
-                              label: 'Consultant',
+                              label: l10n.projConsultant,
                               icon: Icons.support_agent_outlined,
                             ),
                             _projectTextField(
                               controller: _quantitySurveyor,
-                              label: 'Quantity Surveyor',
+                              label: l10n.projQuantitySurveyor,
                               icon: Icons.straighten_outlined,
                             ),
                             _projectTextField(
                               controller: _projectManager,
-                              label: 'Project Manager',
+                              label: l10n.projProjectManager,
                               icon: Icons.manage_accounts_outlined,
                             ),
                             _projectTextField(
                               controller: _siteEngineer,
-                              label: 'Site Engineer',
+                              label: l10n.projSiteEngineer,
                               icon: Icons.construction_outlined,
                             ),
                             _projectTextField(
                               controller: _fundingOrganisation,
-                              label: 'Funding Organisation',
+                              label: l10n.projFundingOrganisation,
                               icon: Icons.account_balance_outlined,
                             ),
                           ],
                         ),
                         const SizedBox(height: AppSpacing.lg),
                         SectionCard(
-                          title: 'Location',
+                          title: l10n.location,
                           icon: Icons.location_on_outlined,
                           spacing: AppSpacing.md,
                           children: [
                             _projectTextField(
                               controller: _country,
-                              label: 'Country',
+                              label: l10n.projCountry,
                               icon: Icons.public,
                             ),
                             _projectTextField(
                               controller: _district,
-                              label: 'District',
+                              label: l10n.projDistrict,
                               icon: Icons.map_outlined,
                             ),
                             _projectTextField(
                               controller: _location,
-                              label: 'Location',
+                              label: l10n.location,
                               icon: Icons.place_outlined,
                             ),
                           ],
                         ),
                         const SizedBox(height: AppSpacing.lg),
                         SectionCard(
-                          title: 'Dates & value',
+                          title: l10n.projDatesValue,
                           icon: Icons.event_note_outlined,
                           spacing: AppSpacing.md,
                           children: [
                             _projectDateField(
                               controller: _startDate,
-                              label: 'Start Date',
+                              label: l10n.startDate,
                               onTap: () => _pickDate(_startDate),
                             ),
                             _projectDateField(
                               controller: _expectedCompletionDate,
-                              label: 'Expected Completion Date',
+                              label: l10n.projExpectedCompletionDate,
                               onTap: () => _pickDate(_expectedCompletionDate),
                             ),
                             _projectTextField(
                               controller: _contractValue,
-                              label: 'Contract Value',
+                              label: l10n.projContractValue,
                               icon: Icons.payments_outlined,
                               keyboardType:
                                   const TextInputType.numberWithOptions(
@@ -963,32 +950,32 @@ class _EditProjectPageState extends State<EditProjectPage> {
                             ),
                             _projectTextField(
                               controller: _currency,
-                              label: 'Currency',
+                              label: l10n.currency,
                               icon: Icons.currency_exchange,
                             ),
                           ],
                         ),
                         const SizedBox(height: AppSpacing.lg),
                         SectionCard(
-                          title: 'Languages',
+                          title: l10n.projLanguages,
                           icon: Icons.translate,
                           spacing: AppSpacing.md,
                           children: [
                             _projectTextField(
                               controller: _originalLanguage,
-                              label: 'Original Language',
+                              label: l10n.projOriginalLanguage,
                               icon: Icons.language,
                             ),
                             _projectTextField(
                               controller: _reportLanguage,
-                              label: 'Report Language',
+                              label: l10n.projReportLanguage,
                               icon: Icons.description_outlined,
                             ),
                           ],
                         ),
                         const SizedBox(height: AppSpacing.xxl),
                         LoadingButton(
-                          label: 'Save Changes',
+                          label: l10n.saveChanges,
                           icon: Icons.save_outlined,
                           loading: _loading,
                           onPressed: _save,
@@ -1066,7 +1053,7 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
     if (location.isEmpty || _pricing) return;
     setState(() {
       _pricing = true;
-      _progress = 'Loading BOQ items...';
+      _progress = context.tr.pdLoadingItems;
       _history = [];
       _historyVisible = false;
       _failedReport = [];
@@ -1078,7 +1065,7 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
       if (items.isEmpty) {
         setState(() {
           _pricing = false;
-          _progress = 'No BOQ items found to price';
+          _progress = context.tr.pdNoItemsToPrice;
         });
         return;
       }
@@ -1094,7 +1081,7 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
       if (mounted) {
         setState(() {
           _pricing = false;
-          _progress = 'Failed to load BOQ items';
+          _progress = context.tr.pdLoadItemsFailed;
         });
       }
     }
@@ -1110,7 +1097,13 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
       location,
       onProgress: (done, total, description) {
         if (mounted) {
-          setState(() => _progress = 'Fetching $done/$total: $description');
+          setState(
+            () => _progress = context.tr.pdFetchingProgress(
+              done,
+              total,
+              description,
+            ),
+          );
         }
       },
     );
@@ -1121,8 +1114,12 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
       _failedReport = report.failedMessages;
       _retryItems = report.failedItems;
       _progress = report.failedMessages.isEmpty
-          ? 'Fetched prices for ${report.priced} items'
-          : 'Fetched ${report.priced} of ${targets.length} items (${report.failedMessages.length} failed)';
+          ? context.tr.pdFetchedAll(report.priced)
+          : context.tr.pdFetchedPartial(
+              report.priced,
+              targets.length,
+              report.failedMessages.length,
+            );
       _historyVisible = true;
     });
     await _loadHistory();
@@ -1137,15 +1134,15 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
       _pricing = true;
       _failedReport = [];
       _retryItems = [];
-      _progress = 'Retrying ${targets.length} failed items...';
+      _progress = context.tr.pdRetrying(targets.length);
     });
     try {
       await _runPricing(targets, location);
-    } on ApiException catch (error) {
+    } on Object catch (error) {
       if (mounted) {
         setState(() {
           _pricing = false;
-          _progress = error.message;
+          _progress = friendlyError(error);
         });
       }
     }
@@ -1155,8 +1152,16 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
     if (!_historyVisible) return;
     final loc = _location.text.trim();
     if (loc.isEmpty) return;
-    final h = await widget.api.pricingHistory(widget.boqId, loc);
-    if (mounted) setState(() => _history = h);
+    try {
+      final h = await widget.api.pricingHistory(widget.boqId, loc);
+      if (mounted) setState(() => _history = h);
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(friendlyError(error))));
+      }
+    }
   }
 
   Future<void> _compareLocations() async {
@@ -1168,11 +1173,11 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
           builder: (_) => LocationComparisonPage(history: history),
         ),
       );
-    } on ApiException catch (error) {
+    } on Object catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text(error.message)));
+        ).showSnackBar(SnackBar(content: Text(friendlyError(error))));
       }
     }
   }
@@ -1193,7 +1198,7 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
               ),
             ),
           ),
-          tooltip: 'View Hierarchy',
+          tooltip: context.tr.pdViewHierarchy,
         ),
       ],
     ),
@@ -1232,6 +1237,7 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
               sum + (double.tryParse(item.amount.replaceAll(',', '')) ?? 0),
         );
         final money = NumberFormat('#,##0.00');
+        final l10n = context.tr;
         return RefreshIndicator(
           onRefresh: _refreshItems,
           child: ListView(
@@ -1244,32 +1250,34 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     HighlightCard(
-                      label: 'Overall BOQ Cost',
+                      label: l10n.pdOverallCost,
                       value: '${boq.currency} ${money.format(total)}',
                       icon: Icons.account_balance_wallet_outlined,
                     ),
                     const SizedBox(height: AppSpacing.lg),
                     SectionCard(
-                      title: 'Get Prices',
+                      title: l10n.getPrices,
                       icon: Icons.sell_outlined,
                       spacing: AppSpacing.md,
                       children: [
                         TextField(
                           controller: _location,
-                          decoration: const InputDecoration(
-                            labelText: 'Select location',
-                            prefixIcon: Icon(Icons.location_on_outlined),
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => _price(),
+                          decoration: InputDecoration(
+                            labelText: l10n.pdSelectLocation,
+                            prefixIcon: const Icon(Icons.location_on_outlined),
                           ),
                         ),
                         LoadingButton(
-                          label: 'Get Prices',
+                          label: l10n.getPrices,
                           icon: Icons.auto_awesome,
                           loading: _pricing,
                           onPressed: _price,
                         ),
                         if (_progress != null)
                           InfoBanner(
-                            message: 'Progress: $_progress',
+                            message: l10n.pdProgress(_progress!),
                             tone: BannerTone.info,
                             icon: Icons.schedule,
                           ),
@@ -1295,7 +1303,7 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
                               ),
                             ),
                             icon: const Icon(Icons.fact_check_outlined),
-                            label: const Text('Review prices'),
+                            label: Text(l10n.pdReviewPrices),
                           ),
                         ),
                         const SizedBox(width: AppSpacing.sm),
@@ -1311,7 +1319,7 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
                               ),
                             ),
                             icon: const Icon(Icons.map_outlined),
-                            label: const Text('Location prices'),
+                            label: Text(l10n.pdLocationPrices),
                           ),
                         ),
                       ],
@@ -1319,8 +1327,7 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
                     if (_failedReport.isNotEmpty) ...[
                       const SizedBox(height: AppSpacing.md),
                       InfoBanner(
-                        title:
-                            '${_failedReport.length} item(s) could not be priced:',
+                        title: l10n.pdItemsNotPriced(_failedReport.length),
                         message: [
                           for (final failure in _failedReport) '- $failure',
                         ].join('\n'),
@@ -1331,7 +1338,7 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
                           child: TextButton.icon(
                             onPressed: _pricing ? null : _retry,
                             icon: const Icon(Icons.refresh),
-                            label: const Text('Retry failed items'),
+                            label: Text(l10n.pdRetryFailed),
                           ),
                         ),
                     ],
@@ -1343,10 +1350,10 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
                         ),
                         onPressed: _compareLocations,
                         icon: const Icon(Icons.compare_arrows),
-                        label: const Text('Compare saved locations'),
+                        label: Text(l10n.pdCompareLocations),
                       ),
                       const SizedBox(height: AppSpacing.sectionGap),
-                      const SectionHeader(title: 'Pricing History'),
+                      SectionHeader(title: l10n.pdPricingHistory),
                       if (_history.isEmpty)
                         FilledButton.tonalIcon(
                           style: FilledButton.styleFrom(
@@ -1354,7 +1361,7 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
                           ),
                           onPressed: _loadHistory,
                           icon: const Icon(Icons.history),
-                          label: const Text('Load History'),
+                          label: Text(l10n.pdLoadHistory),
                         )
                       else
                         for (final h in _history)
@@ -1363,11 +1370,17 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
                               icon: Icons.history,
                               tone: StatusTone.info,
                             ),
-                            title: '${h['boqItem']?['description'] ?? ''}',
+                            title: jsonString(
+                              jsonMap(h['boqItem'])['description'],
+                            ),
                             subtitle:
-                                '${h['boqItem']?['quantity']} ${h['boqItem']?['unit'] ?? ''}',
+                                '${jsonString(jsonMap(h['boqItem'])['quantity'])} '
+                                '${jsonString(jsonMap(h['boqItem'])['unit'])}',
                             trailing: Text(
-                              '${h['suggested_rate'] ?? 'N/A'}',
+                              jsonString(
+                                h['suggested_rate'],
+                                l10n.pdNotAvailable,
+                              ),
                               style: theme.textTheme.titleSmall?.copyWith(
                                 fontWeight: FontWeight.w700,
                                 color: theme.colorScheme.primary,
@@ -1387,7 +1400,7 @@ class _BoqItemsPageState extends State<BoqItemsPage> {
       onPressed: () =>
           showBoqShareSheet(context, widget.api, widget.boqId, widget.title),
       icon: const Icon(Icons.share_outlined),
-      label: const Text('PDF & Share'),
+      label: Text(context.tr.pdPdfShare),
     ),
   );
 }
@@ -1401,17 +1414,20 @@ class LocationComparisonPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final grouped = <String, List<Map<String, dynamic>>>{};
     for (final entry in history) {
-      final location = '${entry['location'] ?? 'Unknown location'}';
+      final location = jsonString(
+        entry['location'],
+        context.tr.pdUnknownLocation,
+      );
       grouped.putIfAbsent(location, () => []).add(entry);
     }
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Scaffold(
-      appBar: AppBar(title: const Text('Location Price Comparison')),
+      appBar: AppBar(title: Text(context.tr.pdLocationComparison)),
       body: history.isEmpty
-          ? const EmptyState(
+          ? EmptyState(
               icon: Icons.compare_arrows,
-              title: 'No saved location prices yet',
+              title: context.tr.pdNoSavedLocations,
             )
           : ListView(
               padding: AppSpacing.page,
@@ -1420,9 +1436,7 @@ class LocationComparisonPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const SectionHeader(
-                        title: 'Saved prices by hardware and location',
-                      ),
+                      SectionHeader(title: context.tr.pdSavedPricesByLocation),
                       for (final location in grouped.keys) ...[
                         SectionCard(
                           title: location,
@@ -1442,12 +1456,19 @@ class LocationComparisonPage extends StatelessWidget {
                                           CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          '${grouped[location]![i]['boqItem']?['description'] ?? 'Hardware item'}',
+                                          jsonString(
+                                            jsonMap(
+                                              grouped[location]![i]['boqItem'],
+                                            )['description'],
+                                            context.tr.pdHardwareItem,
+                                          ),
                                           style: theme.textTheme.titleSmall,
                                         ),
                                         const SizedBox(height: AppSpacing.xxs),
                                         Text(
-                                          '${grouped[location]![i]['boqItem']?['unit'] ?? ''}  |  ${grouped[location]![i]['currency'] ?? ''}',
+                                          '${jsonString(jsonMap(grouped[location]![i]['boqItem'])['unit'])}'
+                                          '  |  '
+                                          '${jsonString(grouped[location]![i]['currency'])}',
                                           style: theme.textTheme.bodySmall
                                               ?.copyWith(
                                                 color: scheme.onSurfaceVariant,
@@ -1458,7 +1479,10 @@ class LocationComparisonPage extends StatelessWidget {
                                   ),
                                   const SizedBox(width: AppSpacing.md),
                                   Text(
-                                    '${grouped[location]![i]['suggested_rate'] ?? 'N/A'}',
+                                    jsonString(
+                                      grouped[location]![i]['suggested_rate'],
+                                      context.tr.pdNotAvailable,
+                                    ),
                                     style: theme.textTheme.titleSmall?.copyWith(
                                       fontWeight: FontWeight.w700,
                                       color: scheme.primary,
@@ -1476,6 +1500,76 @@ class LocationComparisonPage extends StatelessWidget {
                 ),
               ],
             ),
+    );
+  }
+}
+
+/// Asks for the project location before generating a BOQ. Owns its text
+/// controller so it is disposed only after the dialog has fully closed.
+class _ProjectLocationDialog extends StatefulWidget {
+  const _ProjectLocationDialog({required this.initial});
+
+  final String initial;
+
+  @override
+  State<_ProjectLocationDialog> createState() => _ProjectLocationDialogState();
+}
+
+class _ProjectLocationDialogState extends State<_ProjectLocationDialog> {
+  late final _controller = TextEditingController(text: widget.initial);
+  final _formKey = GlobalKey<FormState>();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (_formKey.currentState!.validate()) {
+      Navigator.pop(context, _controller.text.trim());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.tr;
+    return AlertDialog(
+      // Scrolls when the keyboard leaves little room on small phones.
+      scrollable: true,
+      icon: const Icon(Icons.location_on_outlined),
+      title: Text(l10n.pdGenerateBoq),
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l10n.pdLocationHelp),
+            const SizedBox(height: AppSpacing.md),
+            TextFormField(
+              controller: _controller,
+              autofocus: true,
+              textInputAction: TextInputAction.done,
+              decoration: InputDecoration(
+                labelText: l10n.pdProjectLocation,
+                hintText: l10n.pdProjectLocationHint,
+                prefixIcon: const Icon(Icons.place_outlined),
+              ),
+              validator: (value) =>
+                  (value ?? '').trim().isEmpty ? l10n.pdEnterLocation : null,
+              onFieldSubmitted: (_) => _submit(),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(l10n.cancel),
+        ),
+        FilledButton(onPressed: _submit, child: Text(l10n.pdGenerateBoq)),
+      ],
     );
   }
 }

@@ -62,11 +62,13 @@ class PageHeader extends StatelessWidget {
     super.key,
     required this.title,
     this.subtitle,
+    this.leading,
     this.trailing,
   });
 
   final String title;
   final String? subtitle;
+  final Widget? leading;
   final Widget? trailing;
 
   @override
@@ -75,6 +77,10 @@ class PageHeader extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (leading != null) ...[
+          leading!,
+          const SizedBox(width: AppSpacing.md),
+        ],
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -597,15 +603,46 @@ class LoadingButton extends StatelessWidget {
   }
 }
 
-/// Brand mark used on auth screens and the drawer header.
+/// Brand mark used on auth screens, the splash loader and the drawer header.
 class BrandMark extends StatelessWidget {
   const BrandMark({super.key, this.size = 64, this.icon});
+
+  /// Bundled brand logo (see assets/icons/logo_512.png).
+  static const String logoAsset = 'assets/icons/logo_512.png';
 
   final double size;
   final IconData? icon;
 
   @override
   Widget build(BuildContext context) {
+    // The brand logo is shown by default; an explicit [icon] keeps the tinted
+    // gradient tile for the contextual steps (sign up, password reset).
+    final markIcon = icon;
+    if (markIcon == null) {
+      return Container(
+        width: size,
+        height: size,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(size * 0.28),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.24),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Image.asset(
+          logoAsset,
+          fit: BoxFit.cover,
+          filterQuality: FilterQuality.high,
+          excludeFromSemantics: true,
+        ),
+      );
+    }
+
     return Container(
       width: size,
       height: size,
@@ -627,11 +664,7 @@ class BrandMark extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          Icon(
-            icon ?? Icons.foundation_outlined,
-            color: Colors.white,
-            size: size * 0.52,
-          ),
+          Icon(markIcon, color: Colors.white, size: size * 0.52),
           Positioned(
             right: size * 0.16,
             top: size * 0.16,

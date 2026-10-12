@@ -6,6 +6,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'l10n/app_localizations.dart';
 import 'theme/app_theme.dart';
 
 /// Shows a "No Internet Connection" screen whenever the device is offline and
@@ -61,7 +62,7 @@ class _ConnectivityGateState extends State<ConnectivityGate>
   }
 
   Future<void> _check() async {
-    if (_checking) return;
+    if (_checking || !mounted) return;
     setState(() => _checking = true);
 
     var online = false;
@@ -134,6 +135,11 @@ class NoInternetScreen extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final isAndroid = !kIsWeb && Platform.isAndroid;
+    // The gate sits above the navigator; fall back to English if it is ever
+    // shown without app localizations.
+    final l10n =
+        AppLocalizations.of(context) ??
+        lookupAppLocalizations(const Locale('en'));
     const buttonSize = Size.fromHeight(AppSizes.buttonHeight);
 
     return Material(
@@ -176,14 +182,14 @@ class NoInternetScreen extends StatelessWidget {
                   Semantics(
                     header: true,
                     child: Text(
-                      'No Internet Connection',
+                      l10n.connNoInternet,
                       style: theme.textTheme.headlineSmall,
                       textAlign: TextAlign.center,
                     ),
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    'Please connect to Wi-Fi or mobile data to continue.',
+                    l10n.connConnectPrompt,
                     style: theme.textTheme.bodyLarge?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
@@ -203,14 +209,14 @@ class NoInternetScreen extends StatelessWidget {
                             ),
                           )
                         : const Icon(Icons.refresh_rounded),
-                    label: Text(checking ? 'Checking...' : 'Retry'),
+                    label: Text(checking ? l10n.connChecking : l10n.retry),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(minimumSize: buttonSize),
                     onPressed: () => _open(AppSettingsType.wifi),
                     icon: const Icon(Icons.wifi_rounded),
-                    label: const Text('Open Wi-Fi Settings'),
+                    label: Text(l10n.connOpenWifi),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   OutlinedButton.icon(
@@ -223,8 +229,8 @@ class NoInternetScreen extends StatelessWidget {
                     icon: const Icon(Icons.signal_cellular_alt_rounded),
                     label: Text(
                       isAndroid
-                          ? 'Open Mobile Data Settings'
-                          : 'Open Network Settings',
+                          ? l10n.connOpenMobileData
+                          : l10n.connOpenNetwork,
                     ),
                   ),
                   const SizedBox(height: AppSpacing.xl),
@@ -239,7 +245,7 @@ class NoInternetScreen extends StatelessWidget {
                       const SizedBox(width: AppSpacing.xs + 2),
                       Flexible(
                         child: Text(
-                          'The app continues automatically once you are back online.',
+                          l10n.connAutoContinue,
                           style: theme.textTheme.bodySmall,
                           textAlign: TextAlign.center,
                         ),

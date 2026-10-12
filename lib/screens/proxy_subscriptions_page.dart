@@ -41,6 +41,7 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
         if (e is! ApiException || !mounted) return;
         final message = e.message.toLowerCase();
         final denied =
+            e.statusCode == 403 ||
             message.contains('unauthorized') ||
             message.contains('forbidden') ||
             message.contains('admin');
@@ -218,7 +219,7 @@ class _ProxySubscriptionListPageState extends State<ProxySubscriptionListPage> {
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear),
-                        tooltip: 'Clear search',
+                        tooltip: l10n.commonClearSearch,
                         onPressed: () {
                           _searchController.clear();
                           setState(() {});

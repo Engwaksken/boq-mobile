@@ -142,18 +142,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(AppSpacing.sm),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(AppRadii.sm),
-                      ),
-                      child: const Icon(
-                        Icons.foundation_outlined,
-                        color: AppColors.accent,
-                        size: 28,
-                      ),
-                    ),
+                    const BrandMark(size: 48),
                     const SizedBox(height: AppSpacing.lg),
                     Text(
                       l10n.appTitle,
@@ -197,7 +186,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
               drawerTile(
                 icon: Icons.receipt_long_outlined,
-                label: 'BOQs',
+                label: l10n.boqs,
                 onTap: () {
                   Navigator.of(context).pop();
                   Navigator.of(context).push(

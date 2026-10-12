@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:boq_mobile/api_client.dart';
+import 'package:boq_mobile/l10n/app_localizations.dart';
 import 'package:boq_mobile/main.dart';
 import 'package:boq_mobile/theme/app_theme.dart';
 import 'package:flutter/material.dart';
@@ -222,6 +223,8 @@ Widget _app(Widget home, {ThemeMode mode = ThemeMode.light}) => MaterialApp(
   theme: AppTheme.light,
   darkTheme: AppTheme.dark,
   themeMode: mode,
+  localizationsDelegates: AppLocalizations.localizationsDelegates,
+  supportedLocales: AppLocalizations.supportedLocales,
   home: home,
 );
 

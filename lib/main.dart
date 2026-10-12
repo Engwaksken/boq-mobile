@@ -17,6 +17,7 @@ import 'package:boq_mobile/l10n/app_localizations.dart';
 
 import 'api_client.dart';
 import 'app_errors.dart';
+import 'json_utils.dart';
 import 'company_profile_page.dart';
 import 'connectivity_gate.dart';
 import 'boq_share_actions.dart';
@@ -106,18 +107,18 @@ class BiometricService {
   }
 
   /// Gets a localized name for the given biometric type.
-  String getBiometricTypeName(BiometricType type) {
+  String getBiometricTypeName(BiometricType type, AppLocalizations l10n) {
     switch (type) {
       case BiometricType.fingerprint:
-        return 'Fingerprint';
+        return l10n.bioFingerprint;
       case BiometricType.face:
-        return 'Face Recognition';
+        return l10n.bioFace;
       case BiometricType.iris:
-        return 'Iris Scan';
+        return l10n.bioIris;
       case BiometricType.strong:
-        return 'Strong Biometric';
+        return l10n.bioStrong;
       case BiometricType.weak:
-        return 'Weak Biometric';
+        return l10n.bioWeak;
     }
   }
 }

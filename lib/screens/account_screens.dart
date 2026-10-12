@@ -185,7 +185,7 @@ class _AccountPageState extends State<AccountPage> {
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: Text(
-                      'No active plan',
+                      widget.l10n.acctNoActivePlan,
                       style: theme.textTheme.titleSmall,
                     ),
                   ),
@@ -206,21 +206,24 @@ class _AccountPageState extends State<AccountPage> {
             title: widget.l10n.subscription,
             icon: Icons.workspace_premium_outlined,
             trailing: StatusBadge(
-              label: isTrial ? '7-day trial' : status.toUpperCase(),
+              label: isTrial
+                  ? widget.l10n.acctTrialDays(7)
+                  : status.toUpperCase(),
               tone: isTrial ? StatusTone.info : StatusTone.forStatus(status),
               icon: isTrial ? Icons.hourglass_top : Icons.verified_outlined,
             ),
             children: [
               Text(
-                sub['plan']?['name'] ?? 'No Active Plan',
+                jsonStringOrNull(jsonMap(sub['plan'])['name']) ??
+                    widget.l10n.acctNoActivePlan,
                 style: theme.textTheme.titleLarge,
               ),
               if (daysRemaining != null) ...[
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   daysRemaining == 0
-                      ? 'Expires today'
-                      : '$daysRemaining day${daysRemaining == 1 ? '' : 's'} remaining',
+                      ? widget.l10n.acctExpiresToday
+                      : widget.l10n.acctDaysRemaining(daysRemaining),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: daysRemaining <= 3
                         ? AppColors.warning
@@ -241,7 +244,7 @@ class _AccountPageState extends State<AccountPage> {
               KeyValueRow(
                 icon: Icons.document_scanner_outlined,
                 label: widget.l10n.ocrPages,
-                value: '${sub['plan']?['max_ocr_pages'] ?? 'N/A'}',
+                value: '${jsonMap(sub['plan'])['max_ocr_pages'] ?? 'N/A'}',
               ),
               const SizedBox(height: AppSpacing.md),
               _managePlanButton(),
@@ -312,7 +315,7 @@ class _AccountPageState extends State<AccountPage> {
                   _subscriptionCard(context),
                 ],
                 const SizedBox(height: AppSpacing.sectionGap),
-                const SectionHeader(title: 'Settings'),
+                SectionHeader(title: widget.l10n.acctSettings),
                 Card(
                   clipBehavior: Clip.antiAlias,
                   child: Column(
@@ -328,13 +331,13 @@ class _AccountPageState extends State<AccountPage> {
                             if (value != null) widget.onLocaleChanged(value);
                           },
                           items: [
-                            const DropdownMenuItem(
-                              value: Locale('en'),
-                              child: Text('English'),
+                            DropdownMenuItem(
+                              value: const Locale('en'),
+                              child: Text(widget.l10n.english),
                             ),
-                            const DropdownMenuItem(
-                              value: Locale('lg'),
-                              child: Text('Luganda'),
+                            DropdownMenuItem(
+                              value: const Locale('lg'),
+                              child: Text(widget.l10n.luganda),
                             ),
                           ],
                         ),
@@ -343,15 +346,11 @@ class _AccountPageState extends State<AccountPage> {
                       _settingsTile(
                         icon: Icons.notifications_outlined,
                         title: widget.l10n.notifications,
-                        onTap: () {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('No new notifications'),
-                              ),
-                            );
-                          }
-                        },
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => NotificationsPage(api: widget.api),
+                          ),
+                        ),
                       ),
                       const Divider(height: 1, indent: 68),
                       _settingsTile(
@@ -365,8 +364,8 @@ class _AccountPageState extends State<AccountPage> {
                         const Divider(height: 1, indent: 68),
                         _settingsTile(
                           icon: Icons.business_outlined,
-                          title: 'Company Profile',
-                          subtitle: 'Logo and details used on your BOQ PDFs',
+                          title: widget.l10n.acctCompanyProfile,
+                          subtitle: widget.l10n.acctCompanyProfileSubtitle,
                           onTap: () => Navigator.of(context).push(
                             MaterialPageRoute<void>(
                               builder: (_) =>
@@ -463,16 +462,16 @@ class _PlansPageState extends State<PlansPage> {
           widget.onSubscriptionCreated?.call();
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text(
-                'Payment confirmed. Your subscription is now active.',
+                AppLocalizations.of(context)!.acctPaymentConfirmedActive,
               ),
             ),
           );
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Subscription updated successfully.')),
+          SnackBar(content: Text(l10n.acctSubscriptionUpdated)),
         );
       }
     } on ApiException catch (e) {
@@ -546,8 +545,7 @@ class _PlansPageState extends State<PlansPage> {
     ];
     final seen = checks.map((c) => c.toLowerCase()).toSet();
     final rawFeatures =
-        (plan['features'] ?? plan['included_features']) as List<dynamic>? ??
-        const [];
+        jsonList(plan['features'] ?? plan['included_features']);
     for (final raw in rawFeatures) {
       final feature = (raw is Map
               ? '${raw['name'] ?? raw['code'] ?? ''}'
@@ -607,7 +605,7 @@ class _PlansPageState extends State<PlansPage> {
                     )
                   else if (plan['trial_days'] != null)
                     StatusBadge(
-                      label: '${plan['trial_days']} day trial',
+                      label: l10n.acctTrialDays(jsonInt(plan['trial_days'])),
                       tone: StatusTone.info,
                       icon: Icons.hourglass_top,
                     ),
@@ -700,7 +698,7 @@ class _PlansPageState extends State<PlansPage> {
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return ErrorState(
-              error: 'Unable to load subscription plans.',
+              error: l10n.acctPlansLoadError,
               onRetry: _reloadPlans,
             );
           }
@@ -737,11 +735,11 @@ class _PlansPageState extends State<PlansPage> {
                 ? ListView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: AppSpacing.page,
-                    children: const [
-                      SizedBox(height: AppSpacing.xxxl),
+                    children: [
+                      const SizedBox(height: AppSpacing.xxxl),
                       EmptyState(
                         icon: Icons.workspace_premium_outlined,
-                        title: 'No plans are currently available.',
+                        title: l10n.acctNoPlans,
                       ),
                     ],
                   )
@@ -796,14 +794,16 @@ class _PaymentPageState extends State<PaymentPage> {
     super.dispose();
   }
 
+  AppLocalizations get _l10n => AppLocalizations.of(context)!;
+
   int? get _subscriptionId =>
       int.tryParse('${widget.subscription['id'] ?? ''}');
 
   Map<String, dynamic>? get _transaction =>
-      _paymentData?['transaction'] as Map<String, dynamic>?;
+      jsonMapOrNull(_paymentData?['transaction']);
 
   Map<String, dynamic>? get _gatewayResult =>
-      _paymentData?['gateway'] as Map<String, dynamic>?;
+      jsonMapOrNull(_paymentData?['gateway']);
 
   Future<void> _initiate(Map<String, dynamic> gateway) async {
     final subscriptionId = _subscriptionId;
@@ -829,11 +829,7 @@ class _PaymentPageState extends State<PaymentPage> {
       setState(() => _paymentData = data);
       _startStatusPolling();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Payment started. Follow the instructions below, then verify the payment.',
-          ),
-        ),
+        SnackBar(content: Text(_l10n.acctPaymentStarted)),
       );
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -882,14 +878,12 @@ class _PaymentPageState extends State<PaymentPage> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Payment confirmed'),
-        content: const Text(
-          'Your subscription has been activated successfully.',
-        ),
+        title: Text(_l10n.acctPaymentConfirmed),
+        content: Text(_l10n.acctSubscriptionActivated),
         actions: [
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Continue'),
+            child: Text(_l10n.continueAction),
           ),
         ],
       ),
@@ -917,8 +911,10 @@ class _PaymentPageState extends State<PaymentPage> {
           SnackBar(
             content: Text(
               status == 'under_review'
-                  ? 'Payment submitted for review. Your plan will activate after confirmation.'
-                  : 'Payment status: ${status.isEmpty ? 'pending' : status}.',
+                  ? _l10n.acctPaymentUnderReview
+                  : _l10n.acctPaymentStatusValue(
+                      status.isEmpty ? _l10n.statusPending : status,
+                    ),
             ),
           ),
         );
@@ -950,11 +946,12 @@ class _PaymentPageState extends State<PaymentPage> {
       if (status == 'successful') {
         await _handleSuccessfulPayment(refreshed);
       }
-    } on ApiException catch (e) {
+    } on Object catch (e) {
+      // Polling runs from a timer: never let an error escape uncaught.
       if (!mounted || silent) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(e.message)));
+      ).showSnackBar(SnackBar(content: Text(friendlyError(e))));
     }
   }
 
@@ -994,17 +991,21 @@ class _PaymentPageState extends State<PaymentPage> {
     final currency = '${receipt['currency'] ?? ''}';
     final total = receipt['total_amount'] ?? receipt['amount'] ?? '';
     return SectionCard(
-      title: 'Payment receipt',
+      title: _l10n.acctPaymentReceipt,
       icon: Icons.receipt_long_outlined,
       children: [
-        _detailLine('Invoice', receipt['invoice_number'] ?? ''),
+        _detailLine(_l10n.acctInvoice, receipt['invoice_number'] ?? ''),
         _detailLine(
-          'Reference',
+          _l10n.acctReference,
           receipt['transaction_reference'] ?? _transaction?['reference'] ?? '',
         ),
-        _detailLine('Amount', '$currency $total', selectable: false),
+        _detailLine(_l10n.acctAmount, '$currency $total', selectable: false),
         if (receipt['payment_date'] != null)
-          _detailLine('Paid', receipt['payment_date'], selectable: false),
+          _detailLine(
+            _l10n.acctPaid,
+            receipt['payment_date'],
+            selectable: false,
+          ),
       ],
     );
   }
@@ -1019,11 +1020,11 @@ class _PaymentPageState extends State<PaymentPage> {
       rows.add(_detailLine(label, value));
     }
 
-    addRow('Reference', gateway['transaction_reference']);
-    addRow('Provider', gateway['provider']);
-    addRow('Phone', gateway['phone']);
-    addRow('Mode', gateway['mode']);
-    addRow('Instructions', gateway['instructions']);
+    addRow(_l10n.acctReference, gateway['transaction_reference']);
+    addRow(_l10n.acctProvider, gateway['provider']);
+    addRow(_l10n.acctPhone, gateway['phone']);
+    addRow(_l10n.acctMode, gateway['mode']);
+    addRow(_l10n.acctInstructions, gateway['instructions']);
 
     final checkoutUrl = '${gateway['checkout_url'] ?? ''}'.trim();
     if (checkoutUrl.isNotEmpty) {
@@ -1031,13 +1032,13 @@ class _PaymentPageState extends State<PaymentPage> {
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: const IconTile(icon: Icons.link, size: 36),
-          title: const Text('Checkout URL'),
+          title: Text(_l10n.acctCheckoutUrl),
           subtitle: SelectableText(checkoutUrl),
           trailing: Wrap(
             spacing: 2,
             children: [
               IconButton(
-                tooltip: 'Open secure checkout',
+                tooltip: _l10n.acctOpenCheckout,
                 onPressed: () async {
                   final uri = Uri.tryParse(checkoutUrl);
                   if (uri == null ||
@@ -1047,23 +1048,19 @@ class _PaymentPageState extends State<PaymentPage> {
                       )) {
                     if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Unable to open checkout. You can copy the link instead.',
-                        ),
-                      ),
+                      SnackBar(content: Text(_l10n.acctCheckoutOpenFailed)),
                     );
                   }
                 },
                 icon: const Icon(Icons.open_in_new),
               ),
               IconButton(
-                tooltip: 'Copy',
+                tooltip: _l10n.acctCopy,
                 onPressed: () async {
                   await Clipboard.setData(ClipboardData(text: checkoutUrl));
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Checkout URL copied.')),
+                    SnackBar(content: Text(_l10n.acctCheckoutCopied)),
                   );
                 },
                 icon: const Icon(Icons.copy_outlined),
@@ -1080,11 +1077,11 @@ class _PaymentPageState extends State<PaymentPage> {
         addRow('${entry.key}', entry.value);
       }
     } else if (bankDetails != null) {
-      addRow('Bank details', bankDetails);
+      addRow(_l10n.acctBankDetails, bankDetails);
     }
 
     return SectionCard(
-      title: 'Payment instructions',
+      title: _l10n.acctPaymentInstructions,
       icon: Icons.fact_check_outlined,
       children: rows,
     );
@@ -1144,7 +1141,7 @@ class _PaymentPageState extends State<PaymentPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${plan['name'] ?? 'Subscription plan'}',
+                        '${plan['name'] ?? _l10n.acctSubscriptionPlan}',
                         style: theme.textTheme.titleMedium,
                       ),
                       const SizedBox(height: AppSpacing.xs),
@@ -1169,15 +1166,19 @@ class _PaymentPageState extends State<PaymentPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _badgeRow(context, 'Subscription status', subscriptionStatus),
+                _badgeRow(
+                  context,
+                  _l10n.acctSubscriptionStatus,
+                  subscriptionStatus,
+                ),
                 if (transaction != null) ...[
                   const Divider(height: AppSpacing.lg),
                   KeyValueRow(
-                    label: 'Transaction',
+                    label: _l10n.acctTransaction,
                     value:
                         '${transaction['reference'] ?? transaction['id'] ?? ''}',
                   ),
-                  _badgeRow(context, 'Payment status', status),
+                  _badgeRow(context, _l10n.paymentStatus, status),
                 ],
               ],
             ),
@@ -1211,19 +1212,19 @@ class _PaymentPageState extends State<PaymentPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final plan =
-        widget.subscription['plan'] as Map<String, dynamic>? ?? const {};
+    final l10n = _l10n;
+    final plan = jsonMap(widget.subscription['plan']);
     final transaction = _transaction;
-    final status = '${transaction?['status'] ?? 'not started'}';
+    final status = '${transaction?['status'] ?? l10n.acctNotStarted}';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Complete payment')),
+      appBar: AppBar(title: Text(l10n.acctCompletePayment)),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _gateways,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return ErrorState(
-              error: 'Unable to load payment methods.',
+              error: l10n.acctGatewaysLoadError,
               onRetry: () =>
                   setState(() => _gateways = widget.api.paymentGateways()),
             );
@@ -1244,20 +1245,18 @@ class _PaymentPageState extends State<PaymentPage> {
                       const SizedBox(height: AppSpacing.md),
                       InfoBanner(
                         tone: _statusBannerTone(status),
-                        title: 'Payment status: $status',
-                        message:
-                            'Your plan is activated only after the server confirms a successful payment. Closing this screen does not delete the pending subscription.',
+                        title: l10n.acctPaymentStatusValue(status),
+                        message: l10n.acctPaymentActivationNote,
                       ),
                     ],
                     const SizedBox(height: AppSpacing.sectionGap),
                     if (gateways.isEmpty)
-                      const InfoBanner(
+                      InfoBanner(
                         tone: BannerTone.warning,
-                        message:
-                            'No payment methods are currently enabled. Please contact the administrator.',
+                        message: l10n.acctNoGateways,
                       )
                     else ...[
-                      const SectionHeader(title: 'Choose payment method'),
+                      SectionHeader(title: l10n.acctChoosePaymentMethod),
                       RadioGroup<String>(
                         groupValue: _selectedGatewayCode,
                         onChanged: (value) {
@@ -1266,9 +1265,7 @@ class _PaymentPageState extends State<PaymentPage> {
                             (g) => '${g['code'] ?? ''}' == value,
                             orElse: () => const <String, dynamic>{},
                           );
-                          final methods =
-                              (gateway['supported_methods'] as List<dynamic>? ??
-                                      const [])
+                          final methods = jsonList(gateway['supported_methods'])
                                   .map((e) => '$e')
                                   .where((e) => e.trim().isNotEmpty)
                                   .toList();
@@ -1314,8 +1311,8 @@ class _PaymentPageState extends State<PaymentPage> {
                                     ),
                                     subtitle: Text(
                                       '${gateway['description'] ?? gateway['driver'] ?? ''}'
-                                      '${gateway['is_aggregator'] == true ? ' • Aggregator' : ''}'
-                                      '${gateway['is_test_mode'] == true ? ' • Test mode' : ''}',
+                                      '${gateway['is_aggregator'] == true ? ' • ${l10n.acctAggregator}' : ''}'
+                                      '${gateway['is_test_mode'] == true ? ' • ${l10n.acctTestMode}' : ''}',
                                       style: theme.textTheme.bodySmall,
                                     ),
                                     secondary: IconTile(
@@ -1345,9 +1342,7 @@ class _PaymentPageState extends State<PaymentPage> {
                               orElse: () => const <String, dynamic>{},
                             );
                             final methods =
-                                (selected['supported_methods']
-                                            as List<dynamic>? ??
-                                        const [])
+                                jsonList(selected['supported_methods'])
                                     .map((e) => '$e')
                                     .where((e) => e.trim().isNotEmpty)
                                     .toList();
@@ -1368,7 +1363,7 @@ class _PaymentPageState extends State<PaymentPage> {
                                 driver == 'airtel_money' ||
                                 aggregatorMobile;
                             return SectionCard(
-                              title: 'Payment details',
+                              title: l10n.acctPaymentDetails,
                               icon: Icons.lock_outline,
                               children: [
                                 if (needsPhone) ...[
@@ -1378,11 +1373,11 @@ class _PaymentPageState extends State<PaymentPage> {
                                     onChanged: (_) => setState(() {}),
                                     decoration: InputDecoration(
                                       labelText: driver == 'mtn_momo'
-                                          ? 'MTN MoMo number'
+                                          ? l10n.acctMtnNumber
                                           : driver == 'airtel_money'
-                                          ? 'Airtel Money number'
-                                          : 'Mobile money number',
-                                      hintText: 'e.g. 0772 123 456',
+                                          ? l10n.acctAirtelNumber
+                                          : l10n.acctMobileMoneyNumber,
+                                      hintText: l10n.acctPhoneHint,
                                       prefixIcon: const Icon(
                                         Icons.phone_android,
                                       ),
@@ -1399,9 +1394,9 @@ class _PaymentPageState extends State<PaymentPage> {
                                         methods.contains(_selectedMethod)
                                         ? _selectedMethod
                                         : methods.first,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Payment option',
-                                      prefixIcon: Icon(
+                                    decoration: InputDecoration(
+                                      labelText: l10n.acctPaymentOption,
+                                      prefixIcon: const Icon(
                                         Icons.account_balance_wallet_outlined,
                                       ),
                                     ),
@@ -1419,7 +1414,7 @@ class _PaymentPageState extends State<PaymentPage> {
                                 if (methods.length > 1)
                                   const SizedBox(height: AppSpacing.md),
                                 LoadingButton(
-                                  label: 'Continue to payment',
+                                  label: l10n.acctContinueToPayment,
                                   icon: Icons.lock_outline,
                                   loading: _initiating,
                                   onPressed:
@@ -1453,13 +1448,16 @@ class _PaymentPageState extends State<PaymentPage> {
                               ),
                               onPressed: _refreshTransaction,
                               icon: const Icon(Icons.refresh),
-                              label: const Text('Refresh status'),
+                              label: Text(
+                                l10n.acctRefreshStatus,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
                           ),
                           const SizedBox(width: AppSpacing.md),
                           Expanded(
                             child: LoadingButton(
-                              label: 'Verify payment',
+                              label: l10n.acctVerifyPayment,
                               icon: Icons.verified_outlined,
                               loading: _verifying,
                               onPressed: _verify,
@@ -1522,9 +1520,16 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _loadBiometricStatus() async {
-    final available = await _biometricService.isBiometricAvailable();
-    final enabled = await _biometricService.isBiometricEnabled();
-    final biometrics = await _biometricService.getAvailableBiometrics();
+    final bool available;
+    final bool enabled;
+    final List<BiometricType> biometrics;
+    try {
+      available = await _biometricService.isBiometricAvailable();
+      enabled = await _biometricService.isBiometricEnabled();
+      biometrics = await _biometricService.getAvailableBiometrics();
+    } on Object {
+      return; // Leave biometrics shown as unavailable.
+    }
     if (mounted) {
       setState(() {
         _biometricAvailable = available;
@@ -1674,14 +1679,14 @@ class _ProfilePageState extends State<ProfilePage> {
                           icon: const Icon(Icons.photo_camera_outlined),
                           label: Text(
                             _current?.avatarUrl == null
-                                ? 'Add profile photo'
-                                : 'Change profile photo',
+                                ? l10n.acctAddPhoto
+                                : l10n.acctChangePhoto,
                           ),
                         ),
                       ),
                       const SizedBox(height: AppSpacing.lg),
                       SectionCard(
-                        title: 'Personal details',
+                        title: l10n.acctPersonalDetails,
                         icon: Icons.person_outline,
                         spacing: AppSpacing.lg,
                         children: [
@@ -1694,7 +1699,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                             validator: (value) =>
                                 value == null || value.trim().isEmpty
-                                ? l10n.fullName
+                                ? l10n.acctNameRequired
                                 : null,
                           ),
                           TextFormField(
@@ -1707,7 +1712,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             ),
                             validator: (value) =>
                                 value == null || !value.contains('@')
-                                ? l10n.email
+                                ? l10n.commonInvalidEmail
                                 : null,
                           ),
                           TextFormField(
@@ -1767,7 +1772,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         children: [
                           Text(
                             _biometricAvailable
-                                ? '${l10n.biometricAvailable} - ${l10n.biometricTypes}${_availableBiometrics.map((t) => _biometricService.getBiometricTypeName(t)).join(', ')}'
+                                ? '${l10n.biometricAvailable} - ${l10n.biometricTypes}${_availableBiometrics.map((t) => _biometricService.getBiometricTypeName(t, l10n)).join(', ')}'
                                 : l10n.biometricNotAvailable,
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: scheme.onSurfaceVariant,
@@ -1796,7 +1801,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       ),
                       const SizedBox(height: AppSpacing.lg),
                       SectionCard(
-                        title: 'Security',
+                        title: l10n.acctSecurity,
                         icon: Icons.lock_outline,
                         children: [
                           TextFormField(
@@ -1811,7 +1816,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                 value != null &&
                                     value.isNotEmpty &&
                                     value.length < 8
-                                ? l10n.newPassword
+                                ? l10n.passwordTooShort
                                 : null,
                           ),
                         ],
@@ -1896,7 +1901,7 @@ class ProfileAvatar extends StatelessWidget {
     if (onEdit == null) return avatar;
     return Semantics(
       button: true,
-      label: 'Change profile photo',
+      label: AppLocalizations.of(context)!.acctChangePhoto,
       child: GestureDetector(
         onTap: onEdit,
         child: Stack(
@@ -1934,6 +1939,7 @@ Future<UserProfile?> changeProfilePicture(
   ApiClient api,
   UserProfile? current,
 ) async {
+  final l10n = AppLocalizations.of(context)!;
   final choice = await showModalBottomSheet<String>(
     context: context,
     showDragHandle: true,
@@ -1943,12 +1949,12 @@ Future<UserProfile?> changeProfilePicture(
         children: [
           ListTile(
             leading: const Icon(Icons.photo_camera_outlined),
-            title: const Text('Take photo'),
+            title: Text(l10n.acctTakePhoto),
             onTap: () => Navigator.pop(sheetContext, 'camera'),
           ),
           ListTile(
             leading: const Icon(Icons.photo_library_outlined),
-            title: const Text('Choose from gallery'),
+            title: Text(l10n.acctChooseGallery),
             onTap: () => Navigator.pop(sheetContext, 'gallery'),
           ),
           if (current?.avatarUrl != null)
@@ -1957,7 +1963,7 @@ Future<UserProfile?> changeProfilePicture(
                 Icons.delete_outline,
                 color: AppColors.danger,
               ),
-              title: const Text('Remove photo'),
+              title: Text(l10n.acctRemovePhoto),
               onTap: () => Navigator.pop(sheetContext, 'remove'),
             ),
           const SizedBox(height: AppSpacing.sm),
@@ -1975,7 +1981,7 @@ Future<UserProfile?> changeProfilePicture(
   try {
     if (choice == 'remove') {
       final updated = await api.deleteAvatar();
-      show('Profile photo removed');
+      show(l10n.acctPhotoRemoved);
       return updated;
     }
 
@@ -1993,19 +1999,19 @@ Future<UserProfile?> changeProfilePicture(
     } on Object {
       show(
         choice == 'camera'
-            ? 'The camera could not be opened. Allow camera access in Settings.'
-            : 'Your photos could not be opened. Allow photo access in Settings.',
+            ? l10n.acctCameraDenied
+            : l10n.acctPhotosDenied,
       );
       return null;
     }
     if (picked == null) return null;
 
-    show('Uploading profile photo...');
+    show(l10n.acctPhotoUploading);
     final updated = await api.uploadAvatar(
       bytes: await picked.readAsBytes(),
       fileName: 'avatar.jpg',
     );
-    show('Profile photo updated');
+    show(l10n.acctPhotoUpdated);
     return updated;
   } on Object catch (error) {
     show(friendlyError(error));

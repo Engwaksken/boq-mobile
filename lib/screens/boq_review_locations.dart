@@ -49,18 +49,16 @@ class _BoqLocationPricesPageState extends State<BoqLocationPricesPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Use ${location.location} prices?'),
-        content: const Text(
-          'The BOQ\'s suggested prices switch to this location. Approved prices are kept.',
-        ),
+        title: Text(dialogContext.tr.locUseTitle(location.location)),
+        content: Text(dialogContext.tr.locUseMessage),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
+            child: Text(dialogContext.tr.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Use these prices'),
+            child: Text(dialogContext.tr.locUsePrices),
           ),
         ],
       ),
@@ -75,7 +73,7 @@ class _BoqLocationPricesPageState extends State<BoqLocationPricesPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('$applied prices switched to ${location.location}'),
+          content: Text(context.tr.locSwitched(applied, location.location)),
         ),
       );
       _reload();
@@ -93,13 +91,14 @@ class _BoqLocationPricesPageState extends State<BoqLocationPricesPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = context.tr;
     return Scaffold(
-      appBar: AppBar(title: const Text('Location prices')),
+      appBar: AppBar(title: Text(l10n.pdLocationPrices)),
       floatingActionButton: _selected.length >= 2
           ? FloatingActionButton.extended(
               onPressed: _compare,
               icon: const Icon(Icons.compare_arrows),
-              label: Text('Compare ${_selected.length}'),
+              label: Text(l10n.locCompareCount(_selected.length)),
             )
           : null,
       body: FutureBuilder<List<BoqLocation>>(
@@ -111,11 +110,10 @@ class _BoqLocationPricesPageState extends State<BoqLocationPricesPage> {
           if (!snapshot.hasData) return const LoadingState();
           final locations = snapshot.data!;
           if (locations.isEmpty) {
-            return const EmptyState(
+            return EmptyState(
               icon: Icons.map_outlined,
-              title: 'No location prices yet',
-              message:
-                  'Get prices for a location on the BOQ screen; every location\'s prices are kept here.',
+              title: l10n.locNone,
+              message: l10n.locNoneHelp,
             );
           }
           return RefreshIndicator(
@@ -123,10 +121,7 @@ class _BoqLocationPricesPageState extends State<BoqLocationPricesPage> {
             child: ListView(
               padding: AppSpacing.page.copyWith(bottom: 96),
               children: [
-                Text(
-                  'Tick two to four locations to compare them.',
-                  style: theme.textTheme.bodySmall,
-                ),
+                Text(l10n.locTickHint, style: theme.textTheme.bodySmall),
                 const SizedBox(height: AppSpacing.md),
                 for (final location in locations)
                   Card(
@@ -148,8 +143,8 @@ class _BoqLocationPricesPageState extends State<BoqLocationPricesPage> {
                             ),
                           ),
                           if (location.current)
-                            const StatusBadge(
-                              label: 'In use',
+                            StatusBadge(
+                              label: l10n.locInUse,
                               tone: StatusTone.success,
                             ),
                         ],
@@ -166,7 +161,10 @@ class _BoqLocationPricesPageState extends State<BoqLocationPricesPage> {
                             ),
                           ),
                           Text(
-                            '${location.pricedItems} of ${location.totalItems} items priced',
+                            l10n.locItemsPriced(
+                              location.pricedItems,
+                              location.totalItems,
+                            ),
                           ),
                           if (!location.current)
                             Align(
@@ -174,7 +172,7 @@ class _BoqLocationPricesPageState extends State<BoqLocationPricesPage> {
                               child: TextButton.icon(
                                 onPressed: _busy ? null : () => _use(location),
                                 icon: const Icon(Icons.swap_horiz),
-                                label: const Text('Use these prices'),
+                                label: Text(l10n.locUsePrices),
                               ),
                             ),
                         ],
@@ -207,12 +205,15 @@ class _LocationComparisonView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = context.tr;
     return Scaffold(
-      appBar: AppBar(title: const Text('Compare locations')),
-      body: FutureBuilder<LocationComparison>(
-        future: api.compareBoqLocations(boqId, keys),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) return ErrorState(error: snapshot.error);
+      appBar: AppBar(title: Text(l10n.locCompareTitle)),
+      body: _FutureOnce<LocationComparison>(
+        load: () => api.compareBoqLocations(boqId, keys),
+        builder: (context, snapshot, retry) {
+          if (snapshot.hasError) {
+            return ErrorState(error: snapshot.error, onRetry: retry);
+          }
           if (!snapshot.hasData) return const LoadingState();
           final comparison = snapshot.data!;
           final priced = comparison.locations.where((l) => l.pricedItems > 0);
@@ -223,23 +224,22 @@ class _LocationComparisonView extends StatelessWidget {
             padding: AppSpacing.page,
             children: [
               SectionCard(
-                title: 'Totals',
+                title: l10n.locTotals,
                 icon: Icons.summarize_outlined,
                 children: [
                   for (final location in comparison.locations)
                     KeyValueRow(
-                      label:
-                          '${location.location} (${location.pricedItems} priced)',
+                      label: l10n.locPricedLabel(
+                        location.location,
+                        location.pricedItems,
+                      ),
                       value: formatAmount(location.total, currency: currency),
                       emphasize: location.key == cheapest,
                     ),
                 ],
               ),
               const SizedBox(height: AppSpacing.lg),
-              Text(
-                'Lowest price of each item in green.',
-                style: theme.textTheme.bodySmall,
-              ),
+              Text(l10n.locLowestHint, style: theme.textTheme.bodySmall),
               const SizedBox(height: AppSpacing.sm),
               for (final row in comparison.rows)
                 Card(
@@ -262,6 +262,7 @@ class _LocationComparisonView extends StatelessWidget {
                           Row(
                             children: [
                               Expanded(child: Text(location.location)),
+                              const SizedBox(width: AppSpacing.sm),
                               Text(
                                 row.rates[location.key] == null
                                     ? '—'
@@ -339,16 +340,16 @@ class _BoqReviewPricesPageState extends State<BoqReviewPricesPage> {
         reason: reason,
       );
       if (!mounted) return;
-      final verb = switch (action) {
-        'accept' => 'reviewed',
-        'approve' => 'approved',
-        _ => 'rejected',
+      final l10n = context.tr;
+      final done = switch (action) {
+        'accept' => l10n.locItemsReviewed(result.done),
+        'approve' => l10n.locItemsApproved(result.done),
+        _ => l10n.locItemsRejected(result.done),
       };
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${result.done} item(s) $verb'
-            '${result.skipped > 0 ? ', ${result.skipped} skipped' : ''}',
+            result.skipped > 0 ? l10n.locSkipped(done, result.skipped) : done,
           ),
         ),
       );
@@ -364,46 +365,10 @@ class _BoqReviewPricesPageState extends State<BoqReviewPricesPage> {
     }
   }
 
-  Future<String?> _askReason() async {
-    final controller = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-    final reason = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Reject selected prices'),
-        content: Form(
-          key: formKey,
-          child: TextFormField(
-            controller: controller,
-            autofocus: true,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'Reason',
-              hintText: 'e.g. Rates too high for this location',
-            ),
-            validator: (v) =>
-                (v ?? '').trim().isEmpty ? 'Enter a reason' : null,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState!.validate()) {
-                Navigator.pop(dialogContext, controller.text.trim());
-              }
-            },
-            child: const Text('Reject'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    return reason;
-  }
+  Future<String?> _askReason() => showDialog<String>(
+    context: context,
+    builder: (_) => const _RejectReasonDialog(),
+  );
 
   StatusTone _tone(String status) => switch (status) {
     'approved' => StatusTone.success,
@@ -418,12 +383,14 @@ class _BoqReviewPricesPageState extends State<BoqReviewPricesPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          _selected.isEmpty ? 'Review prices' : '${_selected.length} selected',
+          _selected.isEmpty
+              ? context.tr.pdReviewPrices
+              : context.tr.locSelected(_selected.length),
         ),
         actions: [
           if (_selected.isNotEmpty)
             IconButton(
-              tooltip: 'Clear selection',
+              tooltip: context.tr.locClearSelection,
               onPressed: () => setState(_selected.clear),
               icon: const Icon(Icons.close),
             ),
@@ -442,12 +409,12 @@ class _BoqReviewPricesPageState extends State<BoqReviewPricesPage> {
                     FilledButton.tonalIcon(
                       onPressed: _busy ? null : () => _run('accept'),
                       icon: const Icon(Icons.fact_check_outlined),
-                      label: const Text('Review'),
+                      label: Text(context.tr.locReview),
                     ),
                     FilledButton.icon(
                       onPressed: _busy ? null : () => _run('approve'),
                       icon: const Icon(Icons.check_circle_outline),
-                      label: const Text('Approve'),
+                      label: Text(context.tr.locApprove),
                     ),
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
@@ -455,7 +422,7 @@ class _BoqReviewPricesPageState extends State<BoqReviewPricesPage> {
                       ),
                       onPressed: _busy ? null : () => _run('reject'),
                       icon: const Icon(Icons.cancel_outlined),
-                      label: const Text('Reject'),
+                      label: Text(context.tr.locReject),
                     ),
                   ],
                 ),
@@ -470,9 +437,9 @@ class _BoqReviewPricesPageState extends State<BoqReviewPricesPage> {
           if (!snapshot.hasData) return const LoadingState();
           final items = snapshot.data!;
           if (items.isEmpty) {
-            return const EmptyState(
+            return EmptyState(
               icon: Icons.receipt_long_outlined,
-              title: 'No items to review',
+              title: context.tr.locNoItems,
             );
           }
           final selectable = items.where((i) => i.reviewStatus != 'approved');
@@ -484,7 +451,7 @@ class _BoqReviewPricesPageState extends State<BoqReviewPricesPage> {
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
-                  title: const Text('Select all (not approved)'),
+                  title: Text(context.tr.locSelectAll),
                   value:
                       selectable.isNotEmpty &&
                       selectable.every((i) => _selected.contains(i.id)),
@@ -513,11 +480,17 @@ class _BoqReviewPricesPageState extends State<BoqReviewPricesPage> {
                         style: theme.textTheme.titleSmall,
                       ),
                       subtitle: Text(
-                        '${item.quantity} ${item.unit} · suggested ${item.aiRate}',
+                        context.tr.locSuggested(
+                          '${item.quantity} ${item.unit}',
+                          item.aiRate,
+                        ),
                       ),
-                      secondary: StatusBadge(
-                        label: item.reviewStatus.capitalize(),
-                        tone: _tone(item.reviewStatus),
+                      secondary: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 110),
+                        child: StatusBadge(
+                          label: item.reviewStatus.capitalize(),
+                          tone: _tone(item.reviewStatus),
+                        ),
                       ),
                     ),
                   ),
@@ -526,6 +499,62 @@ class _BoqReviewPricesPageState extends State<BoqReviewPricesPage> {
           );
         },
       ),
+    );
+  }
+}
+
+/// Asks why the selected prices are rejected. Owns its controller so it is
+/// disposed only after the dialog has fully closed.
+class _RejectReasonDialog extends StatefulWidget {
+  const _RejectReasonDialog();
+
+  @override
+  State<_RejectReasonDialog> createState() => _RejectReasonDialogState();
+}
+
+class _RejectReasonDialogState extends State<_RejectReasonDialog> {
+  final _controller = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.tr;
+    return AlertDialog(
+      scrollable: true,
+      title: Text(l10n.locRejectTitle),
+      content: Form(
+        key: _formKey,
+        child: TextFormField(
+          controller: _controller,
+          autofocus: true,
+          maxLines: 3,
+          decoration: InputDecoration(
+            labelText: l10n.locReason,
+            hintText: l10n.locReasonHint,
+          ),
+          validator: (v) => (v ?? '').trim().isEmpty ? l10n.locEnterReason : null,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(l10n.cancel),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (_formKey.currentState!.validate()) {
+              Navigator.pop(context, _controller.text.trim());
+            }
+          },
+          child: Text(l10n.locReject),
+        ),
+      ],
     );
   }
 }
