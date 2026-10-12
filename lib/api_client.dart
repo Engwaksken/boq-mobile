@@ -506,6 +506,7 @@ class ApiClient {
     required String email,
     required String locale,
     String? password,
+    String? currentPassword,
     String? phone,
     String? location,
   }) async {
@@ -518,6 +519,9 @@ class ApiClient {
         'locale': locale,
         if (phone != null && phone.isNotEmpty) 'phone': phone,
         if (location != null && location.isNotEmpty) 'location': location,
+        // Required by the API when the email or password changes.
+        if (currentPassword != null && currentPassword.isNotEmpty)
+          'current_password': currentPassword,
         if (password != null && password.isNotEmpty) ...{
           'password': password,
           'password_confirmation': password,
@@ -1588,9 +1592,7 @@ class ApiClient {
     String? network,
   }) async {
     final response = await _httpClient.post(
-      Uri.parse(
-        '$baseUrl/subscriptions/proxy/$proxySubscriptionId/payments',
-      ),
+      Uri.parse('$baseUrl/subscriptions/proxy/$proxySubscriptionId/payments'),
       headers: await _headers(),
       body: {
         'gateway_code': gatewayCode,
@@ -1613,9 +1615,7 @@ class ApiClient {
     String? gatewayTransactionId,
   }) async {
     final response = await _httpClient.post(
-      Uri.parse(
-        '$baseUrl/transactions/proxy/$transactionId/verify',
-      ),
+      Uri.parse('$baseUrl/transactions/proxy/$transactionId/verify'),
       headers: await _headers(),
       body: {
         if (gatewayTransactionId != null && gatewayTransactionId.isNotEmpty)

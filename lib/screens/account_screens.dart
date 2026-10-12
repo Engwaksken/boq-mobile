@@ -470,9 +470,9 @@ class _PlansPageState extends State<PlansPage> {
           );
         }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.acctSubscriptionUpdated)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(l10n.acctSubscriptionUpdated)));
       }
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -544,13 +544,10 @@ class _PlansPageState extends State<PlansPage> {
       if (autoRenewal == true) l10n.renewsAutomatically,
     ];
     final seen = checks.map((c) => c.toLowerCase()).toSet();
-    final rawFeatures =
-        jsonList(plan['features'] ?? plan['included_features']);
+    final rawFeatures = jsonList(plan['features'] ?? plan['included_features']);
     for (final raw in rawFeatures) {
-      final feature = (raw is Map
-              ? '${raw['name'] ?? raw['code'] ?? ''}'
-              : '$raw')
-          .trim();
+      final feature =
+          (raw is Map ? '${raw['name'] ?? raw['code'] ?? ''}' : '$raw').trim();
       if (feature.isEmpty) continue;
       if (feature.toLowerCase().contains('credit')) continue;
       if (seen.add(feature.toLowerCase())) checks.add(feature);
@@ -828,9 +825,9 @@ class _PaymentPageState extends State<PaymentPage> {
       if (!mounted) return;
       setState(() => _paymentData = data);
       _startStatusPolling();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_l10n.acctPaymentStarted)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_l10n.acctPaymentStarted)));
     } on ApiException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -1266,9 +1263,9 @@ class _PaymentPageState extends State<PaymentPage> {
                             orElse: () => const <String, dynamic>{},
                           );
                           final methods = jsonList(gateway['supported_methods'])
-                                  .map((e) => '$e')
-                                  .where((e) => e.trim().isNotEmpty)
-                                  .toList();
+                              .map((e) => '$e')
+                              .where((e) => e.trim().isNotEmpty)
+                              .toList();
                           setState(() {
                             _selectedGatewayCode = value;
                             _selectedMethod = methods.isNotEmpty
@@ -1500,6 +1497,7 @@ class _ProfilePageState extends State<ProfilePage> {
   final _phone = TextEditingController();
   final _location = TextEditingController();
   final _password = TextEditingController();
+  final _currentPassword = TextEditingController();
   late final Future<UserProfile> _profile = widget.api.profile();
   late String _selectedLocale = widget.locale.languageCode;
   bool _loaded = false;
@@ -1570,6 +1568,7 @@ class _ProfilePageState extends State<ProfilePage> {
     _phone.dispose();
     _location.dispose();
     _password.dispose();
+    _currentPassword.dispose();
     super.dispose();
   }
 
@@ -1589,6 +1588,7 @@ class _ProfilePageState extends State<ProfilePage> {
         email: _email.text.trim(),
         locale: _selectedLocale,
         password: _password.text,
+        currentPassword: _currentPassword.text,
         phone: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
         location: _location.text.trim().isEmpty ? null : _location.text.trim(),
       );
@@ -1819,6 +1819,26 @@ class _ProfilePageState extends State<ProfilePage> {
                                 ? l10n.passwordTooShort
                                 : null,
                           ),
+                          const SizedBox(height: AppSpacing.md),
+                          TextFormField(
+                            controller: _currentPassword,
+                            obscureText: true,
+                            decoration: InputDecoration(
+                              labelText: l10n.currentPassword,
+                              helperText: l10n.currentPasswordHint,
+                              prefixIcon: const Icon(Icons.lock_outline),
+                            ),
+                            validator: (value) {
+                              final emailChanged =
+                                  _email.text.trim().toLowerCase() !=
+                                  (_current?.email ?? '').toLowerCase();
+                              final passwordChanged = _password.text.isNotEmpty;
+                              return (emailChanged || passwordChanged) &&
+                                      (value == null || value.isEmpty)
+                                  ? l10n.currentPasswordRequired
+                                  : null;
+                            },
+                          ),
                         ],
                       ),
                       if (_error != null) ...[
@@ -1997,11 +2017,7 @@ Future<UserProfile?> changeProfilePicture(
         requestFullMetadata: false,
       );
     } on Object {
-      show(
-        choice == 'camera'
-            ? l10n.acctCameraDenied
-            : l10n.acctPhotosDenied,
-      );
+      show(choice == 'camera' ? l10n.acctCameraDenied : l10n.acctPhotosDenied);
       return null;
     }
     if (picked == null) return null;

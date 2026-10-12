@@ -1275,6 +1275,16 @@ class AppLocalizationsLg extends AppLocalizations {
   String get passwordHint => 'Kirekeere awo okusigaza ekigambo ekikuumi ekyo';
 
   @override
+  String get currentPassword => 'Current password';
+
+  @override
+  String get currentPasswordHint => 'Needed to change your email or password';
+
+  @override
+  String get currentPasswordRequired =>
+      'Enter your current password to change your email or password.';
+
+  @override
   String get saveChanges => 'Tereka enkyukakyuka';
 
   @override

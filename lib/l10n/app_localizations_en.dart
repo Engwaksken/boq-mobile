@@ -1273,6 +1273,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get passwordHint => 'Leave blank to keep your current password';
 
   @override
+  String get currentPassword => 'Current password';
+
+  @override
+  String get currentPasswordHint => 'Needed to change your email or password';
+
+  @override
+  String get currentPasswordRequired =>
+      'Enter your current password to change your email or password.';
+
+  @override
   String get saveChanges => 'Save changes';
 
   @override

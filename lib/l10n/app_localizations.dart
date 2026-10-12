@@ -2372,6 +2372,24 @@ abstract class AppLocalizations {
   /// **'Leave blank to keep your current password'**
   String get passwordHint;
 
+  /// No description provided for @currentPassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Current password'**
+  String get currentPassword;
+
+  /// No description provided for @currentPasswordHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Needed to change your email or password'**
+  String get currentPasswordHint;
+
+  /// No description provided for @currentPasswordRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your current password to change your email or password.'**
+  String get currentPasswordRequired;
+
   /// No description provided for @saveChanges.
   ///
   /// In en, this message translates to:

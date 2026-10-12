@@ -71,6 +71,12 @@ flutter {
     source = "../.."
 }
 
+dependencies {
+    // AppCompat themes (styles.xml): local_auth's biometric prompt crashes on
+    // Android 8 and below without them.
+    implementation("androidx.appcompat:appcompat:1.7.0")
+}
+
 // Refuse to produce an unsigned release: an APK/AAB without the private key
 // cannot be installed as an update or uploaded to the Play Store.
 gradle.taskGraph.whenReady {
