@@ -6,6 +6,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'api_client.dart';
 import 'l10n/app_localizations.dart';
 import 'theme/app_theme.dart';
 
@@ -87,7 +88,7 @@ class _ConnectivityGateState extends State<ConnectivityGate>
     if (kIsWeb) return true;
     try {
       final result = await InternetAddress.lookup(
-        'boq.kemmytech.com',
+        Uri.parse(ApiClient.baseUrl).host,
       ).timeout(const Duration(seconds: 6));
       return result.isNotEmpty && result.first.rawAddress.isNotEmpty;
     } on Object {

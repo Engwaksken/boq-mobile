@@ -2644,26 +2644,4 @@ class AppLocalizationsLg extends AppLocalizations {
   String piQty(String quantity, String unit) {
     return 'Omuwendo $quantity $unit';
   }
-
-  @override
-  String get piPlanPriceHistory => 'Ebyafaayo by\'ebbeeyi ya pulaani';
-
-  @override
-  String get piMyPlans => 'Pulaani zange';
-
-  @override
-  String get piAllPlans => 'Pulaani zonna';
-
-  @override
-  String get piYourPlan => 'Pulaani yo';
-
-  @override
-  String get piInitialPrice => 'Ebbeeyi eyasooka';
-
-  @override
-  String get piNoPlanChanges => 'Tewali nkyukakyuka mu bbeeyi.';
-
-  @override
-  String get piPlanHistoryHint =>
-      'Pulaani ezizzibwa obuggya, nga ez\'omwezi, zizzibwa ku bbeeyi eriwo ku lunaku lw\'okuzza obuggya.';
 }

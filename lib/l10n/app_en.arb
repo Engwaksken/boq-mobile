@@ -873,12 +873,5 @@
   "piSystem": "System",
   "piDifferenceHelp": "Red: the market is now higher than our rate. Green: the market is lower.",
   "piQty": "Qty {quantity} {unit}",
-  "@piQty": {"placeholders": {"quantity": {"type": "String"}, "unit": {"type": "String"}}},
-  "piPlanPriceHistory": "Plan price history",
-  "piMyPlans": "My plans",
-  "piAllPlans": "All plans",
-  "piYourPlan": "Your plan",
-  "piInitialPrice": "Initial price",
-  "piNoPlanChanges": "No price changes yet.",
-  "piPlanHistoryHint": "Recurring plans, such as monthly, renew at the price in effect on the renewal date."
+  "@piQty": {"placeholders": {"quantity": {"type": "String"}, "unit": {"type": "String"}}}
 }

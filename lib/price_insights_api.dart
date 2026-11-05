@@ -1,8 +1,7 @@
 part of 'api_client.dart';
 
 // Price history and comparison endpoints: monthly market history, recent price
-// changes, a BOQ's rates against today's market, BOQ item rate history and plan
-// price changes. Each uses the same server logic as the matching web page.
+// changes, a BOQ's rates against today's market, BOQ item rate history. Each uses the same server logic as the matching web page.
 
 extension PriceInsightsApi on ApiClient {
   Future<Map<String, dynamic>> _getJson(
@@ -74,14 +73,6 @@ extension PriceInsightsApi on ApiClient {
     );
     return jsonMaps(data['data']).map(BoqItemRateChange.fromJson).toList();
   }
-
-  /// Plan price changes: [scope] "mine" (plans I subscribe to) or "all".
-  Future<PlanPriceChangesResult> planPriceHistory({
-    String scope = 'mine',
-    int page = 1,
-  }) async => PlanPriceChangesResult.fromJson(
-    await _getJson('plans/price-history', {'scope': scope, 'page': '$page'}),
-  );
 }
 
 class MonthlyPriceHistory {
@@ -379,74 +370,4 @@ class BoqItemRateChange {
 
   double? get change =>
       oldValue != null && newValue != null ? newValue! - oldValue! : null;
-}
-
-class PlanPriceChange {
-  const PlanPriceChange({
-    required this.id,
-    required this.planName,
-    required this.planType,
-    required this.newPrice,
-    required this.newCurrency,
-    required this.changedAt,
-    required this.isMyPlan,
-    this.oldPrice,
-    this.oldCurrency,
-    this.difference,
-    this.percentChange,
-  });
-
-  factory PlanPriceChange.fromJson(Map<String, dynamic> json) {
-    final plan = jsonMap(json['plan']);
-    return PlanPriceChange(
-      id: jsonInt(json['id']),
-      planName: jsonStringOrNull(plan['name']) ?? '',
-      planType: jsonStringOrNull(plan['type']) ?? '',
-      oldPrice: jsonDoubleOrNull(json['old_price']),
-      newPrice: jsonDoubleOrNull(json['new_price']) ?? 0,
-      oldCurrency: jsonStringOrNull(json['old_currency']),
-      newCurrency: jsonStringOrNull(json['new_currency']) ?? 'UGX',
-      difference: jsonDoubleOrNull(json['difference']),
-      percentChange: jsonDoubleOrNull(json['percent_change']),
-      changedAt: jsonStringOrNull(json['changed_at']) ?? '',
-      isMyPlan: json['is_my_plan'] == true,
-    );
-  }
-
-  final int id;
-  final String planName;
-  final String planType;
-
-  /// Null for a plan's first (initial) price.
-  final double? oldPrice;
-  final double newPrice;
-  final String? oldCurrency;
-  final String newCurrency;
-  final double? difference;
-  final double? percentChange;
-  final String changedAt;
-  final bool isMyPlan;
-}
-
-class PlanPriceChangesResult {
-  const PlanPriceChangesResult({
-    required this.items,
-    required this.page,
-    required this.lastPage,
-  });
-
-  factory PlanPriceChangesResult.fromJson(Map<String, dynamic> json) {
-    final data = jsonMap(json['data']);
-    return PlanPriceChangesResult(
-      items: jsonMaps(data['data']).map(PlanPriceChange.fromJson).toList(),
-      page: jsonIntOrNull(data['current_page']) ?? 1,
-      lastPage: jsonIntOrNull(data['last_page']) ?? 1,
-    );
-  }
-
-  final List<PlanPriceChange> items;
-  final int page;
-  final int lastPage;
-
-  bool get hasNext => page < lastPage;
 }

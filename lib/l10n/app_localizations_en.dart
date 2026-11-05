@@ -2640,26 +2640,4 @@ class AppLocalizationsEn extends AppLocalizations {
   String piQty(String quantity, String unit) {
     return 'Qty $quantity $unit';
   }
-
-  @override
-  String get piPlanPriceHistory => 'Plan price history';
-
-  @override
-  String get piMyPlans => 'My plans';
-
-  @override
-  String get piAllPlans => 'All plans';
-
-  @override
-  String get piYourPlan => 'Your plan';
-
-  @override
-  String get piInitialPrice => 'Initial price';
-
-  @override
-  String get piNoPlanChanges => 'No price changes yet.';
-
-  @override
-  String get piPlanHistoryHint =>
-      'Recurring plans, such as monthly, renew at the price in effect on the renewal date.';
 }

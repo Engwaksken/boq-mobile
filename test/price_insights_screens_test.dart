@@ -182,29 +182,6 @@ ApiClient _api({bool empty = false}) => ApiClient(
         },
       });
     }
-    if (path.endsWith('/plans/price-history')) {
-      return _json({
-        'success': true,
-        'data': {
-          'current_page': 1,
-          'last_page': 1,
-          'data': [
-            {
-              'id': 9,
-              'plan': {'name': 'Monthly Professional', 'type': 'monthly'},
-              'old_price': 50000,
-              'new_price': 60000,
-              'new_currency': 'UGX',
-              'old_currency': 'UGX',
-              'difference': 10000,
-              'percent_change': 20,
-              'changed_at': '2026-11-05T09:00:00Z',
-              'is_my_plan': true,
-            },
-          ],
-        },
-      });
-    }
     return _json({'success': true, 'data': {}});
   }),
 );
@@ -296,16 +273,6 @@ void main() {
     await tester.tap(find.text('Rate history'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Amina'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('plan price history shows changes and my plan', (tester) async {
-    await _phone(tester);
-    await tester.pumpWidget(_app(PlanPriceHistoryPage(api: _api())));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Monthly Professional'), findsOneWidget);
-    expect(find.text('Your plan'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

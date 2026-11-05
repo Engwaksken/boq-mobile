@@ -4777,48 +4777,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Qty {quantity} {unit}'**
   String piQty(String quantity, String unit);
-
-  /// No description provided for @piPlanPriceHistory.
-  ///
-  /// In en, this message translates to:
-  /// **'Plan price history'**
-  String get piPlanPriceHistory;
-
-  /// No description provided for @piMyPlans.
-  ///
-  /// In en, this message translates to:
-  /// **'My plans'**
-  String get piMyPlans;
-
-  /// No description provided for @piAllPlans.
-  ///
-  /// In en, this message translates to:
-  /// **'All plans'**
-  String get piAllPlans;
-
-  /// No description provided for @piYourPlan.
-  ///
-  /// In en, this message translates to:
-  /// **'Your plan'**
-  String get piYourPlan;
-
-  /// No description provided for @piInitialPrice.
-  ///
-  /// In en, this message translates to:
-  /// **'Initial price'**
-  String get piInitialPrice;
-
-  /// No description provided for @piNoPlanChanges.
-  ///
-  /// In en, this message translates to:
-  /// **'No price changes yet.'**
-  String get piNoPlanChanges;
-
-  /// No description provided for @piPlanHistoryHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Recurring plans, such as monthly, renew at the price in effect on the renewal date.'**
-  String get piPlanHistoryHint;
 }
 
 class _AppLocalizationsDelegate

@@ -216,53 +216,6 @@ void main() {
     expect(changes.last.userName, isEmpty);
   });
 
-  test('plan price history reads changes for the chosen scope', () async {
-    final sent = <http.Request>[];
-    final api = _api({
-      'success': true,
-      'data': {
-        'current_page': 1,
-        'last_page': 1,
-        'data': [
-          {
-            'id': 9,
-            'plan': {
-              'id': 2,
-              'name': 'Monthly Professional',
-              'type': 'monthly',
-            },
-            'old_price': 50000,
-            'new_price': 60000,
-            'old_currency': 'UGX',
-            'new_currency': 'UGX',
-            'difference': 10000,
-            'percent_change': 20,
-            'changed_at': '2026-11-05T09:00:00Z',
-            'is_my_plan': true,
-          },
-          {
-            'id': 8,
-            'plan': {'id': 2, 'name': 'Monthly Professional'},
-            'old_price': null,
-            'new_price': 50000,
-            'new_currency': 'UGX',
-            'is_my_plan': true,
-          },
-        ],
-      },
-    }, sent);
-
-    final result = await api.planPriceHistory(scope: 'all');
-
-    expect(sent.single.url.path, endsWith('/plans/price-history'));
-    expect(sent.single.url.queryParameters['scope'], 'all');
-    expect(result.hasNext, isFalse);
-    expect(result.items.first.planName, 'Monthly Professional');
-    expect(result.items.first.percentChange, 20);
-    expect(result.items.first.isMyPlan, isTrue);
-    expect(result.items.last.oldPrice, isNull);
-  });
-
   test('price list sends the source filter only when set', () async {
     final sent = <http.Request>[];
     final api = _api({

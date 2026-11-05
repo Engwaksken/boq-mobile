@@ -232,19 +232,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
                   },
                 ),
-              if (canViewBilling)
-                drawerTile(
-                  icon: Icons.history,
-                  label: l10n.piPlanPriceHistory,
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => PlanPriceHistoryPage(api: widget.api),
-                      ),
-                    );
-                  },
-                ),
               drawerTile(
                 icon: Icons.payments_outlined,
                 label: l10n.orgExpenses,

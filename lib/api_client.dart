@@ -108,7 +108,7 @@ class ApiClient {
     'API_BASE_URL',
     // Production is the safe default for installed builds. Override this at
     // run/build time when developing against a local Laravel server.
-    defaultValue: 'https://boq.kemmytech.com/api/v1',
+    defaultValue: 'https://www.boqsplatform.com/api/v1',
   );
 
   static const _tokenKey = 'auth_token';

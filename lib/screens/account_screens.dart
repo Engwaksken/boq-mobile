@@ -689,20 +689,7 @@ class _PlansPageState extends State<PlansPage> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.managePlan),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.history),
-            tooltip: l10n.piPlanPriceHistory,
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => PlanPriceHistoryPage(api: widget.api),
-              ),
-            ),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: Text(l10n.managePlan)),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _plans,
         builder: (context, snapshot) {

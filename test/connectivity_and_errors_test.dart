@@ -119,7 +119,7 @@ void main() {
   test('friendly messages never expose raw errors', () {
     expect(
       friendlyError(
-        const SocketException('Failed host lookup: boq.kemmytech.com'),
+        const SocketException('Failed host lookup: www.boqsplatform.com'),
       ),
       AppErrorMessages.noInternet,
     );

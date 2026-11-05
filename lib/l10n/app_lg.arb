@@ -778,12 +778,5 @@
   "piNoRateChanges": "Tewali nkyukakyuka mu bbeeyi ziwandiikiddwa.",
   "piSystem": "Sisitemu",
   "piDifferenceHelp": "Emmyufu: akatale kali waggulu w'ebbeeyi yaffe. Ekiragala: akatale kali wansi.",
-  "piQty": "Omuwendo {quantity} {unit}",
-  "piPlanPriceHistory": "Ebyafaayo by'ebbeeyi ya pulaani",
-  "piMyPlans": "Pulaani zange",
-  "piAllPlans": "Pulaani zonna",
-  "piYourPlan": "Pulaani yo",
-  "piInitialPrice": "Ebbeeyi eyasooka",
-  "piNoPlanChanges": "Tewali nkyukakyuka mu bbeeyi.",
-  "piPlanHistoryHint": "Pulaani ezizzibwa obuggya, nga ez'omwezi, zizzibwa ku bbeeyi eriwo ku lunaku lw'okuzza obuggya."
+  "piQty": "Omuwendo {quantity} {unit}"
 }
