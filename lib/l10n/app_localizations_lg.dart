@@ -2398,4 +2398,272 @@ class AppLocalizationsLg extends AppLocalizations {
 
   @override
   String get commonLoading => 'Loading';
+
+  @override
+  String get piPriceChanges => 'Enkyukakyuka mu Bbeeyi';
+
+  @override
+  String get piPriceChangesSubtitle =>
+      'Enkyukakyuka esembyeyo mu bbeeyi ya buli kintu. Ggulawo ekintu olabe ebyafaayo byakyo buli mwezi.';
+
+  @override
+  String get piItemsChanged => 'Ebintu ebikyuse';
+
+  @override
+  String get piWentUp => 'Byalinnye';
+
+  @override
+  String get piWentDown => 'Byakka';
+
+  @override
+  String get piAverageChange => 'Enkyukakyuka eya wakati';
+
+  @override
+  String get piPeriod => 'Ekiseera';
+
+  @override
+  String get piLast7Days => 'Ennaku 7 eziyise';
+
+  @override
+  String get piLast30Days => 'Ennaku 30 eziyise';
+
+  @override
+  String get piLast90Days => 'Ennaku 90 eziyise';
+
+  @override
+  String get piLast12Months => 'Emyezi 12 egiyise';
+
+  @override
+  String get piAllTime => 'Ebiseera byonna';
+
+  @override
+  String get piSortBy => 'Sengeka okusinziira ku';
+
+  @override
+  String get piSortRecent => 'Enkyukakyuka esembyeyo';
+
+  @override
+  String get piSortUp => 'Okulinnya okusinga';
+
+  @override
+  String get piSortDown => 'Okukka okusinga';
+
+  @override
+  String get piAllCategories => 'Ebika byonna';
+
+  @override
+  String get piPriceSource => 'Ensibuko y\'ebbeeyi';
+
+  @override
+  String get piAllPrices => 'Ebbeeyi zonna';
+
+  @override
+  String get piGeneralMarket => 'Akatale ka bonna';
+
+  @override
+  String get piMyOrganisation => 'Ekitongole kyange';
+
+  @override
+  String get piGeneral => 'Bya bonna';
+
+  @override
+  String get piPrevious => 'Eyasooka';
+
+  @override
+  String get piCurrent => 'Kati';
+
+  @override
+  String piChangedOn(String date) {
+    return 'Yakyuka $date';
+  }
+
+  @override
+  String get piNoChanges => 'Tewali nkyukakyuka mu bbeeyi zisangiddwa.';
+
+  @override
+  String get piNoChangesHint =>
+      'Gezaako ekiseera ekiwanvu oba ggyawo ebisengejja.';
+
+  @override
+  String get piLoadMore => 'Laga ebirala';
+
+  @override
+  String get piHistory => 'Ebyafaayo';
+
+  @override
+  String get piNoChange => 'Tewali nkyukakyuka';
+
+  @override
+  String piChangeFromPrevious(String price) {
+    return 'Yakyuka okuva ku $price';
+  }
+
+  @override
+  String get piMonthlyHistory => 'Ebyafaayo by\'ebbeeyi buli mwezi';
+
+  @override
+  String piMonthsCount(int count) {
+    return 'Emyezi $count';
+  }
+
+  @override
+  String get piMonthlyAverage => 'Eya wakati buli mwezi';
+
+  @override
+  String get piNoPricesPeriod =>
+      'Tewali bbeeyi ziwandiikiddwa mu kiseera kino.';
+
+  @override
+  String get piNoPricesMonth => 'Tewali bbeeyi ziwandiikiddwa';
+
+  @override
+  String get piLow => 'Wansi';
+
+  @override
+  String get piHigh => 'Waggulu';
+
+  @override
+  String get piAvg => 'Wakati';
+
+  @override
+  String get piMonthEnd => 'Enkomerero y\'omwezi';
+
+  @override
+  String piRecords(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ebiwandiiko $count',
+      one: 'ekiwandiiko 1',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get piVsPreviousMonth => 'ku mwezi oguyise';
+
+  @override
+  String piLatestMonth(String month, String price) {
+    return 'Eya wakati mu $month: $price';
+  }
+
+  @override
+  String get piPriceCheck => 'Kebera ebbeeyi';
+
+  @override
+  String get piPriceCheckSubtitle =>
+      'Ebbeeyi za BOQ eno nga zigeraageranyizibwa n\'ez\'akatale olwaleero.';
+
+  @override
+  String get piTotalOurs => 'BOQ ku bbeeyi zaffe';
+
+  @override
+  String get piTotalMarket => 'Ku katale olwaleero';
+
+  @override
+  String get piMarketVsOurs => 'Akatale ku bbeeyi zaffe';
+
+  @override
+  String get piMatchedItems => 'Ebintu ebigattiddwa';
+
+  @override
+  String piNotMatched(int count) {
+    return '$count tebigattiddwa';
+  }
+
+  @override
+  String get piFilterAll => 'Byonna ebigattiddwa';
+
+  @override
+  String get piFilterAbove => 'Waggulu w\'akatale';
+
+  @override
+  String get piFilterBelow => 'Wansi w\'akatale';
+
+  @override
+  String get piFilterChanged => 'Akatale kakyuse';
+
+  @override
+  String get piOurRate => 'Ebbeeyi yaffe';
+
+  @override
+  String get piMarketToday => 'Akatale olwaleero';
+
+  @override
+  String get piDifference => 'Enjawulo';
+
+  @override
+  String get piSinceMatching => 'Okuva lwe kyagattibwa';
+
+  @override
+  String get piRateApproved => 'Ekkiriziddwa';
+
+  @override
+  String get piRateReviewed => 'Ekeberebwa';
+
+  @override
+  String get piRateSuggested => 'Ekiteeseddwa';
+
+  @override
+  String get piRateOriginal => 'Eyasooka';
+
+  @override
+  String get piNoRateYet => 'Tewali bbeeyi';
+
+  @override
+  String get piDifferentCurrency => 'Ensimbi ya njawulo';
+
+  @override
+  String get piNoMatchedItems =>
+      'Tewali bintu bigattiddwa ku bbeeyi z\'akatale.';
+
+  @override
+  String get piNoMatchedItemsHint =>
+      'Gatta ebintu ku bbeeyi z\'akatale okubigeraageranya wano.';
+
+  @override
+  String get piNoItemsInView => 'Tewali bintu wano.';
+
+  @override
+  String get piRateHistory => 'Ebyafaayo by\'ebbeeyi';
+
+  @override
+  String get piMarketHistory => 'Ebyafaayo by\'akatale';
+
+  @override
+  String get piNoRateChanges => 'Tewali nkyukakyuka mu bbeeyi ziwandiikiddwa.';
+
+  @override
+  String get piSystem => 'Sisitemu';
+
+  @override
+  String get piDifferenceHelp =>
+      'Emmyufu: akatale kali waggulu w\'ebbeeyi yaffe. Ekiragala: akatale kali wansi.';
+
+  @override
+  String piQty(String quantity, String unit) {
+    return 'Omuwendo $quantity $unit';
+  }
+
+  @override
+  String get piPlanPriceHistory => 'Ebyafaayo by\'ebbeeyi ya pulaani';
+
+  @override
+  String get piMyPlans => 'Pulaani zange';
+
+  @override
+  String get piAllPlans => 'Pulaani zonna';
+
+  @override
+  String get piYourPlan => 'Pulaani yo';
+
+  @override
+  String get piInitialPrice => 'Ebbeeyi eyasooka';
+
+  @override
+  String get piNoPlanChanges => 'Tewali nkyukakyuka mu bbeeyi.';
+
+  @override
+  String get piPlanHistoryHint =>
+      'Pulaani ezizzibwa obuggya, nga ez\'omwezi, zizzibwa ku bbeeyi eriwo ku lunaku lw\'okuzza obuggya.';
 }

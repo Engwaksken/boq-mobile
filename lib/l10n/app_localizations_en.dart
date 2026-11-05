@@ -2397,4 +2397,269 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get commonLoading => 'Loading';
+
+  @override
+  String get piPriceChanges => 'Price Changes';
+
+  @override
+  String get piPriceChangesSubtitle =>
+      'Latest price change of every item. Open an item for its monthly history.';
+
+  @override
+  String get piItemsChanged => 'Items changed';
+
+  @override
+  String get piWentUp => 'Went up';
+
+  @override
+  String get piWentDown => 'Went down';
+
+  @override
+  String get piAverageChange => 'Average change';
+
+  @override
+  String get piPeriod => 'Period';
+
+  @override
+  String get piLast7Days => 'Last 7 days';
+
+  @override
+  String get piLast30Days => 'Last 30 days';
+
+  @override
+  String get piLast90Days => 'Last 90 days';
+
+  @override
+  String get piLast12Months => 'Last 12 months';
+
+  @override
+  String get piAllTime => 'All time';
+
+  @override
+  String get piSortBy => 'Sort by';
+
+  @override
+  String get piSortRecent => 'Most recent change';
+
+  @override
+  String get piSortUp => 'Biggest increase';
+
+  @override
+  String get piSortDown => 'Biggest decrease';
+
+  @override
+  String get piAllCategories => 'All categories';
+
+  @override
+  String get piPriceSource => 'Price source';
+
+  @override
+  String get piAllPrices => 'All prices';
+
+  @override
+  String get piGeneralMarket => 'General market';
+
+  @override
+  String get piMyOrganisation => 'My organisation';
+
+  @override
+  String get piGeneral => 'General';
+
+  @override
+  String get piPrevious => 'Previous';
+
+  @override
+  String get piCurrent => 'Current';
+
+  @override
+  String piChangedOn(String date) {
+    return 'Changed $date';
+  }
+
+  @override
+  String get piNoChanges => 'No price changes found.';
+
+  @override
+  String get piNoChangesHint => 'Try a longer period or clear the filters.';
+
+  @override
+  String get piLoadMore => 'Load more';
+
+  @override
+  String get piHistory => 'History';
+
+  @override
+  String get piNoChange => 'No change';
+
+  @override
+  String piChangeFromPrevious(String price) {
+    return 'Changed from $price';
+  }
+
+  @override
+  String get piMonthlyHistory => 'Monthly price history';
+
+  @override
+  String piMonthsCount(int count) {
+    return '$count months';
+  }
+
+  @override
+  String get piMonthlyAverage => 'Monthly average';
+
+  @override
+  String get piNoPricesPeriod => 'No prices recorded in this period.';
+
+  @override
+  String get piNoPricesMonth => 'No prices recorded';
+
+  @override
+  String get piLow => 'Low';
+
+  @override
+  String get piHigh => 'High';
+
+  @override
+  String get piAvg => 'Avg';
+
+  @override
+  String get piMonthEnd => 'Month-end';
+
+  @override
+  String piRecords(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count records',
+      one: '1 record',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get piVsPreviousMonth => 'vs previous month';
+
+  @override
+  String piLatestMonth(String month, String price) {
+    return 'Average in $month: $price';
+  }
+
+  @override
+  String get piPriceCheck => 'Price check';
+
+  @override
+  String get piPriceCheckSubtitle =>
+      'This BOQ\'s rates against today\'s market prices.';
+
+  @override
+  String get piTotalOurs => 'BOQ at our rates';
+
+  @override
+  String get piTotalMarket => 'At today\'s market';
+
+  @override
+  String get piMarketVsOurs => 'Market vs our rates';
+
+  @override
+  String get piMatchedItems => 'Matched items';
+
+  @override
+  String piNotMatched(int count) {
+    return '$count not matched';
+  }
+
+  @override
+  String get piFilterAll => 'All matched';
+
+  @override
+  String get piFilterAbove => 'Above market';
+
+  @override
+  String get piFilterBelow => 'Below market';
+
+  @override
+  String get piFilterChanged => 'Market changed';
+
+  @override
+  String get piOurRate => 'Our rate';
+
+  @override
+  String get piMarketToday => 'Market today';
+
+  @override
+  String get piDifference => 'Difference';
+
+  @override
+  String get piSinceMatching => 'Since matching';
+
+  @override
+  String get piRateApproved => 'Approved';
+
+  @override
+  String get piRateReviewed => 'Reviewed';
+
+  @override
+  String get piRateSuggested => 'Suggested';
+
+  @override
+  String get piRateOriginal => 'Original';
+
+  @override
+  String get piNoRateYet => 'No rate yet';
+
+  @override
+  String get piDifferentCurrency => 'Different currency';
+
+  @override
+  String get piNoMatchedItems => 'No items are matched to market prices yet.';
+
+  @override
+  String get piNoMatchedItemsHint =>
+      'Match items to market prices to compare them here.';
+
+  @override
+  String get piNoItemsInView => 'No items in this view.';
+
+  @override
+  String get piRateHistory => 'Rate history';
+
+  @override
+  String get piMarketHistory => 'Market history';
+
+  @override
+  String get piNoRateChanges => 'No rate changes recorded yet.';
+
+  @override
+  String get piSystem => 'System';
+
+  @override
+  String get piDifferenceHelp =>
+      'Red: the market is now higher than our rate. Green: the market is lower.';
+
+  @override
+  String piQty(String quantity, String unit) {
+    return 'Qty $quantity $unit';
+  }
+
+  @override
+  String get piPlanPriceHistory => 'Plan price history';
+
+  @override
+  String get piMyPlans => 'My plans';
+
+  @override
+  String get piAllPlans => 'All plans';
+
+  @override
+  String get piYourPlan => 'Your plan';
+
+  @override
+  String get piInitialPrice => 'Initial price';
+
+  @override
+  String get piNoPlanChanges => 'No price changes yet.';
+
+  @override
+  String get piPlanHistoryHint =>
+      'Recurring plans, such as monthly, renew at the price in effect on the renewal date.';
 }

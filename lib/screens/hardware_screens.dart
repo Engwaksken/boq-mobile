@@ -34,6 +34,9 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
   final List<String> _locations = [];
   final List<String> _regions = [];
   String? _selectedRegion;
+
+  /// '' = all, 'general' = shared market prices, 'mine' = my organisation's.
+  String _selectedSource = '';
   List<HardwarePriceCategory> _categoryStats = [];
 
   @override
@@ -114,6 +117,7 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
         location: _selectedLocation,
         region: _selectedRegion,
         search: _searchController.text.isEmpty ? null : _searchController.text,
+        source: _selectedSource,
         page: target,
         perPage: 20,
       );
@@ -539,6 +543,28 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
                       _fetch();
                     }),
                   ),
+                  // Only members of an organisation have prices of their own.
+                  if (!widget.api.isPersonalAccount)
+                    for (final (value, label, icon) in [
+                      ('general', context.tr.piGeneralMarket, Icons.public),
+                      (
+                        'mine',
+                        context.tr.piMyOrganisation,
+                        Icons.business_outlined,
+                      ),
+                    ]) ...[
+                      const SizedBox(width: AppSpacing.sm),
+                      FilterChip(
+                        avatar: Icon(icon, size: 18),
+                        label: Text(label),
+                        showCheckmark: false,
+                        selected: _selectedSource == value,
+                        onSelected: (on) => setState(() {
+                          _selectedSource = on ? value : '';
+                          _fetch();
+                        }),
+                      ),
+                    ],
                 ],
               ),
             ),
@@ -622,15 +648,15 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
 
   void _addToCompare(HardwarePrice item) {
     if (_compareItems.length >= 5) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr.hwCompareMax)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.tr.hwCompareMax)));
       return;
     }
     if (_compareItems.any((i) => i.id == item.id)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.tr.hwAlreadyCompared)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(context.tr.hwAlreadyCompared)));
       return;
     }
     setState(() => _compareItems.add(item));
@@ -638,9 +664,7 @@ class _HardwarePricesPageState extends State<HardwarePricesPage>
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text(
-            context.tr.hwAddedToComparison(_compareItems.length),
-          ),
+          content: Text(context.tr.hwAddedToComparison(_compareItems.length)),
           action: _compareItems.length >= 2
               ? SnackBarAction(
                   label: context.tr.hwCompare,
@@ -869,6 +893,7 @@ class _HardwarePriceCard extends StatelessWidget {
                             ),
                           if (item.category.isNotEmpty)
                             StatusBadge(label: item.category),
+                          PriceSourceBadge(price: item),
                         ],
                       ),
                       const SizedBox(height: AppSpacing.md),
@@ -891,6 +916,24 @@ class _HardwarePriceCard extends StatelessWidget {
                             Text(
                               '/ ${item.unit}',
                               style: theme.textTheme.bodySmall,
+                            ),
+                          ],
+                          // Last change, e.g. "+4.2%".
+                          if (item.hasChange &&
+                              item.priceChangePercent != null) ...[
+                            const SizedBox(width: AppSpacing.sm),
+                            Tooltip(
+                              message: context.tr.piChangeFromPrevious(
+                                formatAmount(
+                                  item.previousPrice,
+                                  currency: item.currency,
+                                ),
+                              ),
+                              child: _PiChange(
+                                value: item.priceChangePercent,
+                                asPercent: true,
+                                style: theme.textTheme.bodySmall,
+                              ),
                             ),
                           ],
                         ],
@@ -1192,6 +1235,11 @@ class HardwarePriceDetailPage extends StatelessWidget {
                 children: [
                   _buildSummaryCard(context, data.item, data.summary),
                   const SizedBox(height: AppSpacing.lg),
+                  MonthlyPriceHistoryCard(
+                    api: api,
+                    hardwarePriceId: hardwarePrice.id,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
                   _buildDetailsCard(data.item),
                   const SizedBox(height: AppSpacing.lg),
                   _buildHistoryList(data.history),
@@ -1262,6 +1310,7 @@ class HardwarePriceDetailPage extends StatelessWidget {
                   tone: item.isFactory ? StatusTone.info : StatusTone.brand,
                 ),
                 if (item.category.isNotEmpty) StatusBadge(label: item.category),
+                PriceSourceBadge(price: item),
                 StatusBadge(
                   label: summary.trend.capitalize(),
                   tone: _hwTrendTone(summary.trend),
@@ -1387,11 +1436,7 @@ class HardwarePriceDetailPage extends StatelessWidget {
     icon: Icons.timeline,
     children: [
       if (history.isEmpty)
-        EmptyState(
-          icon: Icons.history,
-          title: l10n.hwNoHistory,
-          compact: true,
-        ),
+        EmptyState(icon: Icons.history, title: l10n.hwNoHistory, compact: true),
       for (var i = 0; i < history.length; i++)
         _HwPriceHistoryEntry(
           entry: history[i],
@@ -1439,10 +1484,7 @@ class PriceHistoryPage extends StatelessWidget {
         }
         final history = snapshot.data!.history;
         if (history.isEmpty) {
-          return EmptyState(
-            icon: Icons.history,
-            title: l10n.hwNoHistory,
-          );
+          return EmptyState(icon: Icons.history, title: l10n.hwNoHistory);
         }
         return ListView.builder(
           padding: AppSpacing.page,

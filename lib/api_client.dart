@@ -9,6 +9,7 @@ import 'app_errors.dart';
 import 'json_utils.dart';
 
 part 'organisation_api.dart';
+part 'price_insights_api.dart';
 
 /// `2026-09-01T00:00:00.000000Z` → `2026-09-01` (API date columns).
 String _dateOnly(dynamic value) {
@@ -714,6 +715,7 @@ class ApiClient {
     String? location,
     String? region,
     String? search,
+    String? source,
     double? minPrice,
     double? maxPrice,
     String? dateFrom,
@@ -731,6 +733,8 @@ class ApiClient {
     if (location != null) queryParams['location'] = location;
     if (region != null) queryParams['region'] = region;
     if (search != null) queryParams['search'] = search;
+    // "general" = shared market prices, "mine" = my organisation's own.
+    if (source != null && source.isNotEmpty) queryParams['source'] = source;
     if (minPrice != null) queryParams['min_price'] = minPrice.toString();
     if (maxPrice != null) queryParams['max_price'] = maxPrice.toString();
     if (dateFrom != null) queryParams['date_from'] = dateFrom;
@@ -2686,6 +2690,11 @@ class HardwarePrice {
     this.sourceUrl = '',
     this.lastVerifiedAt = '',
     this.priceHistory = const [],
+    this.organisationId,
+    this.previousPrice,
+    this.priceChange,
+    this.priceChangePercent,
+    this.priceChangedAt = '',
   });
   factory HardwarePrice.fromJson(Map<String, dynamic> json) => HardwarePrice(
     id: jsonInt(json['id']),
@@ -2704,6 +2713,11 @@ class HardwarePrice {
     priceType: jsonStringOrNull(json['price_type']) ?? 'hardware',
     sourceUrl: jsonStringOrNull(json['source_url']) ?? '',
     lastVerifiedAt: jsonStringOrNull(json['last_verified_at']) ?? '',
+    organisationId: jsonIntOrNull(json['organisation_id']),
+    previousPrice: jsonDoubleOrNull(json['previous_price']),
+    priceChange: jsonDoubleOrNull(json['price_change']),
+    priceChangePercent: jsonDoubleOrNull(json['price_change_percent']),
+    priceChangedAt: jsonStringOrNull(json['price_changed_at']) ?? '',
     priceHistory: json['price_histories'] != null
         ? (jsonList(json['price_histories']))
               .whereType<Map<String, dynamic>>()
@@ -2729,7 +2743,24 @@ class HardwarePrice {
   final String lastVerifiedAt;
   final List<PriceHistory> priceHistory;
 
+  /// Owner organisation; null for general (shared) market prices.
+  final int? organisationId;
+
+  /// The price before its last change, the change and the change in percent.
+  final double? previousPrice;
+  final double? priceChange;
+  final double? priceChangePercent;
+
+  /// When the price last changed.
+  final String priceChangedAt;
+
   bool get isFactory => priceType == 'factory';
+
+  /// A shared market price everyone sees (not one of an organisation's own).
+  bool get isGeneral => organisationId == null;
+
+  /// Whether the price has a recorded, non-zero last change.
+  bool get hasChange => priceChange != null && priceChange != 0;
 
   /// When the price was last confirmed (verification, else fetch).
   String get updatedAt =>
@@ -2926,16 +2957,29 @@ class PriceHistorySummary {
     required this.changePercent,
     required this.trend,
   });
-  factory PriceHistorySummary.fromJson(Map<String, dynamic> json) =>
-      PriceHistorySummary(
-        records: jsonInt(json['records']),
-        lowest: jsonDouble(json['lowest']),
-        highest: jsonDouble(json['highest']),
-        average: jsonDouble(json['average']),
-        change: jsonDouble(json['change']),
-        changePercent: jsonDouble(json['change_percent']),
-        trend: jsonStringOrNull(json['trend']) ?? 'stable',
-      );
+
+  /// Reads both the comparison keys (lowest, change_percent, ...) and the
+  /// history endpoint's keys (lowest_price, price_change_percent, ...).
+  factory PriceHistorySummary.fromJson(Map<String, dynamic> json) {
+    final changePercent = jsonDouble(
+      json['change_percent'] ?? json['price_change_percent'],
+    );
+    return PriceHistorySummary(
+      records: jsonInt(json['records'] ?? json['total_records']),
+      lowest: jsonDouble(json['lowest'] ?? json['lowest_price']),
+      highest: jsonDouble(json['highest'] ?? json['highest_price']),
+      average: jsonDouble(json['average'] ?? json['average_price']),
+      change: jsonDouble(json['change'] ?? json['price_change']),
+      changePercent: changePercent,
+      trend:
+          jsonStringOrNull(json['trend']) ??
+          (changePercent > 0
+              ? 'rising'
+              : changePercent < 0
+              ? 'falling'
+              : 'stable'),
+    );
+  }
   final int records;
   final double lowest;
   final double highest;

@@ -182,6 +182,19 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                     },
                   ),
+                if (destinations[index].topSuppliers)
+                  drawerTile(
+                    icon: Icons.trending_up,
+                    label: l10n.piPriceChanges,
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => PriceChangesPage(api: widget.api),
+                        ),
+                      );
+                    },
+                  ),
               ],
 
               drawerTile(
@@ -215,6 +228,19 @@ class _HomeScreenState extends State<HomeScreen> {
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => PlansPage(api: widget.api),
+                      ),
+                    );
+                  },
+                ),
+              if (canViewBilling)
+                drawerTile(
+                  icon: Icons.history,
+                  label: l10n.piPlanPriceHistory,
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => PlanPriceHistoryPage(api: widget.api),
                       ),
                     );
                   },

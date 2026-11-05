@@ -187,6 +187,20 @@ class _BoqDetailPageState extends State<BoqDetailPage> {
                             ),
                           ],
                         ),
+                        const SizedBox(height: AppSpacing.sm),
+                        OutlinedButton.icon(
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => BoqPriceCheckPage(
+                                api: widget.api,
+                                boqId: widget.boqId,
+                                title: _title,
+                              ),
+                            ),
+                          ),
+                          icon: const Icon(Icons.compare_arrows),
+                          label: Text(l10n.piPriceCheck),
+                        ),
                         const SizedBox(height: AppSpacing.lg),
                         _buildSummaries(boq),
                         const SizedBox(height: AppSpacing.lg),

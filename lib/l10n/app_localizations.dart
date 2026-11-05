@@ -4339,6 +4339,486 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Loading'**
   String get commonLoading;
+
+  /// No description provided for @piPriceChanges.
+  ///
+  /// In en, this message translates to:
+  /// **'Price Changes'**
+  String get piPriceChanges;
+
+  /// No description provided for @piPriceChangesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Latest price change of every item. Open an item for its monthly history.'**
+  String get piPriceChangesSubtitle;
+
+  /// No description provided for @piItemsChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Items changed'**
+  String get piItemsChanged;
+
+  /// No description provided for @piWentUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Went up'**
+  String get piWentUp;
+
+  /// No description provided for @piWentDown.
+  ///
+  /// In en, this message translates to:
+  /// **'Went down'**
+  String get piWentDown;
+
+  /// No description provided for @piAverageChange.
+  ///
+  /// In en, this message translates to:
+  /// **'Average change'**
+  String get piAverageChange;
+
+  /// No description provided for @piPeriod.
+  ///
+  /// In en, this message translates to:
+  /// **'Period'**
+  String get piPeriod;
+
+  /// No description provided for @piLast7Days.
+  ///
+  /// In en, this message translates to:
+  /// **'Last 7 days'**
+  String get piLast7Days;
+
+  /// No description provided for @piLast30Days.
+  ///
+  /// In en, this message translates to:
+  /// **'Last 30 days'**
+  String get piLast30Days;
+
+  /// No description provided for @piLast90Days.
+  ///
+  /// In en, this message translates to:
+  /// **'Last 90 days'**
+  String get piLast90Days;
+
+  /// No description provided for @piLast12Months.
+  ///
+  /// In en, this message translates to:
+  /// **'Last 12 months'**
+  String get piLast12Months;
+
+  /// No description provided for @piAllTime.
+  ///
+  /// In en, this message translates to:
+  /// **'All time'**
+  String get piAllTime;
+
+  /// No description provided for @piSortBy.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort by'**
+  String get piSortBy;
+
+  /// No description provided for @piSortRecent.
+  ///
+  /// In en, this message translates to:
+  /// **'Most recent change'**
+  String get piSortRecent;
+
+  /// No description provided for @piSortUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Biggest increase'**
+  String get piSortUp;
+
+  /// No description provided for @piSortDown.
+  ///
+  /// In en, this message translates to:
+  /// **'Biggest decrease'**
+  String get piSortDown;
+
+  /// No description provided for @piAllCategories.
+  ///
+  /// In en, this message translates to:
+  /// **'All categories'**
+  String get piAllCategories;
+
+  /// No description provided for @piPriceSource.
+  ///
+  /// In en, this message translates to:
+  /// **'Price source'**
+  String get piPriceSource;
+
+  /// No description provided for @piAllPrices.
+  ///
+  /// In en, this message translates to:
+  /// **'All prices'**
+  String get piAllPrices;
+
+  /// No description provided for @piGeneralMarket.
+  ///
+  /// In en, this message translates to:
+  /// **'General market'**
+  String get piGeneralMarket;
+
+  /// No description provided for @piMyOrganisation.
+  ///
+  /// In en, this message translates to:
+  /// **'My organisation'**
+  String get piMyOrganisation;
+
+  /// No description provided for @piGeneral.
+  ///
+  /// In en, this message translates to:
+  /// **'General'**
+  String get piGeneral;
+
+  /// No description provided for @piPrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous'**
+  String get piPrevious;
+
+  /// No description provided for @piCurrent.
+  ///
+  /// In en, this message translates to:
+  /// **'Current'**
+  String get piCurrent;
+
+  /// No description provided for @piChangedOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Changed {date}'**
+  String piChangedOn(String date);
+
+  /// No description provided for @piNoChanges.
+  ///
+  /// In en, this message translates to:
+  /// **'No price changes found.'**
+  String get piNoChanges;
+
+  /// No description provided for @piNoChangesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Try a longer period or clear the filters.'**
+  String get piNoChangesHint;
+
+  /// No description provided for @piLoadMore.
+  ///
+  /// In en, this message translates to:
+  /// **'Load more'**
+  String get piLoadMore;
+
+  /// No description provided for @piHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'History'**
+  String get piHistory;
+
+  /// No description provided for @piNoChange.
+  ///
+  /// In en, this message translates to:
+  /// **'No change'**
+  String get piNoChange;
+
+  /// No description provided for @piChangeFromPrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'Changed from {price}'**
+  String piChangeFromPrevious(String price);
+
+  /// No description provided for @piMonthlyHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly price history'**
+  String get piMonthlyHistory;
+
+  /// No description provided for @piMonthsCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} months'**
+  String piMonthsCount(int count);
+
+  /// No description provided for @piMonthlyAverage.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly average'**
+  String get piMonthlyAverage;
+
+  /// No description provided for @piNoPricesPeriod.
+  ///
+  /// In en, this message translates to:
+  /// **'No prices recorded in this period.'**
+  String get piNoPricesPeriod;
+
+  /// No description provided for @piNoPricesMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'No prices recorded'**
+  String get piNoPricesMonth;
+
+  /// No description provided for @piLow.
+  ///
+  /// In en, this message translates to:
+  /// **'Low'**
+  String get piLow;
+
+  /// No description provided for @piHigh.
+  ///
+  /// In en, this message translates to:
+  /// **'High'**
+  String get piHigh;
+
+  /// No description provided for @piAvg.
+  ///
+  /// In en, this message translates to:
+  /// **'Avg'**
+  String get piAvg;
+
+  /// No description provided for @piMonthEnd.
+  ///
+  /// In en, this message translates to:
+  /// **'Month-end'**
+  String get piMonthEnd;
+
+  /// No description provided for @piRecords.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 record} other{{count} records}}'**
+  String piRecords(int count);
+
+  /// No description provided for @piVsPreviousMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'vs previous month'**
+  String get piVsPreviousMonth;
+
+  /// No description provided for @piLatestMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'Average in {month}: {price}'**
+  String piLatestMonth(String month, String price);
+
+  /// No description provided for @piPriceCheck.
+  ///
+  /// In en, this message translates to:
+  /// **'Price check'**
+  String get piPriceCheck;
+
+  /// No description provided for @piPriceCheckSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'This BOQ\'s rates against today\'s market prices.'**
+  String get piPriceCheckSubtitle;
+
+  /// No description provided for @piTotalOurs.
+  ///
+  /// In en, this message translates to:
+  /// **'BOQ at our rates'**
+  String get piTotalOurs;
+
+  /// No description provided for @piTotalMarket.
+  ///
+  /// In en, this message translates to:
+  /// **'At today\'s market'**
+  String get piTotalMarket;
+
+  /// No description provided for @piMarketVsOurs.
+  ///
+  /// In en, this message translates to:
+  /// **'Market vs our rates'**
+  String get piMarketVsOurs;
+
+  /// No description provided for @piMatchedItems.
+  ///
+  /// In en, this message translates to:
+  /// **'Matched items'**
+  String get piMatchedItems;
+
+  /// No description provided for @piNotMatched.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} not matched'**
+  String piNotMatched(int count);
+
+  /// No description provided for @piFilterAll.
+  ///
+  /// In en, this message translates to:
+  /// **'All matched'**
+  String get piFilterAll;
+
+  /// No description provided for @piFilterAbove.
+  ///
+  /// In en, this message translates to:
+  /// **'Above market'**
+  String get piFilterAbove;
+
+  /// No description provided for @piFilterBelow.
+  ///
+  /// In en, this message translates to:
+  /// **'Below market'**
+  String get piFilterBelow;
+
+  /// No description provided for @piFilterChanged.
+  ///
+  /// In en, this message translates to:
+  /// **'Market changed'**
+  String get piFilterChanged;
+
+  /// No description provided for @piOurRate.
+  ///
+  /// In en, this message translates to:
+  /// **'Our rate'**
+  String get piOurRate;
+
+  /// No description provided for @piMarketToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Market today'**
+  String get piMarketToday;
+
+  /// No description provided for @piDifference.
+  ///
+  /// In en, this message translates to:
+  /// **'Difference'**
+  String get piDifference;
+
+  /// No description provided for @piSinceMatching.
+  ///
+  /// In en, this message translates to:
+  /// **'Since matching'**
+  String get piSinceMatching;
+
+  /// No description provided for @piRateApproved.
+  ///
+  /// In en, this message translates to:
+  /// **'Approved'**
+  String get piRateApproved;
+
+  /// No description provided for @piRateReviewed.
+  ///
+  /// In en, this message translates to:
+  /// **'Reviewed'**
+  String get piRateReviewed;
+
+  /// No description provided for @piRateSuggested.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested'**
+  String get piRateSuggested;
+
+  /// No description provided for @piRateOriginal.
+  ///
+  /// In en, this message translates to:
+  /// **'Original'**
+  String get piRateOriginal;
+
+  /// No description provided for @piNoRateYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No rate yet'**
+  String get piNoRateYet;
+
+  /// No description provided for @piDifferentCurrency.
+  ///
+  /// In en, this message translates to:
+  /// **'Different currency'**
+  String get piDifferentCurrency;
+
+  /// No description provided for @piNoMatchedItems.
+  ///
+  /// In en, this message translates to:
+  /// **'No items are matched to market prices yet.'**
+  String get piNoMatchedItems;
+
+  /// No description provided for @piNoMatchedItemsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Match items to market prices to compare them here.'**
+  String get piNoMatchedItemsHint;
+
+  /// No description provided for @piNoItemsInView.
+  ///
+  /// In en, this message translates to:
+  /// **'No items in this view.'**
+  String get piNoItemsInView;
+
+  /// No description provided for @piRateHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Rate history'**
+  String get piRateHistory;
+
+  /// No description provided for @piMarketHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Market history'**
+  String get piMarketHistory;
+
+  /// No description provided for @piNoRateChanges.
+  ///
+  /// In en, this message translates to:
+  /// **'No rate changes recorded yet.'**
+  String get piNoRateChanges;
+
+  /// No description provided for @piSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get piSystem;
+
+  /// No description provided for @piDifferenceHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Red: the market is now higher than our rate. Green: the market is lower.'**
+  String get piDifferenceHelp;
+
+  /// No description provided for @piQty.
+  ///
+  /// In en, this message translates to:
+  /// **'Qty {quantity} {unit}'**
+  String piQty(String quantity, String unit);
+
+  /// No description provided for @piPlanPriceHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Plan price history'**
+  String get piPlanPriceHistory;
+
+  /// No description provided for @piMyPlans.
+  ///
+  /// In en, this message translates to:
+  /// **'My plans'**
+  String get piMyPlans;
+
+  /// No description provided for @piAllPlans.
+  ///
+  /// In en, this message translates to:
+  /// **'All plans'**
+  String get piAllPlans;
+
+  /// No description provided for @piYourPlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Your plan'**
+  String get piYourPlan;
+
+  /// No description provided for @piInitialPrice.
+  ///
+  /// In en, this message translates to:
+  /// **'Initial price'**
+  String get piInitialPrice;
+
+  /// No description provided for @piNoPlanChanges.
+  ///
+  /// In en, this message translates to:
+  /// **'No price changes yet.'**
+  String get piNoPlanChanges;
+
+  /// No description provided for @piPlanHistoryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Recurring plans, such as monthly, renew at the price in effect on the renewal date.'**
+  String get piPlanHistoryHint;
 }
 
 class _AppLocalizationsDelegate
